@@ -301,7 +301,6 @@ def download_all_test_genomes(
     
     return results
 
-
 def cleanup_generated_files(interactive: bool = True) -> Dict[str, int]:
     """
     Clean up downloaded genomes and prediction results.
