@@ -26,6 +26,8 @@ _GLOBAL_CODING_IMM = None
 _GLOBAL_NONCODING_IMM = None
 
 
+from functools import lru_cache
+
 # =============================================================================
 # RBS (RIBOSOME BINDING SITE) PREDICTION
 # =============================================================================
@@ -35,42 +37,53 @@ def find_purine_rich_regions(
     min_length: int = 4, 
     min_purine_content: float = 0.6
 ) -> List[Dict]:
-    """Find purine-rich regions (A and G rich) in sequence."""
+    """Find purine-rich regions using sliding window optimization."""
     purine_regions = []
+    seq_len = len(sequence)
     
-    for start in range(len(sequence)):
-        for length in range(min_length, min(9, len(sequence) - start + 1)):
-            subseq = sequence[start:start + length]
+    if seq_len < min_length:
+        return purine_regions
+    
+    is_purine = [1 if base in 'AG' else 0 for base in sequence]
+    
+    for start in range(seq_len):
+        max_length = min(9, seq_len - start + 1)
+        
+        if max_length > min_length:
+            purine_count = sum(is_purine[start:start + min_length])
             
-            purines = subseq.count('A') + subseq.count('G')
-            purine_fraction = purines / length
+            length = min_length
+            if length <= seq_len - start:
+                purine_fraction = purine_count / length
+                if purine_fraction >= min_purine_content:
+                    purine_regions.append({
+                        'sequence': sequence[start:start + length],
+                        'start': start,
+                        'end': start + length,
+                        'purine_content': purine_fraction,
+                        'length': length
+                    })
             
-            if purine_fraction >= min_purine_content:
-                purine_regions.append({
-                    'sequence': subseq,
-                    'start': start,
-                    'end': start + length,
-                    'purine_content': purine_fraction,
-                    'length': length
-                })
+            for length in range(min_length + 1, max_length):
+                if start + length > seq_len:
+                    break
+                
+                purine_count += is_purine[start + length - 1]
+                
+                purine_fraction = purine_count / length
+                if purine_fraction >= min_purine_content:
+                    purine_regions.append({
+                        'sequence': sequence[start:start + length],
+                        'start': start,
+                        'end': start + length,
+                        'purine_content': purine_fraction,
+                        'length': length
+                    })
     
     return purine_regions
 
 
-def evaluate_spacing_score(spacing: int) -> float:
-    """Evaluate spacing between RBS and start codon (optimal: 6-10 nt)."""
-    if 6 <= spacing <= 8:
-        return 3.0  # Optimal
-    elif 5 <= spacing <= 10:
-        return 2.5  # Very good
-    elif 4 <= spacing <= 12:
-        return 1.5  # Good
-    elif 3 <= spacing <= 14:
-        return 1.0  # Acceptable
-    else:
-        return 0.2  # Poor
-
-
+@lru_cache(maxsize=10000)
 def score_motif_similarity(sequence: str) -> Tuple[float, str]:
     """Score sequence similarity to known RBS motifs."""
     best_score = 0.0
@@ -92,7 +105,7 @@ def score_motif_similarity(sequence: str) -> Tuple[float, str]:
                 similarity = matches / total_positions
                 
                 overlap_length = total_positions
-                motif_weight = len(motif) / 6.0  # AGGAGG gets weight 1.0
+                motif_weight = len(motif) / 6.0  
                 
                 score = similarity * overlap_length * motif_weight
                 
@@ -132,8 +145,13 @@ def predict_rbs_simple(sequence: str, orf: Dict, upstream_length: int = 20) -> D
         
         if spacing < 4 or spacing > 12:
             continue
+        elif 6 <= spacing <= 8:
+            spacing_score= 3.0  # Optimal
+        elif 5 <= spacing <= 10:
+            spacing_score= 2.5  # good
+        elif 4 <= spacing <= 12:
+            spacing_score= 1.5  # ok
         
-        spacing_score = evaluate_spacing_score(spacing)
         motif_score, best_motif = score_motif_similarity(sd_candidate)
         purine_bonus = (region['purine_content'] - 0.6) * 2.0
         
@@ -175,11 +193,17 @@ def predict_rbs_simple(sequence: str, orf: Dict, upstream_length: int = 20) -> D
 
 def find_orfs_candidates(sequence: str, min_length: int = 100) -> List[Dict]:
     """Detect all ORF candidates with dual coordinates and RBS scores."""
+    
+    if hasattr(score_motif_similarity, 'cache_clear'):
+        score_motif_similarity.cache_clear()
+    
     orfs = []
+    
+    reverse_seq = str(Seq(sequence).reverse_complement())
     
     sequences = [
         ('forward', sequence),
-        ('reverse', str(Seq(sequence).reverse_complement()))
+        ('reverse', reverse_seq)
     ]
     seq_len = len(sequence)
 
