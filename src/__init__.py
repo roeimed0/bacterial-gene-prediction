@@ -5,7 +5,7 @@ A hybrid machine learning and traditional algorithm approach
 to bacterial gene prediction and comparative genomics.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.1.1"
 __author__ = "Roy Medina"
 
 # Import from data_management
