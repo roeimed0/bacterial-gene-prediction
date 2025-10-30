@@ -399,24 +399,6 @@ def compare_results_file_to_reference(genome_id: str) -> Dict:
     """
     Compare prediction results file to reference GFF file for a given genome_id.
     
-    Automatically looks for:
-    - Predictions: ./results/{genome_id}_predictions.gff
-    - Reference: Uses get_gff_path(genome_id) to find in full_dataset
-    - If reference GFF not found, attempts to download from NCBI
-    
-    Parameters:
-    -----------
-    genome_id : str
-        Genome identifier (e.g., 'NC_000913.3')
-        
-    Returns:
-    --------
-    Dict : Validation metrics (same as compare_orfs_to_reference)
-    
-    Example:
-    --------
-    >>> metrics = compare_results_file_to_reference('NC_000913.3')
-    >>> print(f"F1 Score: {metrics['f1_score']:.3f}")
     """
     from pathlib import Path
     from Bio import Entrez
