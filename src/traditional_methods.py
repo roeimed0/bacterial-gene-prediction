@@ -83,7 +83,7 @@ def find_purine_rich_regions(
     return purine_regions
 
 
-@lru_cache(maxsize=10000)
+@lru_cache(maxsize=100000)
 def score_motif_similarity(sequence: str) -> Tuple[float, str]:
     """Score sequence similarity to known RBS motifs."""
     best_score = 0.0
