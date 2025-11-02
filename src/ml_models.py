@@ -263,27 +263,106 @@ class OrfGroupClassifier:
         
         return filtered_groups
 
+# filters.py
+import math
+from collections import Counter
+from pathlib import Path
+from typing import List, Dict, Tuple
+
+import joblib
+import numpy as np
+import pandas as pd
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from Bio.Seq import Seq
+from Bio.SeqUtils.ProtParam import ProteinAnalysis
+from sklearn.metrics import confusion_matrix  # kept for potential evaluation prints
 
 
-"""
-Hybrid gene filter classifier.
+# ----------------------------
+# --- Hybrid model arch (same as your notebook)
+# ----------------------------
+class CNNBranch(nn.Module):
+    def __init__(self, output_dim=128, dropout=0.3):
+        super().__init__()
+        self.conv1 = nn.Conv1d(4, 64, 7, padding=3)
+        self.bn1 = nn.BatchNorm1d(64)
+        self.pool1 = nn.MaxPool1d(2)
+        self.conv2 = nn.Conv1d(64, 128, 5, padding=2)
+        self.bn2 = nn.BatchNorm1d(128)
+        self.pool2 = nn.MaxPool1d(2)
+        self.conv3 = nn.Conv1d(128, 256, 3, padding=1)
+        self.bn3 = nn.BatchNorm1d(256)
+        self.global_pool = nn.AdaptiveMaxPool1d(1)
+        self.fc = nn.Linear(256, output_dim)
+        self.dropout = nn.Dropout(dropout)
 
-This class wraps the hybrid_final_filter.pkl model for final gene filtering.
-Uses both numeric features and CNN sequence encoding.
-"""
+    def forward(self, x):
+        # expects x shape: (batch, seq_len, 4)
+        x = x.permute(0, 2, 1)  # -> (batch, 4, seq_len)
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = self.pool1(x)
+        x = F.relu(self.bn2(self.conv2(x)))
+        x = self.pool2(x)
+        x = F.relu(self.bn3(self.conv3(x)))
+        x = self.global_pool(x).squeeze(-1)
+        x = self.dropout(x)
+        x = F.relu(self.fc(x))
+        return x
+
+
+class DenseBranch(nn.Module):
+    def __init__(self, input_dim=25, output_dim=128, dropout=0.3):
+        super().__init__()
+        self.fc1 = nn.Linear(input_dim, 64)
+        self.bn1 = nn.BatchNorm1d(64)
+        self.dropout1 = nn.Dropout(dropout)
+        self.fc2 = nn.Linear(64, 128)
+        self.bn2 = nn.BatchNorm1d(128)
+        self.dropout2 = nn.Dropout(dropout)
+        self.fc3 = nn.Linear(128, output_dim)
+
+    def forward(self, x):
+        x = F.relu(self.bn1(self.fc1(x)))
+        x = self.dropout1(x)
+        x = F.relu(self.bn2(self.fc2(x)))
+        x = self.dropout2(x)
+        x = F.relu(self.fc3(x))
+        return x
+
+
+class HybridGenePredictor(nn.Module):
+    def __init__(self, num_traditional_features=25, dropout=0.3):
+        super().__init__()
+        self.cnn_branch = CNNBranch(128, dropout)
+        self.dense_branch = DenseBranch(num_traditional_features, 128, dropout)
+        self.fusion = nn.Sequential(
+            nn.Linear(256, 128),
+            nn.BatchNorm1d(128),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(128, 64),
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(64, 1)  # raw logits
+        )
+
+    def forward(self, sequences, features):
+        # sequences: (batch, seq_len, 4)
+        # features: (batch, num_traditional_features)
+        cnn_out = self.cnn_branch(sequences)
+        dense_out = self.dense_branch(features)
+        combined = torch.cat([cnn_out, dense_out], dim=1)
+        logits = self.fusion(combined)
+        return logits.squeeze(-1)
+
 class HybridGeneFilter:
-    """
-    Final hybrid classifier for gene prediction.
-    Uses trained PyTorch model with both features and sequence CNN.
-    """
-    
-    def __init__(self):
-        """
-        Initialize empty classifier.
-        Call load() to load a trained model before using.
-        """
+    def __init__(self, device: str = None):
         self.model = None
         self.threshold = 0.12
+        self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
         self.feature_names = [
             'codon_score_norm', 'imm_score_norm', 'rbs_score_norm',
             'length_score_norm', 'start_score_norm', 'combined_score',
@@ -294,109 +373,85 @@ class HybridGeneFilter:
             'has_hairpin_near_stop', 'hydrophobicity_mean', 'hydrophobicity_std',
             'charge_mean', 'aromatic_fraction', 'small_fraction', 'polar_fraction'
         ]
-    
-    def load(self, model_path: str = '../models/hybrid_final_filter.pkl'):
-        """
-        Load trained PyTorch model from disk.
-        """
-        model_path = Path(model_path)
-        
-        if not model_path.exists():
-            raise FileNotFoundError(f"Model not found: {model_path}")
-        
-        # Load the checkpoint (contains full model + threshold)
-        checkpoint = torch.load(str(model_path), map_location='cpu', weights_only=False)
-        
-        # Extract model and threshold
-        self.model = checkpoint['model']
-        self.model.eval()
-        self.threshold = checkpoint.get('threshold', 0.12)
-        
-        print(f"✓ Loaded PyTorch model: {model_path}")
-        print(f"✓ Expecting {len(self.feature_names)} features + DNA sequence")
-        print(f"✓ Best threshold: {self.threshold:.4f}")
-    
-    def _calculate_enc(self, sequence):
-        """Effective Number of Codons (de novo - uses only this sequence)."""
+
+    def load(self, model_path):
+        import pickle
+        with open(model_path, "rb") as f:
+            data = pickle.load(f)
+
+        model = HybridGenePredictor(num_traditional_features=data["num_traditional_features"])
+        model.load_state_dict(data["model_state_dict"])
+        model.eval()
+
+        self.model = model
+        self.threshold = data["threshold"]
+
+        print(f"Loaded hybrid model from {model_path}")
+
+
+    @staticmethod
+    def _calculate_enc(sequence: str) -> float:
         codons = [sequence[i:i+3] for i in range(0, len(sequence)-2, 3)]
         valid_codons = [c for c in codons if len(c) == 3 and 'N' not in c]
-        
         if len(valid_codons) == 0:
             return 0.0
-        
         codon_counts = Counter(valid_codons)
         num_unique = len(codon_counts)
         enc_normalized = num_unique / max(len(valid_codons), 1)
-        
         return float(enc_normalized)
-    
-    def _calculate_cbi(self, sequence):
-        """Codon Bias Index - entropy-based measure."""
+
+    @staticmethod
+    def _calculate_cbi(sequence: str) -> float:
         codons = [sequence[i:i+3] for i in range(0, len(sequence)-2, 3)]
         valid_codons = [c for c in codons if len(c) == 3 and 'N' not in c]
-        
         if len(valid_codons) == 0:
             return 0.0
-        
         codon_counts = Counter(valid_codons)
         frequencies = np.array(list(codon_counts.values())) / len(valid_codons)
-        
         entropy = -np.sum(frequencies * np.log2(frequencies + 1e-10))
         max_entropy = math.log2(61)
         cbi = 1.0 - (entropy / max_entropy) if max_entropy > 0 else 0.0
-        
         return float(cbi)
-    
-    def _detect_hairpin_near_stop(self, sequence, window=30):
-        """Detect potential hairpin structure near stop codon."""
+
+    @staticmethod
+    def _detect_hairpin_near_stop(sequence: str, window: int = 30) -> float:
         if len(sequence) < window:
             return 0.0
-        
         tail = sequence[-window:]
-        
         try:
             seq_obj = Seq(tail)
             reverse_comp = str(seq_obj.reverse_complement())
             matches = sum(1 for a, b in zip(tail, reverse_comp) if a == b)
             hairpin_score = matches / len(tail)
             return 1.0 if hairpin_score > 0.6 else 0.0
-        except:
+        except Exception:
             return 0.0
-    
-    def _calculate_amino_acid_properties(self, sequence):
-        """Calculate amino acid properties from DNA sequence."""
+
+    @staticmethod
+    def _calculate_amino_acid_properties(sequence: str) -> Dict[str, float]:
         try:
             seq_obj = Seq(sequence)
             protein = str(seq_obj.translate(table=11, to_stop=True))
-            
             if len(protein) == 0:
-                return {
-                    'hydro_mean': 0.0, 'hydro_std': 0.0, 'charge_mean': 0.0,
-                    'aromatic_frac': 0.0, 'small_frac': 0.0, 'polar_frac': 0.0
-                }
-            
+                return dict(hydro_mean=0.0, hydro_std=0.0, charge_mean=0.0,
+                            aromatic_frac=0.0, small_frac=0.0, polar_frac=0.0)
             analysis = ProteinAnalysis(protein)
             aa_percent = analysis.get_amino_acids_percent()
-            
             aromatic = set('FYW')
             small = set('AGSTCV')
             polar = set('STNQY')
             charged = set('DEKR')
-            
             aromatic_frac = sum(aa_percent.get(aa, 0) for aa in aromatic)
             small_frac = sum(aa_percent.get(aa, 0) for aa in small)
             polar_frac = sum(aa_percent.get(aa, 0) for aa in polar)
             charge_mean = sum(aa_percent.get(aa, 0) for aa in charged)
-            
             kd_scale = {
                 'A': 1.8, 'R': -4.5, 'N': -3.5, 'D': -3.5, 'C': 2.5,
                 'Q': -3.5, 'E': -3.5, 'G': -0.4, 'H': -3.2, 'I': 4.5,
                 'L': 3.8, 'K': -3.9, 'M': 1.9, 'F': 2.8, 'P': -1.6,
                 'S': -0.8, 'T': -0.7, 'W': -0.9, 'Y': -1.3, 'V': 4.2
             }
-            
             hydro_values = [kd_scale.get(aa, 0.0) for aa in protein]
-            
             return {
                 'hydro_mean': float(np.mean(hydro_values)) if hydro_values else 0.0,
                 'hydro_std': float(np.std(hydro_values)) if len(hydro_values) > 1 else 0.0,
@@ -405,84 +460,47 @@ class HybridGeneFilter:
                 'small_frac': float(small_frac),
                 'polar_frac': float(polar_frac),
             }
-        
         except Exception:
-            return {
-                'hydro_mean': 0.0, 'hydro_std': 0.0, 'charge_mean': 0.0,
-                'aromatic_frac': 0.0, 'small_frac': 0.0, 'polar_frac': 0.0
-            }
-    
-    def extract_features(
-        self, 
-        candidates: List[Dict], 
-        genome_id: str = "unknown"
-    ) -> pd.DataFrame:
-        """
-        Extract all 25 numeric features from candidate genes.
-        
-        Args:
-            candidates: List of candidate gene dictionaries (must have 'sequence' key)
-            genome_id: Genome identifier (for progress bar)
-        
-        Returns:
-            DataFrame with one row per candidate, columns are features
-        """
-        from tqdm import tqdm
-        
+            return dict(hydro_mean=0.0, hydro_std=0.0, charge_mean=0.0,
+                        aromatic_frac=0.0, small_frac=0.0, polar_frac=0.0)
+
+    def extract_features(self, candidates: List[Dict], genome_id: str = "unknown") -> pd.DataFrame:
         rows = []
-        for candidate in tqdm(candidates, desc=f"Extracting features {genome_id}"):
-            sequence = candidate.get('sequence', '')
-            seq_upper = sequence.upper()
-            
-            # Start with existing scores
+        for candidate in candidates:
+            sequence = candidate.get('sequence', '').upper()
             feature_dict = {
-                'codon_score_norm': candidate.get('codon_score_norm', 0.0),
-                'imm_score_norm': candidate.get('imm_score_norm', 0.0),
-                'rbs_score_norm': candidate.get('rbs_score_norm', 0.0),
-                'length_score_norm': candidate.get('length_score_norm', 0.0),
-                'start_score_norm': candidate.get('start_score_norm', 0.0),
-                'combined_score': candidate.get('combined_score', 0.0),
+                'codon_score_norm': float(candidate.get('codon_score_norm', 0.0)),
+                'imm_score_norm': float(candidate.get('imm_score_norm', 0.0)),
+                'rbs_score_norm': float(candidate.get('rbs_score_norm', 0.0)),
+                'length_score_norm': float(candidate.get('length_score_norm', 0.0)),
+                'start_score_norm': float(candidate.get('start_score_norm', 0.0)),
+                'combined_score': float(candidate.get('combined_score', 0.0)),
             }
-            
-            # Length features (3)
-            length = candidate.get('length', len(sequence))
+            length = int(candidate.get('length', len(sequence)))
             feature_dict['length_bp'] = float(length)
-            feature_dict['length_codons'] = float(length / 3)
+            feature_dict['length_codons'] = float(length / 3.0)
             feature_dict['length_log'] = math.log(max(length, 1))
-            
-            # Start/stop codon types (2)
-            start_codon = candidate.get('start_codon', seq_upper[:3] if len(seq_upper) >= 3 else 'ATG')
-            start_map = {'ATG': 0, 'GTG': 1, 'TTG': 2}
-            feature_dict['start_codon_type'] = float(start_map.get(start_codon, 0))
-            
-            stop_codon = seq_upper[-3:] if len(seq_upper) >= 3 else 'TAA'
-            stop_map = {'TAA': 0, 'TAG': 1, 'TGA': 2}
-            feature_dict['stop_codon_type'] = float(stop_map.get(stop_codon, 0))
-            
-            # Kozak-like (1)
+            start_codon = candidate.get('start_codon', sequence[:3] if len(sequence) >= 3 else 'ATG')
+            start_map = {'ATG': 0.0, 'GTG': 1.0, 'TTG': 2.0}
+            feature_dict['start_codon_type'] = float(start_map.get(start_codon, 0.0))
+            stop_codon = sequence[-3:] if len(sequence) >= 3 else 'TAA'
+            stop_map = {'TAA': 0.0, 'TAG': 1.0, 'TGA': 2.0}
+            feature_dict['stop_codon_type'] = float(stop_map.get(stop_codon, 0.0))
             feature_dict['has_kozak_like'] = float(candidate.get('rbs_score', 0) > 3.0)
-            
-            # Sequence composition (3)
-            counts = Counter(seq_upper)
-            seq_len = len(seq_upper)
-            
+            counts = Counter(sequence)
+            seq_len = len(sequence)
             g = counts.get('G', 0)
             c = counts.get('C', 0)
             a = counts.get('A', 0)
             t = counts.get('T', 0)
-            
             feature_dict['gc_content'] = (g + c) / seq_len if seq_len > 0 else 0.0
             feature_dict['gc_skew'] = (g - c) / (g + c) if (g + c) > 0 else 0.0
             feature_dict['at_skew'] = (a - t) / (a + t) if (a + t) > 0 else 0.0
-            
-            # Complex calculations (10 features)
             feature_dict['purine_content'] = (a + g) / seq_len if seq_len > 0 else 0.0
-            feature_dict['effective_num_codons'] = self._calculate_enc(seq_upper)
-            feature_dict['codon_bias_index'] = self._calculate_cbi(seq_upper)
-            feature_dict['has_hairpin_near_stop'] = self._detect_hairpin_near_stop(seq_upper)
-            
-            # Amino acid properties (6)
-            aa_props = self._calculate_amino_acid_properties(seq_upper)
+            feature_dict['effective_num_codons'] = self._calculate_enc(sequence)
+            feature_dict['codon_bias_index'] = self._calculate_cbi(sequence)
+            feature_dict['has_hairpin_near_stop'] = self._detect_hairpin_near_stop(sequence)
+            aa_props = self._calculate_amino_acid_properties(sequence)
             feature_dict.update({
                 'hydrophobicity_mean': aa_props['hydro_mean'],
                 'hydrophobicity_std': aa_props['hydro_std'],
@@ -491,148 +509,156 @@ class HybridGeneFilter:
                 'small_fraction': aa_props['small_frac'],
                 'polar_fraction': aa_props['polar_frac'],
             })
-            
             rows.append(feature_dict)
-        
         return pd.DataFrame(rows).fillna(0.0)
-    
-    def _one_hot_encode_dna(self, candidates: List[Dict], max_len: int = None):
-        """
-        Convert DNA sequences to one-hot tensor (A,C,G,T).
-        
-        Returns:
-            torch.Tensor of shape (num_candidates, max_len, 4)
-        """
+
+    @staticmethod
+    def _one_hot_encode_dna(candidates: List[Dict], max_len: int = None):
         mapping = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
-        
-        # Determine max length
         if max_len is None:
-            max_len = max(len(c.get('sequence', '')) for c in candidates)
-        
-        # Pre-allocate numpy array instead of list
+            max_len = max((len(c.get('sequence', '')) for c in candidates), default=0)
         num_candidates = len(candidates)
         one_hot = np.zeros((num_candidates, max_len, 4), dtype=np.float32)
-        
         for idx, candidate in enumerate(candidates):
             seq = candidate.get('sequence', '').upper()
-            
             for i, nt in enumerate(seq):
                 if i >= max_len:
                     break
                 if nt in mapping:
                     one_hot[idx, i, mapping[nt]] = 1.0
-        
-        # Convert to tensor once (much faster!)
         return torch.from_numpy(one_hot)
-    
+
     def predict(
         self, 
         candidates: List[Dict], 
-        genome_id: str = "unknown",
-        threshold: float = None,
-        max_seq_len: int = None
-    ) -> tuple:
+        genome_id: str = "unknown", 
+        threshold: float = None, 
+        batch_size: int = 64  # NEW PARAMETER
+    ) -> Tuple[np.ndarray, np.ndarray, List[str]]:
         """
-        Predict which candidates are real genes using hybrid model.
-        
-        Args:
-            candidates: List of candidate gene dictionaries (must have 'sequence' key)
-            genome_id: Genome identifier
-            threshold: Probability threshold for classification (uses saved threshold if None)
-            max_seq_len: Maximum sequence length for padding (auto-detected if None)
-        
-        Returns:
-            Tuple of (predictions, probabilities, gene_ids)
-            - predictions: Binary array (1 = real gene, 0 = false positive)
-            - probabilities: Probability of being a real gene
-            - gene_ids: List of gene IDs in same order
+        Predict which candidates are real genes using BATCHED processing.
         """
+        if self.model is None:
+            raise RuntimeError("Model not loaded. Call load() first.")
+
         if not candidates:
             return np.array([]), np.array([]), []
-        
-        # Use saved threshold if not provided
+
         if threshold is None:
-            threshold = self.threshold
-        
-        # Extract numeric features
+            threshold = float(self.threshold)
+
+        # Extract features once (doesn't use much memory)
         df = self.extract_features(candidates, genome_id)
-        X_features = torch.tensor(df[self.feature_names].values, dtype=torch.float32)
+        missing = [f for f in self.feature_names if f not in df.columns]
+        if missing:
+            print(f"⚠ Warning: missing numeric features: {missing}")
+
+        X_features = torch.tensor(
+            df[[f for f in self.feature_names if f in df.columns]].values, 
+            dtype=torch.float32
+        )
         
-        # Encode DNA sequences
-        X_sequences = self._one_hot_encode_dna(candidates, max_seq_len)
+        # Determine max sequence length
+        max_seq_len = max((len(c.get('sequence', '')) for c in candidates), default=1000)
         
-        # Run model (NOTE: sequences first, then features!)
+        # Process in batches to avoid OOM
+        all_probs = []
+        num_batches = (len(candidates) + batch_size - 1) // batch_size
+        
+        self.model.to(self.device)
         self.model.eval()
+        
+        print(f"Processing {len(candidates)} candidates in {num_batches} batches of {batch_size}...")
+        
         with torch.no_grad():
-            outputs = self.model(X_sequences, X_features)
-            probabilities = torch.sigmoid(outputs).squeeze().numpy()
+            for i in range(0, len(candidates), batch_size):
+                batch_end = min(i + batch_size, len(candidates))
+                batch_candidates = candidates[i:batch_end]
+                
+                # One-hot encode batch
+                X_sequences_batch = self._one_hot_encode_dna(batch_candidates, max_len=max_seq_len)
+                X_features_batch = X_features[i:batch_end]
+                
+                # Move to device
+                X_sequences_batch = X_sequences_batch.to(self.device)
+                X_features_batch = X_features_batch.to(self.device)
+                
+                # Predict
+                outputs = self.model(X_sequences_batch, X_features_batch)
+                probs = torch.sigmoid(outputs).cpu().numpy()
+                
+                all_probs.append(probs)
+                
+                # Clear cache
+                del X_sequences_batch, X_features_batch, outputs
+                if self.device == 'cuda':
+                    torch.cuda.empty_cache()
         
-        # Handle single prediction case
-        if probabilities.ndim == 0:
-            probabilities = np.array([probabilities])
+        # Concatenate all batch results
+        probs = np.concatenate(all_probs)
         
-        # Apply threshold
-        predictions = (probabilities >= threshold).astype(int)
-        
-        # Get gene IDs
+        if probs.ndim == 0:
+            probs = np.array([float(probs)])
+
+        preds = (probs >= threshold).astype(int)
         gene_ids = [c.get('gene_id', f'gene_{i}') for i, c in enumerate(candidates)]
         
-        return predictions, probabilities, gene_ids
-    
-    def filter_candidates(self, candidates, genome_id="unknown", threshold=None, max_seq_len=None):
-        if not candidates:
-            return []
+        return preds, probs, gene_ids
 
-        threshold = self.threshold if threshold is None else threshold
-
-        _, probabilities, _ = self.predict(candidates, genome_id, threshold, max_seq_len)
-
-        return [
-            {**cand, "hybrid_prob": float(prob)}
-            for cand, prob in zip(candidates, probabilities)
-            if prob >= threshold
-        ]
+    def filter_candidates(
+        self, 
+        candidates: List[Dict], 
+        genome_id: str = "unknown", 
+        threshold: float = None,
+        batch_size: int = 64  # NEW PARAMETER
+    ) -> List[Dict]:
+        """
+        Filter candidates, keeping only those predicted to be real genes.
+        Uses batched processing to avoid memory issues.
+        
+        Args:
+            candidates: List of candidate ORFs
+            genome_id: Genome identifier
+            threshold: Probability threshold
+            batch_size: Batch size for processing (default: 64)
+        
+        Returns:
+            Filtered list of candidates
+        """
+        preds, probs, gene_ids = self.predict(
+            candidates, genome_id, threshold, batch_size
+        )
+        
+        kept = []
+        for cand, p in zip(candidates, probs):
+            if p >= (threshold if threshold is not None else self.threshold):
+                new = dict(cand)
+                new['hybrid_prob'] = float(p)
+                kept.append(new)
+        
+        return kept
 
 if __name__ == '__main__':
     print("Testing HybridGeneFilter...\n")
     
     try:
         classifier = HybridGeneFilter()
-        classifier.load('../models/hybrid_final_filter.pkl')
-        
-        print(f"\n✓ Model loaded successfully")
-        print(f"  Type: {type(classifier.model).__name__}")
-        print(f"\n✓ Expected {len(classifier.feature_names)} features:")
-        for i, name in enumerate(classifier.feature_names, 1):
-            print(f"  {i:2d}. {name}")
-        
-    except FileNotFoundError as e:
-        print(f"✗ {e}")
-        print("\nTo create the model:")
-        print("  1. Train the hybrid_final_filter model")
-        print("  2. Save with joblib.dump()")
+        model_path = Path(__file__).parent.parent/ 'models' / 'hybrid_best_model.pkl'
+        if model_path.exists():
+            classifier.load(str(model_path))
+        else:
+            print(f"[!] Model not found, skipping ML...")
     except Exception as e:
-        print(f"✗ Error: {e}")
-        import traceback
-        traceback.print_exc()
+         print(f"[!] ML error: {e}, skipping...")
 
     print("Testing OrfGroupClassifier...\n")
     
     try:
         classifier = OrfGroupClassifier()
-        classifier.load('../models/orf_classifier_lgb.pkl')
-        
-        print(f"\n✓ Model loaded successfully")
-        print(f"  Type: {type(classifier.model).__name__}")
-        
-        if classifier.feature_names:
-            print(f"\nExpected features:")
-            for i, name in enumerate(classifier.feature_names, 1):
-                print(f"  {i}. {name}")
-        
-    except FileNotFoundError as e:
-        print(f"✗ {e}")
-        print("\nTo create the model:")
-        print("  1. Run notebook 03_ml_models.ipynb")
-        print("  2. Train the model")
-        print("  3. Save with joblib.dump()")
+        model_path = Path(__file__).parent.parent/ 'models' / 'orf_classifier_lgb.pkl'
+        if model_path.exists():
+            classifier.load(str(model_path))
+        else:
+            print(f"[!] Model not found, skipping ML...")
+    except Exception as e:
+         print(f"[!] ML error: {e}, skipping...")
