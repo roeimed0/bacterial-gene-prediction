@@ -829,7 +829,7 @@ Examples:
             # FASTA file
             result = fasta_upload()
             if result:
-                mode, fasta_path, _ = result  # Ignore output from fasta_upload
+                mode, fasta_path, _ = result 
                 try:
                     predict_fasta_file(fasta_path)
                     print(f"\n[+] Success!")
