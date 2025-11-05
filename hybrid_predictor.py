@@ -806,9 +806,8 @@ Examples:
                     predict_ncbi_genome(accession, args.email or NCBI_EMAIL)
                     print(f"\n[+] Success!")
                     break
-                except NotImplementedError as e:
-                    print(f"\n[!] {e}")
-                    print("This mode is under construction.")
+                except Exception as e:
+                    print(f"\n[!] Error: {e}")
                     input("\nPress Enter to continue...")
         
         elif choice == '2':
@@ -820,9 +819,8 @@ Examples:
                     predict_ncbi_genome(accession, email)
                     print(f"\n[+] Success!")
                     break
-                except NotImplementedError as e:
-                    print(f"\n[!] {e}")
-                    print("This mode is under construction.")
+                except Exception as e:
+                    print(f"\n[!] Error: {e}")
                     input("\nPress Enter to continue...")
         
         elif choice == '3':
@@ -834,9 +832,8 @@ Examples:
                     predict_fasta_file(fasta_path)
                     print(f"\n[+] Success!")
                     break
-                except NotImplementedError as e:
-                    print(f"\n[!] {e}")
-                    print("This mode is under construction.")
+                except Exception as e:
+                    print(f"\n[!] Error: {e}")
                     input("\nPress Enter to continue...")
         
         elif choice == '4':
