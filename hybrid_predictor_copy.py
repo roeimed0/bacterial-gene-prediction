@@ -805,7 +805,7 @@ Examples:
                 try:
                     predict_ncbi_genome(accession, args.email or NCBI_EMAIL)
                     print(f"\n[+] Success!")
-                    break
+                    input("\nPress Enter to continue...")
                 except Exception as e:
                     print(f"\n[!] Error: {e}")
                     input("\nPress Enter to continue...")
@@ -818,7 +818,7 @@ Examples:
                 try:
                     predict_ncbi_genome(accession, email)
                     print(f"\n[+] Success!")
-                    break
+                    input("\nPress Enter to continue...")
                 except Exception as e:
                     print(f"\n[!] Error: {e}")
                     input("\nPress Enter to continue...")
@@ -832,8 +832,6 @@ Examples:
                     predict_fasta_file(fasta_path)
                     print(f"\n[+] Success!")
                     input("\nPress Enter to continue...")
-
-                    break
                 except Exception as e:
                     print(f"\n[!] Error: {e}")
                     input("\nPress Enter to continue...")
