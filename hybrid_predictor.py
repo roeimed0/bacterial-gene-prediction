@@ -43,6 +43,40 @@ GENOME_CATALOG = config.GENOME_CATALOG
 get_genome_by_id = config.get_genome_by_id
 get_genome_by_accession = config.get_genome_by_accession
 
+def get_versioned_filename(base_path: Path, extension: str = '') -> Path:
+    """
+    Generate a versioned filename if the file already exists.
+
+    """
+    if not base_path.exists():
+        return base_path
+    
+    # Split into parts
+    parent = base_path.parent
+    stem = base_path.stem
+    suffix = base_path.suffix
+    
+    # Check if already versioned
+    import re
+    version_match = re.search(r'_v(\d+)$', stem)
+    
+    if version_match:
+        # Already has version, increment it
+        current_version = int(version_match.group(1))
+        base_stem = stem[:version_match.start()]
+        version = current_version + 1
+    else:
+        # No version yet, start at v2
+        base_stem = stem
+        version = 2
+    
+    # Find next available version
+    while True:
+        new_path = parent / f"{base_stem}_v{version}{suffix}"
+        if not new_path.exists():
+            return new_path
+        version += 1
+
 
 def print_banner():
     """Print a nice welcome banner"""
@@ -327,8 +361,9 @@ def run_validation(genome_id: str):
         
         # Save report
         results_dir = Path('results')
-        report_path = results_dir / f'{genome_id}_validation_report.txt'
-        
+        base_report_path= results_dir / f'{genome_id}_validation_report.txt'
+        report_path = get_versioned_filename(base_report_path)
+
         with open(report_path, 'w') as f:
             f.write("="*80 + "\n")
             f.write("VALIDATION REPORT\n")
@@ -419,7 +454,15 @@ def detect_input_mode(input_str: str) -> tuple:
         f"  Use --list to see available genomes"
     )
 
-def predict_ncbi_genome(accession: str, email: str = None):
+
+def predict_ncbi_genome(
+    accession: str, 
+    email: str = None,
+    use_ml: bool = True,
+    ml_threshold: float = 0.1,
+    use_final_filtration_ml: bool = True,
+    final_ml_threshold: float = 0.12
+):
     """Download genome from NCBI and predict genes"""
     from Bio import Entrez
     import gzip
@@ -484,15 +527,17 @@ def predict_ncbi_genome(accession: str, email: str = None):
     # Set output path using genome_id for results
     results_dir = Path('results')
     results_dir.mkdir(exist_ok=True)
-    output_path = results_dir / f'{accession}_predictions.gff'
-    
+    base_output_path = results_dir / f'{accession}_predictions.gff'
+    output_path= get_versioned_filename(base_output_path)
+
     # Call predict_fasta_file with the downloaded genome
     try:
         predictions = predict_fasta_file(
             fasta_path=str(fasta_path),
-            output_path=str(output_path),
-            use_ml=True,
-            ml_threshold=0.1
+            use_ml=use_ml,
+            ml_threshold=ml_threshold,
+            use_final_filtration_ml=use_final_filtration_ml,
+            final_ml_threshold=final_ml_threshold
         )
         
         print(f"\n{'='*80}")
@@ -510,11 +555,13 @@ def predict_ncbi_genome(accession: str, email: str = None):
         print(f"\n[!] Prediction failed: {e}", file=sys.stderr)
         raise
 
+
 def predict_fasta_file(
     fasta_path: str, 
-    output_path: str = None, 
     use_ml: bool = True, 
-    ml_threshold: float = 0.1
+    ml_threshold: float = 0.1,
+    use_final_filtration_ml: bool = True,
+    final_ml_threshold: float = 0.12
 ):
     """Predict genes from FASTA file."""
     print(f"\n{'='*80}")
@@ -522,16 +569,21 @@ def predict_fasta_file(
     print(f"{'='*80}")
     print(f"Input: {fasta_path}")
     
-    # FORCED: Always results folder, ignore output_path parameter
+    # Always results folder
     results_dir = Path(__file__).resolve().parent / 'results'
     results_dir.mkdir(exist_ok=True)
+
     filename = Path(fasta_path).stem + '_predictions.gff'
-    output_path = str(results_dir / filename)
+    base_output_path = results_dir / filename
+    output_path = str(get_versioned_filename(base_output_path))
     
     print(f"Output: {output_path}")
-    print(f"ML filtering: {'Enabled' if use_ml else 'Disabled'}")
+    print(f"ML group filtering: {'Enabled' if use_ml else 'Disabled'}")
     if use_ml:
-        print(f"ML threshold: {ml_threshold}")
+        print(f"  Group ML threshold: {ml_threshold}")
+    print(f"Final ML filtration: {'Enabled' if use_final_filtration_ml else 'Disabled'}")
+    if use_final_filtration_ml:
+        print(f"  Final ML threshold: {final_ml_threshold}")
     
     try:
         from src.data_management import load_genome_sequence
@@ -541,7 +593,7 @@ def predict_fasta_file(
             organize_nested_orfs, select_best_starts,
             FIRST_FILTER_THRESHOLD, SECOND_FILTER_THRESHOLD, START_SELECTION_WEIGHTS 
         )    
-        from src.ml_models import OrfGroupClassifier
+        from src.ml_models import OrfGroupClassifier, HybridGeneFilter
         
         print(f"\n{'='*80}\nSTEP 1: LOAD FASTA FILE\n{'='*80}")
         genome_info = load_genome_sequence(fasta_path)
@@ -583,10 +635,15 @@ def predict_fasta_file(
                 model_path = Path(__file__).parent / 'models' / 'orf_classifier_lgb.pkl'
                 if model_path.exists():
                     classifier.load(str(model_path))
+                    pre_filter_count = len(grouped_orfs)
                     grouped_orfs = classifier.filter_groups(
                         groups=grouped_orfs, genome_id="user_genome",
                         weights=START_SELECTION_WEIGHTS, threshold=ml_threshold
                     )
+                    post_filter_count = len(grouped_orfs)
+                    print(f"Groups before ML: {pre_filter_count:,}")
+                    print(f"Groups after ML:  {post_filter_count:,}")
+                    print(f"Groups removed:   {pre_filter_count - post_filter_count:,}")
                 else:
                     print(f"[!] Model not found, skipping ML...")
             except Exception as e:
@@ -599,6 +656,33 @@ def predict_fasta_file(
         print(f"\n{'='*80}\nSTEP 11: FINAL FILTERING\n{'='*80}")
         final_predictions = filter_candidates(top_candidates, **SECOND_FILTER_THRESHOLD)
         print(f"Final predictions: {len(final_predictions):,}")
+        
+        # NEW: FINAL ML FILTRATION (STEP 11.5 - AFTER traditional filter)
+        if use_final_filtration_ml:
+            print(f"\n{'='*80}\nSTEP 11.5: HYBRID ML FILTRATION\n{'='*80}")
+            try:
+                hybrid_filter = HybridGeneFilter()
+                model_path = Path(__file__).parent / 'models' / 'hybrid_best_model.pkl'
+                if model_path.exists():
+                    hybrid_filter.load(str(model_path))
+                    pre_filter_count = len(final_predictions)
+                    
+                    final_predictions = hybrid_filter.filter_candidates(
+                        candidates=final_predictions,
+                        genome_id="user_genome",
+                        threshold=final_ml_threshold,
+                        batch_size=32  # Process 32 candidates at a time
+                    )
+                    post_filter_count = len(final_predictions)
+                    print(f"Candidates before hybrid ML: {pre_filter_count:,}")
+                    print(f"Candidates after hybrid ML:  {post_filter_count:,}")
+                    print(f"Candidates removed:          {pre_filter_count - post_filter_count:,}")
+                else:
+                    print(f"[!] Hybrid model not found at {model_path}, skipping final ML filtration...")
+            except Exception as e:
+                print(f"[!] Hybrid ML error: {e}, skipping final filtration...")
+                import traceback
+                traceback.print_exc()
         
         print(f"\n{'='*80}\nSTEP 12: WRITE OUTPUT\n{'='*80}")
         write_gff(final_predictions, output_path, sequence_id=Path(fasta_path).stem)
@@ -618,6 +702,7 @@ def predict_fasta_file(
         traceback.print_exc()
         raise
 
+
 def write_gff(predictions: List[Dict], output_path: str, sequence_id: str = "sequence"):
     """Write predictions to GFF3 format."""
     with open(output_path, 'w') as f:
@@ -631,6 +716,7 @@ def write_gff(predictions: List[Dict], output_path: str, sequence_id: str = "seq
             attrs = f"ID=gene_{i};rbs_score={rbs:.2f};combined_score={score:.2f}"
             f.write(f"{sequence_id}\tHybridPredictor\tCDS\t{start}\t{end}\t{score:.3f}\t{strand}\t0\t{attrs}\n")
     print(f"[+] Wrote {len(predictions)} predictions to {output_path}")
+
 
 def main():
     """Main entry point"""
@@ -647,13 +733,26 @@ Examples:
   python hybrid_predictor.py 1
   python hybrid_predictor.py NC_000913.3 --email you@example.com
   python hybrid_predictor.py mygenome.fasta
+  
+  # With ML options
+  python hybrid_predictor.py mygenome.fasta --group-threshold 0.15 --final-threshold 0.2
+  python hybrid_predictor.py mygenome.fasta --no-group-ml --no-final-ml
         """
     )
     
     parser.add_argument('input', nargs='?', help='Catalog number, NCBI accession, or FASTA file')
     parser.add_argument('--email', help='Email for NCBI (required for downloads)')
-    parser.add_argument('--threshold', type=float, default=0.1,
-                       help='ML probability threshold (default: 0.1)')
+    
+    # ML filtering options
+    parser.add_argument('--group-threshold', type=float, default=0.1,
+                       help='ML group filtering threshold (default: 0.1)')
+    parser.add_argument('--final-threshold', type=float, default=0.12,
+                       help='Final hybrid ML filtration threshold (default: 0.12)')
+    parser.add_argument('--no-group-ml', action='store_true',
+                       help='Disable ML group filtering')
+    parser.add_argument('--no-final-ml', action='store_true',
+                       help='Disable final hybrid ML filtration')
+    
     parser.add_argument('-l', '--list', action='store_true',
                        help='List available genomes in catalog')
     parser.add_argument('--group', choices=['Proteobacteria', 'Firmicutes', 'Actinobacteria', 'Archaea'],
@@ -701,9 +800,22 @@ Examples:
         
         try:
             if mode == 'ncbi':
-                predict_ncbi_genome(resolved_input, args.email)
+                predict_ncbi_genome(
+                    resolved_input, 
+                    args.email,
+                    use_ml=not args.no_group_ml,
+                    ml_threshold=args.group_threshold,
+                    use_final_filtration_ml=not args.no_final_ml,
+                    final_ml_threshold=args.final_threshold
+                )
             elif mode == 'fasta':
-                predict_fasta_file(resolved_input)
+                predict_fasta_file(
+                    resolved_input,
+                    use_ml=not args.no_group_ml,
+                    ml_threshold=args.group_threshold,
+                    use_final_filtration_ml=not args.no_final_ml,
+                    final_ml_threshold=args.final_threshold
+                )
             
             print(f"\n[+] Success!")
             
@@ -731,11 +843,10 @@ Examples:
                 try:
                     predict_ncbi_genome(accession, args.email or NCBI_EMAIL)
                     print(f"\n[+] Success!")
-                    break
-                except NotImplementedError as e:
-                    print(f"\n[!] {e}")
-                    print("This mode is under construction.")
                     input("\nPress Enter to continue...")
+                except Exception as e:
+                    print(f"\n[!] Error: {e}")
+                    
         
         elif choice == '2':
             # NCBI download
@@ -745,24 +856,22 @@ Examples:
                 try:
                     predict_ncbi_genome(accession, email)
                     print(f"\n[+] Success!")
-                    break
-                except NotImplementedError as e:
-                    print(f"\n[!] {e}")
-                    print("This mode is under construction.")
                     input("\nPress Enter to continue...")
+                except Exception as e:
+                    print(f"\n[!] Error: {e}")
+                    
         
         elif choice == '3':
             # FASTA file
             result = fasta_upload()
             if result:
-                mode, fasta_path, output = result
+                mode, fasta_path, _ = result 
                 try:
-                    predict_fasta_file(fasta_path, output)
+                    predict_fasta_file(fasta_path)
                     print(f"\n[+] Success!")
-                    break
-                except NotImplementedError as e:
-                    print(f"\n[!] {e}")
-                    print("This mode is under construction.")
+                    input("\nPress Enter to continue...")
+                except Exception as e:
+                    print(f"\n[!] Error: {e}")
                     input("\nPress Enter to continue...")
         
         elif choice == '4':

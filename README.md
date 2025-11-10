@@ -15,7 +15,8 @@ The tool performs de novo gene prediction without requiring pre-downloaded train
 
 **Key Features:**
 - Self-training on target genome (no external training data required)
-- Optional ML filtering trained on 27 diverse prokaryotes (4 taxonomic families)
+- Optional ML nested orf filtering trained on 27 diverse prokaryotes (4 taxonomic families)
+- Optional Deep learning model trained on 27 diverse prokaryotes (4 taxonomic families) for precision enhancement
 - Works on any bacterial or archaeal genome
 - Interactive menu and command-line modes
 - Automatic validation against NCBI reference annotations
@@ -24,15 +25,24 @@ The tool performs de novo gene prediction without requiring pre-downloaded train
 ## Performance
 
 Evaluated on 15 diverse bacterial and archaeal genomes:
+No Deep learning model:
 
 | Metric | Average Score |
 |--------|---------------|
-| Sensitivity (Recall) | ~75% |
+| Sensitivity (Recall)| ~75% |
 | Precision | ~65% |
 | F1 Score | ~69% |
 
-**ML Model Training:**
-The optional LightGBM classifier was trained on 27 prokaryotic genomes spanning 4 major taxonomic groups (Proteobacteria, Firmicutes, Actinobacteria, Archaea) to ensure generalization across different bacterial families with varying GC content, genome sizes, and codon usage patterns.
+With Deep learning model:
+
+| Metric | Average Score |
+|--------|---------------|
+| Sensitivity (Recall)| ~73% |
+| Precision | ~80% |
+| F1 Score | ~76% |
+
+**ML Models Training:**
+The optional LightGBM classifier and CNN+Dense models were trained on 27 prokaryotic genomes spanning 4 major taxonomic groups (Proteobacteria, Firmicutes, Actinobacteria, Archaea) to ensure generalization across different bacterial families with varying GC content, genome sizes, and codon usage patterns.
 
 ## Quick Start
 
@@ -199,11 +209,20 @@ python hybrid_predictor.py NC_000913.3 --email your@email.com
 # Predict from FASTA file
 python hybrid_predictor.py genome.fasta
 
-# Adjust ML threshold (default: 0.1, range: 0.0-1.0)
-python hybrid_predictor.py genome.fasta --threshold 0.2
+# Adjust group ML threshold (default: 0.1, range: 0.0-1.0)
+python hybrid_predictor.py genome.fasta --ml-threshold 0.2
+
+# Adjust Hybrid ML threshold (default: 0.1, range: 0.0-1.0)
+python hybrid_predictor.py genome.fasta --final-ml-threshold 0.2
 
 # Force interactive mode even with arguments
 python hybrid_predictor.py --interactive
+
+# Dont use group ml
+python hybrid_predictor.py --no-group-ml
+
+# Dont use final filter ml
+python hybrid_predictor.py --no-final-ml
 ```
 
 ## Output Format
@@ -252,7 +271,7 @@ Each ORF is scored using five features:
 - **Start Codon Type**: Weight preference: ATG > GTG > TTG
 
 ### Step 5: Initial Filtering
-- Two-stage threshold-based filtering
+- threshold-based filtering
 - Thresholds optimized on training data from diverse genomes
 - Removes low-scoring ORF candidates
 
@@ -288,6 +307,19 @@ Each ORF is scored using five features:
   - RBS: 0.64
   - start type: 0.28
 
+### Step 9: Traditional Second Filtering
+- threshold-based filtering
+- Thresholds optimized on training data from diverse genomes
+- Removes low-scoring ORF candidates
+
+### Step 10: Hybrid ML Filtration (Optional)
+-Deep-learning–based binary classifier that refines the final candidate genes after traditional filtering and start-site selection.
+-Combines sequence-based embeddings (via CNN) with traditional features such as codon bias, IMM score, RBS score, and ORF length.
+-Reduces residual false positives that remain after the main LightGBM group filter.
+-Model file: models/hybrid_best_model.pkl
+-Default threshold: 0.12 (adjustable via --final-threshold)
+-Can be disabled with --no-final-ml.
+
 ## Project Structure
 
 ```
@@ -307,6 +339,7 @@ bacterial-gene-prediction/
 │   └── 03_ml_models.ipynb
 ├── models/                      # Trained ML models (optional)
 │   └── orf_classifier_lgb.pkl
+|   └── hybrid_best_model.pkl
 ├── data/                        # Downloaded genomes (auto-created)
 │   └── full_dataset/           # NCBI downloads cached here
 ├── results/                     # Output directory (auto-created)
@@ -580,13 +613,19 @@ chmod 755 results/
   - Very high or low GC content (<30% or >75%)
   - Unusually small (<1 Mbp) or large (>15 Mbp)
   - Draft assembly with many short contigs
-- Try adjusting ML threshold:
+- Try adjusting ML thresholds:
   ```bash
   # More lenient (may increase sensitivity)
-  python hybrid_predictor.py genome.fasta --threshold 0.05
+  python hybrid_predictor.py genome.fasta --group-threshold 0.05
   
   # More strict (may increase precision)
-  python hybrid_predictor.py genome.fasta --threshold 0.2
+  python hybrid_predictor.py genome.fasta --group-threshold 0.2
+
+    # More lenient (may increase sensitivity)
+  python hybrid_predictor.py genome.fasta --final-threshold 0.05
+  
+  # More strict (may increase precision)
+  python hybrid_predictor.py genome.fasta --final-threshold 0.2
   ```
 
 **ML model not found**
