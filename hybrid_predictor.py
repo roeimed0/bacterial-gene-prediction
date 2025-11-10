@@ -43,6 +43,40 @@ GENOME_CATALOG = config.GENOME_CATALOG
 get_genome_by_id = config.get_genome_by_id
 get_genome_by_accession = config.get_genome_by_accession
 
+def get_versioned_filename(base_path: Path, extension: str = '') -> Path:
+    """
+    Generate a versioned filename if the file already exists.
+
+    """
+    if not base_path.exists():
+        return base_path
+    
+    # Split into parts
+    parent = base_path.parent
+    stem = base_path.stem
+    suffix = base_path.suffix
+    
+    # Check if already versioned
+    import re
+    version_match = re.search(r'_v(\d+)$', stem)
+    
+    if version_match:
+        # Already has version, increment it
+        current_version = int(version_match.group(1))
+        base_stem = stem[:version_match.start()]
+        version = current_version + 1
+    else:
+        # No version yet, start at v2
+        base_stem = stem
+        version = 2
+    
+    # Find next available version
+    while True:
+        new_path = parent / f"{base_stem}_v{version}{suffix}"
+        if not new_path.exists():
+            return new_path
+        version += 1
+
 
 def print_banner():
     """Print a nice welcome banner"""
@@ -327,8 +361,9 @@ def run_validation(genome_id: str):
         
         # Save report
         results_dir = Path('results')
-        report_path = results_dir / f'{genome_id}_validation_report.txt'
-        
+        base_report_path= results_dir / f'{genome_id}_validation_report.txt'
+        report_path = get_versioned_filename(base_report_path)
+
         with open(report_path, 'w') as f:
             f.write("="*80 + "\n")
             f.write("VALIDATION REPORT\n")
@@ -492,8 +527,9 @@ def predict_ncbi_genome(
     # Set output path using genome_id for results
     results_dir = Path('results')
     results_dir.mkdir(exist_ok=True)
-    output_path = results_dir / f'{accession}_predictions.gff'
-    
+    base_output_path = results_dir / f'{accession}_predictions.gff'
+    output_path= get_versioned_filename(base_output_path)
+
     # Call predict_fasta_file with the downloaded genome
     try:
         predictions = predict_fasta_file(
@@ -536,8 +572,10 @@ def predict_fasta_file(
     # Always results folder
     results_dir = Path(__file__).resolve().parent / 'results'
     results_dir.mkdir(exist_ok=True)
+
     filename = Path(fasta_path).stem + '_predictions.gff'
-    output_path = str(results_dir / filename)
+    base_output_path = results_dir / filename
+    output_path = str(get_versioned_filename(base_output_path))
     
     print(f"Output: {output_path}")
     print(f"ML group filtering: {'Enabled' if use_ml else 'Disabled'}")
@@ -805,11 +843,10 @@ Examples:
                 try:
                     predict_ncbi_genome(accession, args.email or NCBI_EMAIL)
                     print(f"\n[+] Success!")
-                    break
-                except NotImplementedError as e:
-                    print(f"\n[!] {e}")
-                    print("This mode is under construction.")
                     input("\nPress Enter to continue...")
+                except Exception as e:
+                    print(f"\n[!] Error: {e}")
+                    
         
         elif choice == '2':
             # NCBI download
@@ -819,11 +856,10 @@ Examples:
                 try:
                     predict_ncbi_genome(accession, email)
                     print(f"\n[+] Success!")
-                    break
-                except NotImplementedError as e:
-                    print(f"\n[!] {e}")
-                    print("This mode is under construction.")
                     input("\nPress Enter to continue...")
+                except Exception as e:
+                    print(f"\n[!] Error: {e}")
+                    
         
         elif choice == '3':
             # FASTA file
@@ -833,10 +869,9 @@ Examples:
                 try:
                     predict_fasta_file(fasta_path)
                     print(f"\n[+] Success!")
-                    break
-                except NotImplementedError as e:
-                    print(f"\n[!] {e}")
-                    print("This mode is under construction.")
+                    input("\nPress Enter to continue...")
+                except Exception as e:
+                    print(f"\n[!] Error: {e}")
                     input("\nPress Enter to continue...")
         
         elif choice == '4':

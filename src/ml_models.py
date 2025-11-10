@@ -1,3 +1,18 @@
+
+import joblib
+import numpy as np
+import pandas as pd
+import math
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from pathlib import Path
+from typing import List, Dict, Tuple
+from collections import Counter
+from Bio.Seq import Seq
+from Bio.SeqUtils.ProtParam import ProteinAnalysis
+
+
 """
 Machine learning classifier for ORF groups.
 
@@ -5,17 +20,6 @@ Loads a trained LightGBM model to filter groups of nested ORFs.
 Groups share the same stop codon but have different start codons.
 Model predicts: Does this GROUP contain a real gene? (yes/no)
 """
-
-import joblib
-import numpy as np
-import pandas as pd
-import torch
-import math
-from pathlib import Path
-from typing import List, Dict
-from collections import Counter
-from Bio.Seq import Seq
-from Bio.SeqUtils.ProtParam import ProteinAnalysis
 
 class OrfGroupClassifier:
     """
@@ -43,15 +47,15 @@ class OrfGroupClassifier:
             raise FileNotFoundError(f"Model not found: {model_path}")
         
         self.model = joblib.load(str(model_path))
-        print(f"✓ Loaded model: {model_path}")
+        print(f"Loaded model: {model_path}")
         
         # Load feature names (should be in same directory)
         feature_path = model_path.parent / 'feature_names.pkl'
         if feature_path.exists():
             self.feature_names = joblib.load(str(feature_path))
-            print(f"✓ Loaded {len(self.feature_names)} features")
+            print(f"Loaded {len(self.feature_names)} features")
         else:
-            print(f"⚠ Warning: feature_names.pkl not found in {model_path.parent}")
+            print(f"Warning: feature_names.pkl not found in {model_path.parent}")
             self.feature_names = None
     
     def _entropy_from_probs(self, arr, base=2):
@@ -214,7 +218,7 @@ class OrfGroupClassifier:
         
         if len(available_features) < len(model_features):
             missing = set(model_features) - set(available_features)
-            print(f"⚠ Warning: {len(missing)} features missing from data: {missing}")
+            print(f"Warning: {len(missing)} features missing from data: {missing}")
         
         # Extract feature matrix
         X = df[available_features].values
@@ -236,13 +240,6 @@ class OrfGroupClassifier:
     ) -> Dict[str, List[Dict]]:
         """
         Filter groups, keeping only those predicted to contain real genes.
-        
-        Args:
-            groups: Dictionary of {group_id: [list of ORFs]}
-            genome_id: Genome identifier
-            weights: Optional weights for start selection
-            threshold: Probability threshold (default 0.1)
-        
         Returns:
             Filtered dictionary with only groups predicted as real genes
         """
@@ -263,26 +260,9 @@ class OrfGroupClassifier:
         
         return filtered_groups
 
-# filters.py
-import math
-from collections import Counter
-from pathlib import Path
-from typing import List, Dict, Tuple
-
-import joblib
-import numpy as np
-import pandas as pd
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from Bio.Seq import Seq
-from Bio.SeqUtils.ProtParam import ProteinAnalysis
-from sklearn.metrics import confusion_matrix  # kept for potential evaluation prints
-
-
-# ----------------------------
-# --- Hybrid model arch (same as your notebook)
-# ----------------------------
+# ----------------
+# --- Hybrid model
+# ----------------
 class CNNBranch(nn.Module):
     def __init__(self, output_dim=128, dropout=0.3):
         super().__init__()
@@ -311,7 +291,6 @@ class CNNBranch(nn.Module):
         x = F.relu(self.fc(x))
         return x
 
-
 class DenseBranch(nn.Module):
     def __init__(self, input_dim=25, output_dim=128, dropout=0.3):
         super().__init__()
@@ -330,7 +309,6 @@ class DenseBranch(nn.Module):
         x = self.dropout2(x)
         x = F.relu(self.fc3(x))
         return x
-
 
 class HybridGenePredictor(nn.Module):
     def __init__(self, num_traditional_features=25, dropout=0.3):
