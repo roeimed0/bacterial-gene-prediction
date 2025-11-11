@@ -16,7 +16,7 @@ const ModeSelector = ({ modes, activeMode, onModeChange }) => {
               key={mode.id}
               onClick={() => onModeChange(activeMode===mode.id ? null : mode.id)}
               className={`p-4 rounded-lg border-2 transition-all ${
-                isActives
+                isActive
                   ? 'border-blue-500 bg-blue-50'
                   : 'border-gray-200 hover:border-blue-300'
               }`}

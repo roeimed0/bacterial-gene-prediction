@@ -1,25 +1,26 @@
 import { useState } from 'react'
 import PipelineVisualization from './components/PipelineVisualization'
+import Header from './components/Layout/Header'
+import ModeBar from './components/Layout/ModeBar'
+import MainContent from './components/Layout/MainContent'
 
 function App() {
   const [showPipeline, setShowPipeline] = useState(false)
+  const [activeMode, setActiveMode] = useState(null)
 
   return (
-    <div className="min-h-screen bg-gray-100 relative">
-      <button 
-        onClick={() => setShowPipeline(true)}
-        className="absolute top-8 right-8 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors z-10"
-      >
-        Introduction
-      </button>
+    <div className="min-h-screen bg-gray-50">
+      {/* Is this line here? */}
+      <Header onShowPipeline={() => setShowPipeline(true)} />
       
-      <div className="min-h-screen flex items-center justify-center">
-        <h1 className="text-4xl font-bold text-blue-600">
-          Bacterial and Archeal Gene Predictor
-        </h1>
-      </div>
-
-      {/* Modal Overlay - Scrollable */}
+      <ModeBar 
+        activeMode={activeMode}
+        onModeChange={setActiveMode}
+      />
+      
+      <MainContent activeMode={activeMode} />
+      
+      {/* Modal - Is this still here? */}
       {showPipeline && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 z-50 overflow-y-auto"
@@ -32,6 +33,7 @@ function App() {
             >
               <PipelineVisualization 
                 onClose={() => setShowPipeline(false)}
+                initialMode={activeMode}
                 initialMLState={true}
               />
             </div>
