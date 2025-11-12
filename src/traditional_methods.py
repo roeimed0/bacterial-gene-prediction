@@ -518,12 +518,9 @@ def create_training_set(
     Returns:
         List of training ORFs (intersection of both methods)
     """
-    # Mode detection
     if sequence is not None and all_orfs is not None:
-        # LIVE MODE - working with new genome
         pass
     elif genome_id is not None and cached_data is not None:
-        # CACHED MODE - working with catalog genome
         genome_data = cached_data.get(genome_id)
         if genome_data is None:
             raise ValueError(f"No precomputed ORFs found for genome_id {genome_id}")
@@ -535,16 +532,14 @@ def create_training_set(
             "or (genome_id + cached_data) for cached mode"
         )
     
-    # Now we have sequence and all_orfs regardless of mode
     
-    # Select using Glimmer method
     glimmer_set = select_training_glimmer(
         all_orfs, 
         min_length=300, 
         max_training_size=glimmer_max_size
     )
     
-    # Select using Flexible method
+
     flexible_set = select_training_flexible(
         all_orfs, 
         target_size=flexible_target_size, 
@@ -554,7 +549,6 @@ def create_training_set(
         prefer_atg=True
     )
     
-    # Find intersection
     glimmer_coords = set((orf.get('genome_start', orf['start']),
                           orf.get('genome_end', orf['end'])) for orf in glimmer_set)
     flexible_coords = set((orf.get('genome_start', orf['start']),
@@ -597,12 +591,9 @@ def create_intergenic_set(
     Returns:
         List of intergenic region dictionaries
     """
-    # Mode detection
     if sequence is not None and all_orfs is not None:
-        # LIVE MODE - working with new genome
         pass
     elif genome_id is not None and cached_data is not None:
-        # CACHED MODE - working with catalog genome
         genome_data = cached_data.get(genome_id)
         if genome_data is None:
             raise ValueError(f"No precomputed ORFs found for genome {genome_id}")
@@ -614,12 +605,8 @@ def create_intergenic_set(
             "or (genome_id + cached_data) for cached mode"
         )
     
-    # Now we have sequence and all_orfs regardless of mode
-    
-    # Step 1: Identify likely coding regions
     likely_genes = [orf for orf in all_orfs if orf['length'] >= 200]
     
-    # Step 2: Extract intergenic regions from multiple strategies
     _, intergenic_coords_1 = extract_intergenic_regions(
         sequence, likely_genes, buffer=buffer, min_length=min_length
     )
@@ -630,12 +617,10 @@ def create_intergenic_set(
         sequence, all_orfs, min_length=min_length
     )
     
-    # Step 3: Merge all coordinates
     all_union_coords = merge_intervals(
         intergenic_coords_1 + intergenic_coords_2 + intergenic_coords_3
     )
     
-    # Step 4: Build dictionary objects
     intergenic_regions = []
     for start, end in all_union_coords:
         seq = sequence[start-1:end]
