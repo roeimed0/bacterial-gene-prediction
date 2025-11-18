@@ -100,5 +100,11 @@ export const api = {
     }
 
     return response.json();
+  },
+
+  async getCatalog() {
+    const response = await fetch(`${API_BASE_URL}/catalog`);
+    if (!response.ok) throw new Error('Failed to load catalog');
+    return response.json();
   }
 };

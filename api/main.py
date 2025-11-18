@@ -47,7 +47,6 @@ def check_models_exist() -> dict:
         "hybrid_filter": (models_dir / 'hybrid_best_model.pkl').exists()
     }
 
-
 @app.get("/", tags=["Root"])
 async def root():
     """Root endpoint"""
@@ -58,11 +57,10 @@ async def root():
             "health": "/health",
             "predict": "/predict (POST)",
             "predict_file": "/predict/file (POST)",
-            "predict_ncbi": "/predict/ncbi (POST)"
+            "predict_ncbi": "/predict/ncbi (POST)",
+            "catalog": "/catalog (GET)" 
         }
     }
-
-
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
 async def health_check():
     """Check API health and model availability"""
@@ -296,7 +294,26 @@ async def predict_ncbi(request: NcbiPredictionRequest):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"NCBI prediction failed: {str(e)}")
 
-
+@app.get("/catalog", tags=["Catalog"])
+async def get_genome_catalog():
+    """
+    Get the list of 100 well-studied genomes from the catalog
+    """
+    try:
+        # Import config to get catalog
+        from src import config
+        
+        # Return catalog data
+        return {
+            "total": len(config.GENOME_CATALOG),
+            "genomes": config.GENOME_CATALOG
+        }
+        
+    except Exception as e:
+        print(f"Catalog error: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to load catalog: {str(e)}")
+    
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

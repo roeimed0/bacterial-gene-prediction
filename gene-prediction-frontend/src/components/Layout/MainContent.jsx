@@ -1,5 +1,6 @@
 import FastaMode from '../Modes/FastaMode';
-import NcbiMode from '../Modes/NcbiMode';  // ADD THIS
+import NcbiMode from '../Modes/NcbiMode';
+import CatalogMode from '../Modes/CatalogMode';  // ADD THIS
 
 const MainContent = ({ 
   activeMode, 
@@ -27,18 +28,21 @@ const MainContent = ({
         </div>
       )}
       
+      {/* CATALOG MODE - UPDATE THIS */}
       {activeMode === 'catalog' && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">
             Browse Genome Catalog
           </h2>
-          <p className="text-gray-600">
-            Catalog content will go here...
-          </p>
+          <CatalogMode 
+            results={catalogResults}
+            setResults={setCatalogResults}
+            addJob={addJob}
+            removeJob={removeJob}
+          />
         </div>
       )}
       
-      {/* NCBI MODE - UPDATE THIS SECTION */}
       {activeMode === 'ncbi' && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">
