@@ -1,7 +1,20 @@
-const MainContent = ({ activeMode }) => {
+import FastaMode from '../Modes/FastaMode';
+
+const MainContent = ({ 
+  activeMode, 
+  fastaResults, 
+  setFastaResults,
+  catalogResults,
+  setCatalogResults,
+  ncbiResults,
+  setNcbiResults,
+  validateResults,
+  setValidateResults,
+  addJob,
+  removeJob
+}) => {
   return (
     <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-      {/* No mode selected - Welcome screen */}
       {activeMode === null && (
         <div className="text-center py-16">
           <h2 className="text-3xl font-bold text-gray-900 mb-4">
@@ -13,7 +26,6 @@ const MainContent = ({ activeMode }) => {
         </div>
       )}
       
-      {/* Catalog mode selected */}
       {activeMode === 'catalog' && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">
@@ -25,7 +37,6 @@ const MainContent = ({ activeMode }) => {
         </div>
       )}
       
-      {/* NCBI mode selected */}
       {activeMode === 'ncbi' && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">
@@ -37,19 +48,20 @@ const MainContent = ({ activeMode }) => {
         </div>
       )}
       
-      {/* FASTA mode selected */}
       {activeMode === 'fasta' && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">
             Upload Your FASTA File
           </h2>
-          <p className="text-gray-600">
-            File upload will go here...
-          </p>
+          <FastaMode 
+            results={fastaResults}
+            setResults={setFastaResults}
+            addJob={addJob}
+            removeJob={removeJob}
+          />
         </div>
       )}
       
-      {/* Validate mode selected */}
       {activeMode === 'validate' && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">

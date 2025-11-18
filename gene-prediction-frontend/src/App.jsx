@@ -7,20 +7,59 @@ import MainContent from './components/Layout/MainContent'
 function App() {
   const [showPipeline, setShowPipeline] = useState(false)
   const [activeMode, setActiveMode] = useState(null)
+  
+  // Results state
+  const [fastaResults, setFastaResults] = useState(null)
+  const [catalogResults, setCatalogResults] = useState(null)
+  const [ncbiResults, setNcbiResults] = useState(null)
+  const [validateResults, setValidateResults] = useState(null)
+  
+  // Running jobs tracker
+  const [runningJobs, setRunningJobs] = useState([])
+  
+  // Add a new job
+  const addJob = (jobData) => {
+    const job = {
+      id: Date.now(), // Simple unique ID
+      ...jobData,
+      startTime: new Date()
+    }
+    setRunningJobs(prev => [...prev, job])
+    return job.id
+  }
+  
+  // Remove a job (when completed or cancelled)
+  const removeJob = (jobId) => {
+    setRunningJobs(prev => prev.filter(job => job.id !== jobId))
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Is this line here? */}
-      <Header onShowPipeline={() => setShowPipeline(true)} />
+      <Header 
+        onShowPipeline={() => setShowPipeline(true)}
+        runningJobs={runningJobs}
+        onRemoveJob={removeJob}
+      />
       
       <ModeBar 
         activeMode={activeMode}
         onModeChange={setActiveMode}
       />
       
-      <MainContent activeMode={activeMode} />
+      <MainContent 
+        activeMode={activeMode}
+        fastaResults={fastaResults}
+        setFastaResults={setFastaResults}
+        catalogResults={catalogResults}
+        setCatalogResults={setCatalogResults}
+        ncbiResults={ncbiResults}
+        setNcbiResults={setNcbiResults}
+        validateResults={validateResults}
+        setValidateResults={setValidateResults}
+        addJob={addJob}
+        removeJob={removeJob}
+      />
       
-      {/* Modal - Is this still here? */}
       {showPipeline && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-50 z-50 overflow-y-auto"
