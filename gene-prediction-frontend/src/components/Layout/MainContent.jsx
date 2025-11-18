@@ -1,4 +1,5 @@
 import FastaMode from '../Modes/FastaMode';
+import NcbiMode from '../Modes/NcbiMode';  // ADD THIS
 
 const MainContent = ({ 
   activeMode, 
@@ -37,14 +38,18 @@ const MainContent = ({
         </div>
       )}
       
+      {/* NCBI MODE - UPDATE THIS SECTION */}
       {activeMode === 'ncbi' && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">
             Download from NCBI
           </h2>
-          <p className="text-gray-600">
-            NCBI content will go here...
-          </p>
+          <NcbiMode 
+            results={ncbiResults}
+            setResults={setNcbiResults}
+            addJob={addJob}
+            removeJob={removeJob}
+          />
         </div>
       )}
       

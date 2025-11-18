@@ -68,5 +68,37 @@ export const api = {
     }
 
     return response.json();
+  },
+
+  // Predict genes from NCBI accession
+  async predictFromNcbi(accession, email, options = {}) {
+    const {
+      useGroupML = true,
+      groupThreshold = 0.1,
+      useFinalML = true,
+      finalThreshold = 0.12
+    } = options;
+
+    const response = await fetch(`${API_BASE_URL}/predict/ncbi`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        accession,
+        email,
+        use_group_ml: useGroupML,
+        group_threshold: groupThreshold,
+        use_final_ml: useFinalML,
+        final_threshold: finalThreshold
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'NCBI download failed');
+    }
+
+    return response.json();
   }
 };
