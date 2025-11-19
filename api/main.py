@@ -18,7 +18,13 @@ from api.models import (
     NcbiPredictionRequest,
     PredictionResponse, 
     GenePrediction,
-    HealthResponse
+    HealthResponse,
+    ValidationRequest,
+    ValidationResponse,
+    FileInfo,              
+    FileListResponse,      
+    DeleteFilesRequest,    
+    DeleteFilesResponse    
 )
 
 # Create FastAPI app
@@ -31,7 +37,7 @@ app = FastAPI(
 # Enable CORS for React frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # Vite dev server
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,6 +53,7 @@ def check_models_exist() -> dict:
         "hybrid_filter": (models_dir / 'hybrid_best_model.pkl').exists()
     }
 
+
 @app.get("/", tags=["Root"])
 async def root():
     """Root endpoint"""
@@ -58,9 +65,16 @@ async def root():
             "predict": "/predict (POST)",
             "predict_file": "/predict/file (POST)",
             "predict_ncbi": "/predict/ncbi (POST)",
-            "catalog": "/catalog (GET)" 
+            "catalog": "/catalog (GET)",
+            "results": "/results (GET)",
+            "validate": "/validate (POST)",
+            "files": "/files (GET)",           
+            "delete": "/files/delete (POST)",  
+            "cleanup": "/files/cleanup (POST)" 
         }
     }
+
+
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
 async def health_check():
     """Check API health and model availability"""
@@ -80,24 +94,19 @@ async def predict_genes(request: PredictionRequest):
     Accepts raw DNA sequence or FASTA format string
     """
     try:
-        # Use a meaningful filename instead of random temp name
         filename = request.filename if request.filename else "pasted_sequence"
         
-        # Create temp directory for our files
         temp_dir = Path(tempfile.gettempdir()) / 'gene_predictions'
         temp_dir.mkdir(exist_ok=True)
         tmp_file_path = temp_dir / f"{filename}.fasta"
         
-        # Write sequence to file with proper name
         with open(tmp_file_path, 'w') as f:
             if not request.sequence.strip().startswith('>'):
                 f.write(f">{filename}\n")
             f.write(request.sequence)
         
-        # Import prediction function
         from hybrid_predictor import predict_fasta_file
         
-        # Run prediction - backend will use filename automatically
         predictions = predict_fasta_file(
             fasta_path=str(tmp_file_path),
             use_ml=request.use_group_ml,
@@ -106,10 +115,8 @@ async def predict_genes(request: PredictionRequest):
             final_ml_threshold=request.final_threshold
         )
         
-        # Clean up temp file
         tmp_file_path.unlink(missing_ok=True)
         
-        # Convert predictions to response format
         gene_predictions = []
         for i, pred in enumerate(predictions, 1):
             gene_predictions.append(GenePrediction(
@@ -122,7 +129,6 @@ async def predict_genes(request: PredictionRequest):
                 rbs_score=pred.get('rbs_score')
             ))
         
-        # Calculate sequence length
         sequence = request.sequence.replace('>', '').replace('\n', '').replace(' ', '')
         sequence = ''.join(c for c in sequence if c in 'ATGCatgc')
         
@@ -140,7 +146,6 @@ async def predict_genes(request: PredictionRequest):
         )
         
     except Exception as e:
-        # Clean up temp file on error
         try:
             tmp_file_path.unlink(missing_ok=True)
         except:
@@ -162,7 +167,6 @@ async def predict_genes_from_file(
     """
     Predict genes from an uploaded FASTA file
     """
-    # Validate file type
     if not file.filename.endswith(('.fasta', '.fa', '.fna')):
         raise HTTPException(
             status_code=400,
@@ -170,20 +174,16 @@ async def predict_genes_from_file(
         )
     
     try:
-        # Save with original filename in temp directory
         temp_dir = Path(tempfile.gettempdir()) / 'gene_predictions'
         temp_dir.mkdir(exist_ok=True)
         tmp_file_path = temp_dir / file.filename
         
-        # Write uploaded content
         with open(tmp_file_path, 'wb') as f:
             content = await file.read()
             f.write(content)
         
-        # Import prediction function
         from hybrid_predictor import predict_fasta_file
         
-        # Run prediction - backend will use filename automatically
         predictions = predict_fasta_file(
             fasta_path=str(tmp_file_path),
             use_ml=use_group_ml,
@@ -192,10 +192,8 @@ async def predict_genes_from_file(
             final_ml_threshold=final_threshold
         )
         
-        # Clean up temp file
         tmp_file_path.unlink(missing_ok=True)
         
-        # Convert predictions to response format
         gene_predictions = []
         for i, pred in enumerate(predictions, 1):
             gene_predictions.append(GenePrediction(
@@ -208,10 +206,7 @@ async def predict_genes_from_file(
                 rbs_score=pred.get('rbs_score')
             ))
         
-        # Get sequence length from predictions
         sequence_length = max(p.end for p in gene_predictions) if gene_predictions else 0
-        
-        # Extract genome ID from filename (without extension)
         genome_id = Path(file.filename).stem
         
         return PredictionResponse(
@@ -228,7 +223,6 @@ async def predict_genes_from_file(
         )
         
     except Exception as e:
-        # Clean up temp file on error
         try:
             tmp_file_path.unlink(missing_ok=True)
         except:
@@ -247,10 +241,8 @@ async def predict_ncbi(request: NcbiPredictionRequest):
     Requires NCBI accession number and email address
     """
     try:
-        # Import prediction function
         from hybrid_predictor import predict_ncbi_genome
         
-        # Run NCBI download and prediction
         predictions = predict_ncbi_genome(
             accession=request.accession,
             email=request.email,
@@ -260,7 +252,6 @@ async def predict_ncbi(request: NcbiPredictionRequest):
             final_ml_threshold=request.final_threshold
         )
         
-        # Convert predictions to response format
         gene_predictions = []
         for i, pred in enumerate(predictions, 1):
             gene_predictions.append(GenePrediction(
@@ -273,7 +264,6 @@ async def predict_ncbi(request: NcbiPredictionRequest):
                 rbs_score=pred.get('rbs_score')
             ))
         
-        # Get sequence length from predictions
         sequence_length = max(p.end for p in gene_predictions) if gene_predictions else 0
         
         return PredictionResponse(
@@ -294,16 +284,15 @@ async def predict_ncbi(request: NcbiPredictionRequest):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"NCBI prediction failed: {str(e)}")
 
+
 @app.get("/catalog", tags=["Catalog"])
 async def get_genome_catalog():
     """
     Get the list of 100 well-studied genomes from the catalog
     """
     try:
-        # Import config to get catalog
         from src import config
         
-        # Return catalog data
         return {
             "total": len(config.GENOME_CATALOG),
             "genomes": config.GENOME_CATALOG
@@ -313,7 +302,266 @@ async def get_genome_catalog():
         print(f"Catalog error: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to load catalog: {str(e)}")
+
+
+@app.get("/results", tags=["Results"])
+async def get_results():
+    """
+    Get list of available prediction results for validation
+    """
+    try:
+        results_dir = project_root / 'results'
+        
+        if not results_dir.exists():
+            return {"results": []}
+        
+        all_gff = sorted(results_dir.glob('*_predictions.gff'))
+        results = []
+        
+        import re
+        for file in all_gff:
+            genome_id = file.stem.replace('_predictions', '')
+            is_ncbi = bool(re.match(r'^[A-Z]{2}_\d{6,}\.\d+$', genome_id))
+            
+            results.append({
+                "genome_id": genome_id,
+                "filename": file.name,
+                "size": file.stat().st_size,
+                "created": file.stat().st_mtime,
+                "can_validate": is_ncbi
+            })
+        
+        return {"results": results}
+        
+    except Exception as e:
+        print(f"Results listing error: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to list results: {str(e)}")
+
+
+@app.post("/validate", response_model=ValidationResponse, tags=["Validation"])
+async def validate_predictions(request: ValidationRequest):
+    """
+    Validate predictions against reference annotations
     
+    Only works for NCBI genomes with available reference annotations
+    """
+    try:
+        from src.validation import validate_from_results_directory
+        
+        metrics = validate_from_results_directory(request.genome_id)
+        
+        # Save validation report
+        results_dir = project_root / 'results'
+        report_path = results_dir / f'{request.genome_id}_validation_report.txt'
+        
+        if report_path.exists():
+            version = 2
+            while True:
+                versioned_path = results_dir / f'{request.genome_id}_validation_report_v{version}.txt'
+                if not versioned_path.exists():
+                    report_path = versioned_path
+                    break
+                version += 1
+        
+        with open(report_path, 'w') as f:
+            f.write("="*80 + "\n")
+            f.write("VALIDATION REPORT\n")
+            f.write("="*80 + "\n")
+            f.write(f"Genome ID:   {request.genome_id}\n")
+            f.write(f"Prediction:  {metrics['results_file']}\n")
+            f.write(f"Reference:   {metrics['reference_file']}\n")
+            f.write("\n")
+            f.write(f"Reference genes:       {metrics['reference_count']:,}\n")
+            f.write(f"Predicted genes:       {metrics['predicted_count']:,}\n")
+            f.write("\n")
+            f.write(f"True Positives (TP):   {metrics['true_positives']:,}\n")
+            f.write(f"False Positives (FP):  {metrics['false_positives']:,}\n")
+            f.write(f"False Negatives (FN):  {metrics['false_negatives']:,}\n")
+            f.write("\n")
+            f.write(f"Sensitivity (Recall):  {metrics['sensitivity']:.4f}\n")
+            f.write(f"Precision:             {metrics['precision']:.4f}\n")
+            f.write(f"F1 Score:              {metrics['f1_score']:.4f}\n")
+            f.write("="*80 + "\n")
+        
+        print(f"[+] Validation report saved to: {report_path}")
+        
+        return ValidationResponse(
+            genome_id=request.genome_id,
+            reference_count=metrics['reference_count'],
+            predicted_count=metrics['predicted_count'],
+            true_positives=metrics['true_positives'],
+            false_positives=metrics['false_positives'],
+            false_negatives=metrics['false_negatives'],
+            sensitivity=metrics['sensitivity'],
+            precision=metrics['precision'],
+            f1_score=metrics['f1_score'],
+            reference_file=metrics['reference_file'],
+            results_file=metrics['results_file']
+        )
+        
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=f"File not found: {str(e)}")
+    except Exception as e:
+        print(f"Validation error: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Validation failed: {str(e)}")
+
+
+@app.get("/files", response_model=FileListResponse, tags=["Files"])
+async def list_files():
+    """
+    List all downloaded genomes and prediction results
+    """
+    try:
+        files = []
+        total_size = 0
+        
+        # List genomes from data/full_dataset/
+        genomes_dir = project_root / 'data' / 'full_dataset'
+        if genomes_dir.exists():
+            for file in genomes_dir.glob('*.fasta'):
+                stat = file.stat()
+                files.append(FileInfo(
+                    filename=file.name,
+                    path=str(file.relative_to(project_root)),
+                    size=stat.st_size,
+                    created=stat.st_mtime,
+                    type='genome',
+                    can_delete=True
+                ))
+                total_size += stat.st_size
+        
+        # List GFF results from results/
+        results_dir = project_root / 'results'
+        if results_dir.exists():
+            for file in results_dir.glob('*.gff'):
+                stat = file.stat()
+                files.append(FileInfo(
+                    filename=file.name,
+                    path=str(file.relative_to(project_root)),
+                    size=stat.st_size,
+                    created=stat.st_mtime,
+                    type='result',
+                    can_delete=True
+                ))
+                total_size += stat.st_size
+            
+            # List validation reports from results/
+            for file in results_dir.glob('*_validation_report*.txt'):
+                stat = file.stat()
+                files.append(FileInfo(
+                    filename=file.name,
+                    path=str(file.relative_to(project_root)),
+                    size=stat.st_size,
+                    created=stat.st_mtime,
+                    type='report',
+                    can_delete=True
+                ))
+                total_size += stat.st_size
+        
+        files.sort(key=lambda x: x.created, reverse=True)
+        
+        return FileListResponse(
+            files=files,
+            total_size=total_size
+        )
+        
+    except Exception as e:
+        print(f"File listing error: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to list files: {str(e)}")
+
+
+@app.post("/files/delete", response_model=DeleteFilesResponse, tags=["Files"])
+async def delete_files(request: DeleteFilesRequest):
+    """
+    Delete specified files
+    """
+    try:
+        deleted = 0
+        failed = 0
+        errors = []
+        
+        for path_str in request.paths:
+            try:
+                file_path = project_root / path_str
+                
+                # Security check: only allow deleting from data/ and results/
+                if not (str(file_path).startswith(str(project_root / 'data')) or 
+                        str(file_path).startswith(str(project_root / 'results'))):
+                    errors.append(f"Cannot delete {path_str}: Outside allowed directories")
+                    failed += 1
+                    continue
+                
+                if file_path.exists():
+                    file_path.unlink()
+                    deleted += 1
+                else:
+                    errors.append(f"File not found: {path_str}")
+                    failed += 1
+                    
+            except Exception as e:
+                errors.append(f"Failed to delete {path_str}: {str(e)}")
+                failed += 1
+        
+        return DeleteFilesResponse(
+            deleted=deleted,
+            failed=failed,
+            errors=errors
+        )
+        
+    except Exception as e:
+        print(f"File deletion error: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to delete files: {str(e)}")
+
+
+@app.post("/files/cleanup", response_model=DeleteFilesResponse, tags=["Files"])
+async def cleanup_all_files():
+    """
+    Delete all downloaded genomes and results
+    """
+    try:
+        deleted = 0
+        failed = 0
+        errors = []
+        
+        # Delete all genomes
+        genomes_dir = project_root / 'data' / 'full_dataset'
+        if genomes_dir.exists():
+            for file in genomes_dir.glob('*.fasta'):
+                try:
+                    file.unlink()
+                    deleted += 1
+                except Exception as e:
+                    errors.append(f"Failed to delete {file.name}: {str(e)}")
+                    failed += 1
+        
+        # Delete all results
+        results_dir = project_root / 'results'
+        if results_dir.exists():
+            for file in results_dir.glob('*'):
+                if file.is_file():
+                    try:
+                        file.unlink()
+                        deleted += 1
+                    except Exception as e:
+                        errors.append(f"Failed to delete {file.name}: {str(e)}")
+                        failed += 1
+        
+        return DeleteFilesResponse(
+            deleted=deleted,
+            failed=failed,
+            errors=errors
+        )
+        
+    except Exception as e:
+        print(f"Cleanup error: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Cleanup failed: {str(e)}")
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

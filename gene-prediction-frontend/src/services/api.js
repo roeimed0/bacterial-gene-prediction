@@ -102,9 +102,76 @@ export const api = {
     return response.json();
   },
 
+  // Get genome catalog
   async getCatalog() {
     const response = await fetch(`${API_BASE_URL}/catalog`);
     if (!response.ok) throw new Error('Failed to load catalog');
+    return response.json();
+  },
+
+  // Get available results for validation
+  async getResults() {
+    const response = await fetch(`${API_BASE_URL}/results`);
+    if (!response.ok) throw new Error('Failed to load results');
+    return response.json();
+  },
+
+  // Validate predictions
+  async validatePredictions(genomeId) {
+    const response = await fetch(`${API_BASE_URL}/validate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        genome_id: genomeId
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Validation failed');
+    }
+
+    return response.json();
+  },
+   async getFiles() {
+    const response = await fetch(`${API_BASE_URL}/files`);
+    if (!response.ok) throw new Error('Failed to load files');
+    return response.json();
+  },
+
+  // Delete specific files
+  async deleteFiles(paths) {
+    const response = await fetch(`${API_BASE_URL}/files/delete`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        paths
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Delete failed');
+    }
+
+    return response.json();
+  },
+
+  // Delete all files
+  async cleanupAllFiles() {
+    const response = await fetch(`${API_BASE_URL}/files/cleanup`, {
+      method: 'POST',
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'Cleanup failed');
+    }
+
     return response.json();
   }
 };

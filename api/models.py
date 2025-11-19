@@ -49,3 +49,49 @@ class HealthResponse(BaseModel):
     """Health check response"""
     status: str
     models_loaded: dict
+
+class ValidationRequest(BaseModel):
+    """Request body for validation"""
+    genome_id: str = Field(..., description="Genome ID (NCBI accession) to validate")
+
+
+class ValidationResponse(BaseModel):
+    """Response containing validation metrics"""
+    genome_id: str
+    reference_count: int
+    predicted_count: int
+    true_positives: int
+    false_positives: int
+    false_negatives: int
+    sensitivity: float
+    precision: float
+    f1_score: float
+    reference_file: str
+    results_file: str
+
+class FileInfo(BaseModel):
+    """Information about a file"""
+    filename: str
+    path: str
+    size: int
+    created: float
+    type: str  # 'genome' or 'result'
+    can_delete: bool
+
+
+class FileListResponse(BaseModel):
+    """Response containing file list"""
+    files: List[FileInfo]
+    total_size: int
+
+
+class DeleteFilesRequest(BaseModel):
+    """Request to delete files"""
+    paths: List[str] = Field(..., description="List of file paths to delete")
+
+
+class DeleteFilesResponse(BaseModel):
+    """Response after deleting files"""
+    deleted: int
+    failed: int
+    errors: List[str]

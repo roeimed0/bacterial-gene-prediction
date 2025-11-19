@@ -1,6 +1,7 @@
 import FastaMode from '../Modes/FastaMode';
 import NcbiMode from '../Modes/NcbiMode';
-import CatalogMode from '../Modes/CatalogMode';  // ADD THIS
+import CatalogMode from '../Modes/CatalogMode';
+import ValidateMode from '../Modes/ValidateMode';  // ADD THIS
 
 const MainContent = ({ 
   activeMode, 
@@ -28,7 +29,6 @@ const MainContent = ({
         </div>
       )}
       
-      {/* CATALOG MODE - UPDATE THIS */}
       {activeMode === 'catalog' && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">
@@ -71,14 +71,18 @@ const MainContent = ({
         </div>
       )}
       
+      {/* VALIDATE MODE - UPDATE THIS */}
       {activeMode === 'validate' && (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">
             Validate Predictions
           </h2>
-          <p className="text-gray-600">
-            Validation content will go here...
-          </p>
+          <ValidateMode 
+            results={validateResults}
+            setResults={setValidateResults}
+            addJob={addJob}
+            removeJob={removeJob}
+          />
         </div>
       )}
     </main>

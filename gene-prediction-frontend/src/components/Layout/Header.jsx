@@ -1,7 +1,7 @@
-import { Info } from 'lucide-react';
+import { Info, FolderOpen } from 'lucide-react';
 import ProcessManager from '../ProcessManager';
 
-const Header = ({ onShowPipeline, runningJobs, onRemoveJob }) => {
+const Header = ({ onShowPipeline, runningJobs, onRemoveJob, onShowFileManager }) => {
   return (
     <header className="bg-white border-b border-gray-200 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
@@ -18,13 +18,22 @@ const Header = ({ onShowPipeline, runningJobs, onRemoveJob }) => {
             </div>
           </div>
           
-          {/* Right side: Process Manager + Introduction button */}
+          {/* Right side: Process Manager + Buttons */}
           <div className="flex items-center gap-3">
             {/* Process Manager */}
             <ProcessManager 
               runningJobs={runningJobs}
               onRemove={onRemoveJob}
             />
+            
+            {/* File Manager button */}
+            <button
+              onClick={onShowFileManager}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+            >
+              <FolderOpen className="w-4 h-4" />
+              <span>Files</span>
+            </button>
             
             {/* Introduction button */}
             <button
