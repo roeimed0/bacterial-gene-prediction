@@ -174,13 +174,14 @@ const FileManager = () => {
   };
 
   const getFileIcon = (type) => {
-    switch (type) {
-      case 'genome': return '🧬';
-      case 'result': return '📊';
-      case 'report': return '📄';
-      default: return '📁';
-    }
-  };
+  switch (type) {
+    case 'genome': return '🧬';
+    case 'reference': return '📋';  // Reference annotations
+    case 'result': return '📊';
+    case 'report': return '📄';
+    default: return '📁';
+  }
+};
 
   const totalSize = files.reduce((sum, f) => sum + f.size, 0);
 

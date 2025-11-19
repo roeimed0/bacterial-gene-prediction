@@ -407,7 +407,6 @@ async def validate_predictions(request: ValidationRequest):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Validation failed: {str(e)}")
 
-
 @app.get("/files", response_model=FileListResponse, tags=["Files"])
 async def list_files():
     """
@@ -417,7 +416,7 @@ async def list_files():
         files = []
         total_size = 0
         
-        # List genomes from data/full_dataset/
+        # List FASTA genomes from data/full_dataset/
         genomes_dir = project_root / 'data' / 'full_dataset'
         if genomes_dir.exists():
             for file in genomes_dir.glob('*.fasta'):
@@ -431,11 +430,24 @@ async def list_files():
                     can_delete=True
                 ))
                 total_size += stat.st_size
+            
+            # List GFF reference annotations from data/full_dataset/
+            for file in genomes_dir.glob('*.gff'):
+                stat = file.stat()
+                files.append(FileInfo(
+                    filename=file.name,
+                    path=str(file.relative_to(project_root)),
+                    size=stat.st_size,
+                    created=stat.st_mtime,
+                    type='reference',
+                    can_delete=True
+                ))
+                total_size += stat.st_size
         
-        # List GFF results from results/
+        # List GFF prediction results from results/
         results_dir = project_root / 'results'
         if results_dir.exists():
-            for file in results_dir.glob('*.gff'):
+            for file in results_dir.glob('*_predictions.gff'):
                 stat = file.stat()
                 files.append(FileInfo(
                     filename=file.name,
@@ -471,7 +483,6 @@ async def list_files():
         print(f"File listing error: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to list files: {str(e)}")
-
 
 @app.post("/files/delete", response_model=DeleteFilesResponse, tags=["Files"])
 async def delete_files(request: DeleteFilesRequest):
@@ -527,10 +538,20 @@ async def cleanup_all_files():
         failed = 0
         errors = []
         
-        # Delete all genomes
+        # Delete all genomes and reference annotations
         genomes_dir = project_root / 'data' / 'full_dataset'
         if genomes_dir.exists():
+            # Delete FASTA files
             for file in genomes_dir.glob('*.fasta'):
+                try:
+                    file.unlink()
+                    deleted += 1
+                except Exception as e:
+                    errors.append(f"Failed to delete {file.name}: {str(e)}")
+                    failed += 1
+            
+            # Delete GFF reference files
+            for file in genomes_dir.glob('*.gff'):
                 try:
                     file.unlink()
                     deleted += 1
@@ -560,7 +581,6 @@ async def cleanup_all_files():
         print(f"Cleanup error: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Cleanup failed: {str(e)}")
-
 
 if __name__ == "__main__":
     import uvicorn
