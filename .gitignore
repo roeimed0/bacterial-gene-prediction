@@ -76,18 +76,19 @@ results/*.log
 cache/
 temp/
 
-# Frontend (Node.js)
-node_modules/
-frontend/build/
-frontend/.env.local
-frontend/.env.development.local
-frontend/.env.test.local
-frontend/.env.production.local
+# Frontend (Node.js) - gene-prediction-frontend/
+gene-prediction-frontend/node_modules/
+gene-prediction-frontend/dist/
+gene-prediction-frontend/build/
+gene-prediction-frontend/.env.local
+gene-prediction-frontend/.env.development.local
+gene-prediction-frontend/.env.test.local
+gene-prediction-frontend/.env.production.local
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Backend
-backend/__pycache__/
-backend/*.db
-backend/uploads/
+# Backend (FastAPI) - api/
+api/__pycache__/
+api/*.db
+api/uploads/
