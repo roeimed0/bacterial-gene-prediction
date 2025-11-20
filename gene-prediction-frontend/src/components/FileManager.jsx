@@ -10,7 +10,6 @@ const FileManager = () => {
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   
-  // Drag selection state
   const [isDragging, setIsDragging] = useState(false);
   const [selectionBox, setSelectionBox] = useState(null);
   const containerRef = useRef(null);
