@@ -11,3 +11,7 @@ isort>=5.10.0
 
 # Type checking
 mypy>=0.950
+
+# API testing
+httpx>=0.25.0  # for testing FastAPI endpoints
+pytest-asyncio>=0.21.0
