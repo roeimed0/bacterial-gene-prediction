@@ -4,7 +4,7 @@ A hybrid machine learning and traditional algorithm approach to bacterial gene p
 
 ## Overview
 
-This is an interactive command-line tool that predicts genes in bacterial genomes using four different modes:
+This tool provides both a **web interface** and **command-line interface** for predicting genes in bacterial genomes using four different modes:
 
 1. **Catalog Mode** - Choose from 100 pre-selected well-studied genomes
 2. **NCBI Download Mode** - Download and analyze any genome from NCBI by accession number
@@ -15,17 +15,18 @@ The tool performs de novo gene prediction without requiring pre-downloaded train
 
 **Key Features:**
 - Self-training on target genome (no external training data required)
-- Optional ML nested orf filtering trained on 27 diverse prokaryotes (4 taxonomic families)
-- Optional Deep learning model trained on 27 diverse prokaryotes (4 taxonomic families) for precision enhancement
+- Optional ML nested ORF filtering trained on 27 diverse prokaryotes (4 taxonomic families)
+- Optional deep learning model for precision enhancement
 - Works on any bacterial or archaeal genome
-- Interactive menu and command-line modes
+- Web interface and command-line modes
 - Automatic validation against NCBI reference annotations
 - Outputs standard GFF3 format
 
 ## Performance
 
 Evaluated on 15 diverse bacterial and archaeal genomes:
-No Deep learning model:
+
+**Without Deep Learning:**
 
 | Metric | Average Score |
 |--------|---------------|
@@ -33,7 +34,7 @@ No Deep learning model:
 | Precision | ~65% |
 | F1 Score | ~69% |
 
-With Deep learning model:
+**With Deep Learning:**
 
 | Metric | Average Score |
 |--------|---------------|
@@ -53,13 +54,80 @@ The optional LightGBM classifier and CNN+Dense models were trained on 27 prokary
 git clone https://github.com/roeimed0/bacterial-gene-prediction.git
 cd bacterial-gene-prediction
 
-# Install dependencies
+# Install Python dependencies
 pip install -r requirements.txt
+
+# Install frontend dependencies
+cd gene-prediction-frontend
+npm install
+cd ..
 ```
 
-### Basic Usage
+## Usage Options
 
-Run the interactive tool:
+This tool provides **two ways** to interact with the system:
+
+### Option 1: Web Application (Recommended)
+
+The web interface provides an intuitive way to upload genomes, run predictions, and download results.
+
+**Launch the web interface:**
+
+**Windows - Using Batch File:**
+```bat
+launch_app.bat
+```
+
+This will automatically:
+- Start the backend server (minimized terminal)
+- Start the frontend server (minimized terminal)
+- Open your browser to the application
+
+**Manual Launch (Any Platform):**
+```bash
+# Terminal 1 - Start backend
+conda activate gene_prediction  # If using conda
+python -m uvicorn api.main:app --reload
+
+# Terminal 2 - Start frontend
+cd gene-prediction-frontend
+npm run dev
+```
+
+**Access:**
+- Application: http://localhost:5173
+
+**For Developers:**
+- Backend API runs on port 8000 (internal)
+- API Documentation: http://localhost:8000/docs
+
+**Web Interface Features:**
+- Upload FASTA files via drag-and-drop or file browser
+- Download genomes directly from NCBI by accession number
+- Browse catalog of 100 pre-selected genomes organized by taxonomy
+- Interactive validation against reference annotations
+- Download predictions as GFF3 files
+- View prediction statistics and quality metrics
+
+**Web Workflow Example:**
+
+1. **Run `launch_app.bat`** - Browser opens automatically
+2. **Choose prediction method:**
+   - Upload your own FASTA file
+   - Enter an NCBI accession number (e.g., NC_000913.3)
+   - Browse the genome catalog
+3. **Configure options:**
+   - Enable/disable ML filtering
+   - Adjust ML thresholds if needed
+4. **Run prediction** - Results appear in a few minutes
+5. **Download GFF3 file** - Standard format compatible with genome browsers
+6. **Validate** (optional) - Compare against reference for NCBI genomes
+
+### Option 2: Command-Line Tool
+
+The CLI provides scriptable access for batch processing and automation.
+
+**Run the interactive tool:**
 
 ```bash
 python hybrid_predictor.py
@@ -85,7 +153,7 @@ How would you like to predict genes?
 Enter your choice [1-6]:
 ```
 
-## Usage Modes
+## CLI Usage Modes
 
 ### Mode 1: Catalog Browser
 
@@ -166,6 +234,8 @@ python hybrid_predictor.py
 # Choose [1] to enter genome ID manually (e.g., NC_000913.3)
 # OR choose [2] to browse available predictions in results/
 ```
+
+**Example validation output:**
 ```
 ================================================================================
 VALIDATION RESULTS
@@ -212,22 +282,22 @@ python hybrid_predictor.py genome.fasta
 # Adjust group ML threshold (default: 0.1, range: 0.0-1.0)
 python hybrid_predictor.py genome.fasta --ml-threshold 0.2
 
-# Adjust Hybrid ML threshold (default: 0.1, range: 0.0-1.0)
+# Adjust hybrid ML threshold (default: 0.12, range: 0.0-1.0)
 python hybrid_predictor.py genome.fasta --final-ml-threshold 0.2
+
+# Disable group ML filtering
+python hybrid_predictor.py genome.fasta --no-group-ml
+
+# Disable final ML filtering
+python hybrid_predictor.py genome.fasta --no-final-ml
 
 # Force interactive mode even with arguments
 python hybrid_predictor.py --interactive
-
-# Dont use group ml
-python hybrid_predictor.py --no-group-ml
-
-# Dont use final filter ml
-python hybrid_predictor.py --no-final-ml
 ```
 
 ## Output Format
 
-Results are saved in GFF3 format:
+Results are saved in GFF3 format (compatible with genome browsers like IGV, Artemis, JBrowse):
 
 ```gff
 ##gff-version 3
@@ -248,7 +318,7 @@ sequence_id  HybridPredictor  CDS  start  end  score  strand  0  ID=gene_1;rbs_s
 - Scans both DNA strands (forward and reverse complement)
 - Identifies all Open Reading Frames with start codons: ATG, GTG, TTG
 - Minimum length: 100 bp (configurable in `src/config.py`)
-- **Optimized with LRU caching for ~3x speedup on RBS motif scoring**
+- Optimized with LRU caching for ~3x speedup on RBS motif scoring
 
 ### Step 2: RBS Detection
 - Searches upstream regions (-20 to -5 bp) for Shine-Dalgarno motifs
@@ -259,7 +329,7 @@ sequence_id  HybridPredictor  CDS  start  end  score  strand  0  ID=gene_1;rbs_s
 - Identifies high-confidence genes (long ORFs with strong signals)
 - Builds genome-specific models from the target genome itself:
   - Codon usage frequency tables (coding vs non-coding)
-  - Interpolated Markov Models - ordear is modified to fit genome length (context-dependent scoring)
+  - Interpolated Markov Models - order is modified to fit genome length (context-dependent scoring)
 - No external training data required
 
 ### Step 4: Traditional Scoring
@@ -271,7 +341,7 @@ Each ORF is scored using five features:
 - **Start Codon Type**: Weight preference: ATG > GTG > TTG
 
 ### Step 5: Initial Filtering
-- threshold-based filtering
+- Threshold-based filtering
 - Thresholds optimized on training data from diverse genomes
 - Removes low-scoring ORF candidates
 
@@ -296,7 +366,7 @@ Each ORF is scored using five features:
   - Genome sizes (1.5-10 Mbp)
   - Codon usage patterns
 - Requires: `models/orf_classifier_lgb.pkl` (optional - prediction works without it)
-- Default threshold: 0.1 (adjustable via `--threshold`)
+- Default threshold: 0.1 (adjustable via `--ml-threshold`)
 
 ### Step 8: Start Site Selection
 - Selects optimal start codon for each gene
@@ -308,44 +378,104 @@ Each ORF is scored using five features:
   - start type: 0.28
 
 ### Step 9: Traditional Second Filtering
-- threshold-based filtering
+- Threshold-based filtering
 - Thresholds optimized on training data from diverse genomes
 - Removes low-scoring ORF candidates
 
 ### Step 10: Hybrid ML Filtration (Optional)
--Deep-learning–based binary classifier that refines the final candidate genes after traditional filtering and start-site selection.
--Combines sequence-based embeddings (via CNN) with traditional features such as codon bias, IMM score, RBS score, and ORF length.
--Reduces residual false positives that remain after the main LightGBM group filter.
--Model file: models/hybrid_best_model.pkl
--Default threshold: 0.12 (adjustable via --final-threshold)
--Can be disabled with --no-final-ml.
+- Deep-learning–based binary classifier that refines the final candidate genes after traditional filtering and start-site selection
+- Combines sequence-based embeddings (via CNN) with traditional features such as codon bias, IMM score, RBS score, and ORF length
+- Reduces residual false positives that remain after the main LightGBM group filter
+- Model file: `models/hybrid_best_model.pkl`
+- Default threshold: 0.12 (adjustable via `--final-ml-threshold`)
+- Can be disabled with `--no-final-ml`
 
 ## Project Structure
 
 ```
 bacterial-gene-prediction/
-├── hybrid_predictor.py          # Main interactive tool
-├── src/                         # Core algorithms
-│   ├── config.py               # Configuration & genome catalog (100 genomes)
-│   ├── data_management.py      # NCBI download & file I/O
-│   ├── traditional_methods.py  # ORF detection & scoring algorithms
-│   ├── comparative_analysis.py # Validation metrics computation
-│   ├── validation.py           # Validation wrapper functions
-│   ├── ml_models.py           # Optional ML classifier
-│   └── cache.py               # Caching utilities
-├── notebooks/                   # Jupyter notebooks (research & development)
+├── launch_app.bat              # Web app launcher (Windows)
+├── hybrid_predictor.py         # Command-line interface
+├── requirements.txt            # Python dependencies
+├── requirements-dev.txt        # Development dependencies
+├── LICENSE
+├── README.md
+│
+├── api/                        # FastAPI backend
+│   ├── main.py                # API entry point with all routes
+│   ├── models.py              # Pydantic models for API
+│   └── __init__.py
+│
+├── gene-prediction-frontend/   # React web interface
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── Layout/
+│   │   │   │   ├── Header.jsx          # Top navigation bar
+│   │   │   │   ├── MainContent.jsx     # Main content wrapper
+│   │   │   │   └── ModeBar.jsx         # Mode selection tabs
+│   │   │   ├── Modes/
+│   │   │   │   ├── CatalogMode.jsx     # Genome catalog browser
+│   │   │   │   ├── FastaMode.jsx       # File upload interface
+│   │   │   │   ├── NcbiMode.jsx        # NCBI download interface
+│   │   │   │   └── ValidateMode.jsx    # Validation interface
+│   │   │   ├── PipelineVisualization/
+│   │   │   │   ├── index.jsx           # Main pipeline component
+│   │   │   │   ├── PipelineSteps.jsx   # Step-by-step visualization
+│   │   │   │   ├── PipelineStep.jsx    # Individual step card
+│   │   │   │   ├── KeyFeatures.jsx     # Feature highlights
+│   │   │   │   ├── FeatureCard.jsx     # Individual feature card
+│   │   │   │   ├── MLToggle.jsx        # ML options toggle
+│   │   │   │   ├── ModeSelector.jsx    # Mode selection component
+│   │   │   │   └── pipelineData.js     # Pipeline configuration data
+│   │   │   ├── Results/
+│   │   │   │   ├── ResultsView.jsx     # Main results display
+│   │   │   │   ├── ResultsTable.jsx    # Prediction table
+│   │   │   │   └── GenomeViewer.jsx    # Genome visualization
+│   │   │   ├── FileManager.jsx         # File management utilities
+│   │   │   └── ProcessManager.jsx      # Process status management
+│   │   ├── services/
+│   │   │   └── api.js         # API client functions
+│   │   ├── App.jsx            # Main application component
+│   │   ├── App.css            # Application styles
+│   │   ├── main.jsx           # React entry point
+│   │   └── index.css          # Global styles
+│   ├── public/
+│   ├── package.json           # Node dependencies
+│   ├── vite.config.js         # Vite build configuration
+│   ├── tailwind.config.js     # Tailwind CSS configuration
+│   ├── postcss.config.js      # PostCSS configuration
+│   └── eslint.config.js       # ESLint configuration
+│
+├── src/                        # Core prediction algorithms
+│   ├── config.py              # Configuration & genome catalog (100 genomes)
+│   ├── data_management.py     # NCBI download & file I/O
+│   ├── traditional_methods.py # ORF detection & scoring algorithms
+│   ├── comparative_analysis.py# Validation metrics computation
+│   ├── validation.py          # Validation wrapper functions
+│   ├── ml_models.py           # Optional ML classifiers
+│   ├── cache.py               # Caching utilities
+│   └── __init__.py
+│
+├── models/                     # Trained ML models (optional)
+│   ├── orf_classifier_lgb.pkl # LightGBM group filter
+│   ├── hybrid_best_model.pkl  # Deep learning final filter
+│   └── feature_names.pkl      # Feature name mappings
+│
+├── notebooks/                  # Jupyter notebooks (research & development)
 │   ├── 01_data_collection.ipynb
 │   ├── 02_orf_detection.ipynb
-│   └── 03_ml_models.ipynb
-├── models/                      # Trained ML models (optional)
-│   └── orf_classifier_lgb.pkl
-|   └── hybrid_best_model.pkl
-├── data/                        # Downloaded genomes (auto-created)
-│   └── full_dataset/           # NCBI downloads cached here
-├── results/                     # Output directory (auto-created)
-│   ├── *_predictions.gff      # Prediction files
-│   └── *_validation_report.txt # Validation reports
-└── requirements.txt
+│   ├── 03_ml_models.ipynb
+│   ├── hybrid_dl_classifier.ipynb
+│   └── orf_detection_optimized.ipynb
+│
+├── data/                       # Downloaded genomes (auto-created)
+│   ├── full_dataset/          # NCBI genome downloads
+│   ├── hybrid_dl_training/    # Training data for deep learning model
+│   └── processed/             # Processed genome data
+│
+└── results/                    # Output directory (auto-created)
+    ├── *_predictions.gff      # Prediction files (GFF3 format)
+    └── *_validation_report.txt# Validation reports
 ```
 
 ## Configuration
@@ -372,13 +502,41 @@ START_SELECTION_WEIGHTS = {
     'start': 0.2755
 }
 
-# ML threshold (adjustable)
-ML_THRESHOLD = 0.1  # Can also use --threshold flag
+# ML thresholds (adjustable)
+ML_THRESHOLD = 0.1        # Group filter
+FINAL_ML_THRESHOLD = 0.12 # Hybrid filter
 ```
 
 ## Examples
 
-### Example 1: Analyze E. coli from catalog
+### Web Interface Examples
+
+**Example 1: Upload and analyze your genome**
+1. Run `launch_app.bat`
+2. Click "Upload FASTA File"
+3. Drag and drop `my_genome.fasta`
+4. Click "Predict Genes"
+5. Wait for analysis to complete
+6. Download `my_genome_predictions.gff`
+
+**Example 2: Download from NCBI and validate**
+1. Click "NCBI Download"
+2. Enter accession: `NC_000913.3`
+3. Enter email: `your@email.com`
+4. Click "Download & Predict"
+5. After completion, click "Validate Results"
+6. View validation metrics in browser
+
+**Example 3: Browse catalog**
+1. Click "Browse Catalog"
+2. Select "Proteobacteria"
+3. Choose "Escherichia coli K-12 MG1655"
+4. Click "Predict Genes"
+5. Download results
+
+### Command-Line Examples
+
+**Example 1: Analyze E. coli from catalog**
 
 ```bash
 python hybrid_predictor.py
@@ -399,7 +557,7 @@ python hybrid_predictor.py
 # Creates: results/NC_000913.3_validation_report.txt
 ```
 
-### Example 2: Download and predict from NCBI
+**Example 2: Download and predict from NCBI**
 
 ```bash
 python hybrid_predictor.py NC_002516.2 --email your@email.com
@@ -408,7 +566,7 @@ python hybrid_predictor.py NC_002516.2 --email your@email.com
 # Predictions: results/NC_002516.2_predictions.gff
 ```
 
-### Example 3: Analyze your own genome
+**Example 3: Analyze your own genome**
 
 ```bash
 python hybrid_predictor.py my_bacterial_genome.fasta
@@ -417,17 +575,17 @@ python hybrid_predictor.py my_bacterial_genome.fasta
 # Note: Cannot validate without reference annotation
 ```
 
-### Example 4: Adjust ML threshold
+**Example 4: Adjust ML thresholds**
 
 ```bash
-# More lenient (more predictions)
-python hybrid_predictor.py NC_000913.3 --email user@email.com --threshold 0.05
+# More lenient group filter (more predictions)
+python hybrid_predictor.py NC_000913.3 --email user@email.com --ml-threshold 0.05
 
-# More strict (fewer predictions)
-python hybrid_predictor.py NC_000913.3 --email user@email.com --threshold 0.2
+# More strict final filter (higher precision)
+python hybrid_predictor.py NC_000913.3 --email user@email.com --final-ml-threshold 0.2
 ```
 
-### Example 5: Command-line workflow
+**Example 5: Command-line workflow**
 
 ```bash
 # List Actinobacteria genomes
@@ -440,6 +598,7 @@ python hybrid_predictor.py 51
 ```
 
 ## Performance Considerations
+
 **Recent Optimizations (v1.1):**
 - RBS detection optimized with LRU caching and sliding window algorithm
 - Average 73% reduction in ORF detection time across diverse genomes
@@ -461,15 +620,21 @@ Per genome on typical hardware (4-core CPU):
 ### Storage
 - Each downloaded genome: 1-5 MB (FASTA + GFF)
 - Prediction results: 50-500 KB per genome
-- No large model files cached (only optional 5 MB ML model)
+- No large model files cached (only optional 5 MB ML models)
 - Use cleanup to remove downloaded files
 
 ## File Cleanup
 
 The tool can clean up generated files:
 
+**Via Web Interface:**
+- Navigate to Settings or Tools menu
+- Click "Cleanup Files"
+- Review files to be deleted
+- Confirm deletion
+
+**Via CLI:**
 ```bash
-# Interactive mode
 python hybrid_predictor.py
 # Select [5] Cleanup Files
 
@@ -481,6 +646,48 @@ python hybrid_predictor.py
 ```
 
 The cleanup shows you all files before deletion and asks for confirmation.
+
+## Requirements
+
+### Backend (Python)
+- **Python 3.7 or higher**
+
+**Dependencies:**
+```
+biopython>=1.79
+pandas>=1.3.0
+numpy>=1.21.0
+scikit-learn>=1.0.0
+lightgbm>=3.3.0
+fastapi>=0.104.0
+uvicorn>=0.24.0
+python-multipart>=0.0.6
+```
+
+Install via:
+```bash
+pip install -r requirements.txt
+```
+
+### Frontend (Web Interface)
+- **Node.js 18+ and npm**
+
+**Technologies:**
+- React 18.3
+- Vite (build tool)
+- Tailwind CSS
+- Lucide React (icons)
+
+Install via:
+```bash
+cd gene-prediction-frontend
+npm install
+```
+
+### System Requirements
+- 4GB+ RAM (8GB recommended for large genomes)
+- ~500 MB disk space for data/results
+- Internet connection (for NCBI downloads only)
 
 ## Jupyter Notebooks
 
@@ -506,7 +713,7 @@ The `notebooks/` directory contains research notebooks showing the development p
 - Performance evaluation and metrics
 - Feature importance analysis
 
-**Note:** Notebooks are for development/research. The production tool is `hybrid_predictor.py`.
+**Note:** Notebooks are for development/research. The production tools are the web interface and `hybrid_predictor.py`.
 
 ## Methods & References
 
@@ -532,26 +739,38 @@ This implementation is inspired by established gene prediction tools:
 - **Validation limited**: Can only validate against NCBI genomes with reference annotations
 - **Single contig**: Best performance on complete genomes (not optimized for draft assemblies with many contigs)
 
-## Requirements
-
-### Python Version
-- Python 3.7 or higher
-
-### Dependencies
-```
-biopython>=1.79
-pandas>=1.3.0
-numpy>=1.21.0
-scikit-learn>=1.0.0
-lightgbm>=3.3.0  # Optional - for ML mode
-```
-
-### System Requirements
-- 4GB+ RAM (8GB recommended)
-- ~500 MB disk space for data/results
-- Internet connection (for NCBI downloads only)
-
 ## Troubleshooting
+
+### Web Application Issues
+
+**Error: "Cannot connect to backend"**
+```bash
+# Make sure backend is running
+python -m uvicorn api.main:app --reload
+
+# Check if port 8000 is available
+# Windows: netstat -ano | findstr :8000
+# Linux/Mac: lsof -i :8000
+```
+
+**Error: "Frontend won't start"**
+```bash
+# Clear npm cache and reinstall
+cd gene-prediction-frontend
+rm -rf node_modules package-lock.json
+npm install
+npm run dev
+```
+
+**Error: "Port already in use"**
+```bash
+# Kill processes using ports 5173 and 8000
+# Windows: 
+#   netstat -ano | findstr :5173
+#   taskkill /PID <PID> /F
+# Linux/Mac:
+#   kill -9 $(lsof -t -i:5173)
+```
 
 ### Import Errors
 
@@ -577,6 +796,8 @@ python hybrid_predictor.py
 
 # Option 2: Provide via command line
 python hybrid_predictor.py NC_000913.3 --email your@email.com
+
+# Option 3: Enter in web interface
 ```
 
 **Error: "HTTP Error 429: Too Many Requests"**
@@ -607,7 +828,7 @@ chmod 755 results/
 
 ### Prediction Quality Issues
 
-**Prediction seems inaccurate (low F1 score)**
+**Predictions seem inaccurate (low F1 score)**
 - Verify FASTA file contains a bacterial/archaeal genome
 - Check if genome has unusual characteristics:
   - Very high or low GC content (<30% or >75%)
@@ -616,23 +837,19 @@ chmod 755 results/
 - Try adjusting ML thresholds:
   ```bash
   # More lenient (may increase sensitivity)
-  python hybrid_predictor.py genome.fasta --group-threshold 0.05
+  python hybrid_predictor.py genome.fasta --ml-threshold 0.05
   
   # More strict (may increase precision)
-  python hybrid_predictor.py genome.fasta --group-threshold 0.2
-
-    # More lenient (may increase sensitivity)
-  python hybrid_predictor.py genome.fasta --final-threshold 0.05
-  
-  # More strict (may increase precision)
-  python hybrid_predictor.py genome.fasta --final-threshold 0.2
+  python hybrid_predictor.py genome.fasta --final-ml-threshold 0.2
   ```
 
 **ML model not found**
 ```bash
-# The tool works without ML model (falls back to traditional scoring)
-# To use ML filtering, ensure models/orf_classifier_lgb.pkl exists
-# Or disable ML by removing the model file
+# The tool works without ML models (falls back to traditional scoring)
+# To use ML filtering, ensure models exist:
+#   - models/orf_classifier_lgb.pkl
+#   - models/hybrid_best_model.pkl
+# Or disable ML with --no-group-ml and --no-final-ml
 ```
 
 ### Validation Issues
@@ -648,10 +865,11 @@ Contributions are welcome! Areas for improvement:
 - Support for draft genomes with multiple contigs
 - RNA gene prediction (tRNA, rRNA)
 - Functional annotation integration
-- GUI interface
+- Additional visualization options in web interface
+- Batch processing capabilities
 - Additional ML models
 
-Please see CONTRIBUTING.md for guidelines.
+Please open an issue or pull request on GitHub.
 
 ## License
 
@@ -677,6 +895,7 @@ https://github.com/roeimed0/bacterial-gene-prediction
 - **NCBI** for genome data and Entrez API access
 - **BioPython** community for excellent bioinformatics tools
 - **LightGBM** developers for the ML framework
+- **FastAPI** and **React** communities for web framework tools
 - Authors of **GLIMMER**, **GeneMark**, and **Prodigal** for algorithmic inspiration
 - Training genome data from publicly available bacterial genome projects
 
