@@ -212,16 +212,17 @@ class OrfGroupClassifier:
         
         # Get feature names from model
         model_features = self.model.feature_name_
-        
-        # Use only features that exist in both model and data
-        available_features = [f for f in model_features if f in df.columns]
-        
-        if len(available_features) < len(model_features):
-            missing = set(model_features) - set(available_features)
-            print(f"Warning: {len(missing)} features missing from data: {missing}")
-        
-        # Extract feature matrix
-        X = df[available_features].values
+
+        missing = [f for f in model_features if f not in df.columns]
+        if missing:
+            raise ValueError(
+                f"Feature mismatch: {len(missing)} feature(s) expected by the "
+                f"OrfGroupClassifier model are absent from the extracted feature "
+                f"DataFrame. Missing: {sorted(missing)}"
+            )
+
+        # Extract feature matrix in the order the model was trained on
+        X = df[model_features].values
         
         # Get probabilities (probability of class 1 = real gene)
         probabilities = self.model.predict_proba(X)[:, 1]
@@ -529,10 +530,14 @@ class HybridGeneFilter:
         df = self.extract_features(candidates, genome_id)
         missing = [f for f in self.feature_names if f not in df.columns]
         if missing:
-            print(f"⚠ Warning: missing numeric features: {missing}")
+            raise ValueError(
+                f"Feature mismatch: {len(missing)} feature(s) expected by the "
+                f"HybridGeneFilter model are absent from the extracted feature "
+                f"DataFrame. Missing: {sorted(missing)}"
+            )
 
         X_features = torch.tensor(
-            df[[f for f in self.feature_names if f in df.columns]].values, 
+            df[self.feature_names].values,
             dtype=torch.float32
         )
         
