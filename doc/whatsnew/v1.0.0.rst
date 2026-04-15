@@ -95,6 +95,7 @@ ML models
 ^^^^^^^^^
 - Fixed :meth:`OrfGroupClassifier.predict_groups` silently continuing with a truncated feature list when model features were absent from the extracted DataFrame; now raises :class:`ValueError` naming the missing features (:issue:`47`)
 - Fixed :meth:`HybridGeneFilter.predict` silently passing a wrong-shaped tensor to ``DenseBranch(input_dim=25)`` when features were missing from the extracted DataFrame; now raises :class:`ValueError` naming the missing features (:issue:`47`)
+- Fixed :meth:`HybridGeneFilter._calculate_amino_acid_properties` calling the deprecated ``ProteinAnalysis.get_amino_acids_percent()`` method; replaced with the ``amino_acids_percent`` attribute to prevent a breakage on future Biopython upgrades (:issue:`55`)
 
 .. ---------------------------------------------------------------------------
 .. _whatsnew_100.infrastructure:

@@ -415,7 +415,7 @@ class HybridGeneFilter:
                 return dict(hydro_mean=0.0, hydro_std=0.0, charge_mean=0.0,
                             aromatic_frac=0.0, small_frac=0.0, polar_frac=0.0)
             analysis = ProteinAnalysis(protein)
-            aa_percent = analysis.get_amino_acids_percent()
+            aa_percent = analysis.amino_acids_percent
             aromatic = set('FYW')
             small = set('AGSTCV')
             polar = set('STNQY')
