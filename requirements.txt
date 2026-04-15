@@ -6,6 +6,7 @@ numpy>=1.21.0
 # Machine Learning
 scikit-learn>=1.0.0
 lightgbm>=3.3.0
+torch>=2.0.0
 
 # Web Framework
 fastapi>=0.104.0
