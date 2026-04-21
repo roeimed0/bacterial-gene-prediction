@@ -1,0 +1,16 @@
+[run]
+source = src, api
+omit =
+    */tests/*
+    */__pycache__/*
+    */conftest.py
+    setup.py
+
+[report]
+show_missing = true
+skip_covered = false
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if __name__ == .__main__.:
+    raise NotImplementedError
