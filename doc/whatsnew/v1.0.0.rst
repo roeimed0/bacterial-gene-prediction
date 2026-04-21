@@ -111,6 +111,8 @@ Test suite
 - Added ``tests/test_traditional_methods.py`` — 49 unit tests for the core bioinformatics layer in ``src/traditional_methods.py``: ORF detection on both strands, RBS scoring, codon model building, codon bias ratio, Interpolated Markov Model construction and scoring, score normalization, and combined score calculation (:issue:`14`)
 - Added ``tests/fixtures/sequences/``, ``tests/fixtures/gff/``, ``tests/fixtures/models/`` — fixture directory scaffold for future synthetic sequences, reference annotations, and mock model files (:issue:`47`)
 - Added ``tests/integration/`` — package for slow end-to-end pipeline tests (:issue:`47`)
+- Added ``.coveragerc`` — coverage configuration: measures ``src/`` and ``api/``, excludes test scaffolding and boilerplate (:issue:`66`)
+- Updated CI ``Run tests`` step to report coverage via ``pytest-cov`` (``--cov=src --cov=api --cov-report=term-missing``) and exclude ``@pytest.mark.slow`` tests from the fast tier (:issue:`66`)
 
 CI/CD
 ^^^^^
