@@ -38,8 +38,6 @@ _GLOBAL_CODING_IMM = None
 _GLOBAL_NONCODING_IMM = None
 
 
-from functools import lru_cache
-
 # =============================================================================
 # RBS (RIBOSOME BINDING SITE) PREDICTION
 # =============================================================================
@@ -817,8 +815,6 @@ def get_interpolated_probability(
     fallback_prob: float = 0.25,
 ) -> float:
 
-    global _GLOBAL_CODING_IMM, _GLOBAL_NONCODING_IMM
-
     probabilities = (
         _GLOBAL_CODING_IMM if imm_type == "coding" else _GLOBAL_NONCODING_IMM
     )
@@ -1053,7 +1049,7 @@ def add_combined_scores(scored_orfs: List[Dict], weights: Dict = None) -> List[D
     if weights is None:
         weights = SCORE_WEIGHTS
 
-    print(f"\nCalculating combined scores...")
+    print("\nCalculating combined scores...")
 
     for orf in scored_orfs:
         orf["combined_score"] = calculate_combined_score(orf, weights)
@@ -1125,7 +1121,8 @@ def filter_candidates(
 ) -> List[Dict]:
     """
     Removes ORFs if:
-    - all three scores (codon, imm, length) are below thresholds, OR combined_score is below threshold
+    - all three scores (codon, imm, length) are below thresholds,
+      OR combined_score is below threshold
     """
     filtered_orfs = []
 

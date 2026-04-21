@@ -11,7 +11,6 @@ Supports modes:
 """
 
 import argparse
-import os
 import re
 import sys
 from pathlib import Path
@@ -478,12 +477,10 @@ def predict_ncbi_genome(
     final_ml_threshold: float = 0.12,
 ):
     """Download genome from NCBI and predict genes"""
-    import gzip
-
     from Bio import Entrez
 
     print(f"\n{'='*80}")
-    print(f"MODE: NCBI DOWNLOAD")
+    print("MODE: NCBI DOWNLOAD")
     print(f"{'='*80}")
     print(f"Accession: {accession}")
 
@@ -502,7 +499,7 @@ def predict_ncbi_genome(
     # Download the genome
     fasta_path = downloads_dir / f"{accession}.fasta"
 
-    print(f"\nDownloading from NCBI...")
+    print("\nDownloading from NCBI...")
     print(f"  Target: {fasta_path}")
 
     try:
@@ -525,7 +522,7 @@ def predict_ncbi_genome(
         if file_size < 100:
             raise ValueError("Downloaded file is too small, download may have failed")
 
-        print(f"  ✓ Genome downloaded successfully\n")
+        print("  ✓ Genome downloaded successfully\n")
 
     except Exception as e:
         print(f"\n[!] Download failed: {e}", file=sys.stderr)
@@ -533,7 +530,7 @@ def predict_ncbi_genome(
 
     # Now predict genes using the downloaded file
     print(f"{'='*80}")
-    print(f"RUNNING GENE PREDICTION")
+    print("RUNNING GENE PREDICTION")
     print(f"{'='*80}\n")
 
     # Set output path using genome_id for results
@@ -553,7 +550,7 @@ def predict_ncbi_genome(
         )
 
         print(f"\n{'='*80}")
-        print(f"NCBI PREDICTION COMPLETE!")
+        print("NCBI PREDICTION COMPLETE!")
         print(f"{'='*80}")
         print(f"Genome:      {accession}")
         print(f"Downloaded:  {fasta_path}")
@@ -577,7 +574,7 @@ def predict_fasta_file(
 ):
     """Predict genes from FASTA file."""
     print(f"\n{'='*80}")
-    print(f"MODE: RAW FASTA FILE")
+    print("MODE: RAW FASTA FILE")
     print(f"{'='*80}")
     print(f"Input: {fasta_path}")
 
@@ -668,7 +665,7 @@ def predict_fasta_file(
                     print(f"Groups after ML:  {post_filter_count:,}")
                     print(f"Groups removed:   {pre_filter_count - post_filter_count:,}")
                 else:
-                    print(f"[!] Model not found, skipping ML...")
+                    print("[!] Model not found, skipping ML...")
             except Exception as e:
                 print(f"[!] ML error: {e}, skipping...")
 
@@ -704,7 +701,8 @@ def predict_fasta_file(
                     )
                 else:
                     print(
-                        f"[!] Hybrid model not found at {model_path}, skipping final ML filtration..."
+                        f"[!] Hybrid model not found at {model_path},"
+                        " skipping final ML filtration..."
                     )
             except Exception as e:
                 print(f"[!] Hybrid ML error: {e}, skipping final filtration...")
@@ -743,9 +741,11 @@ def write_gff(predictions: List[Dict], output_path: str, sequence_id: str = "seq
             score = pred.get("combined_score", 0.0)
             rbs = pred.get("rbs_score", 0.0)
             attrs = f"ID=gene_{i};rbs_score={rbs:.2f};combined_score={score:.2f}"
-            f.write(
-                f"{sequence_id}\tHybridPredictor\tCDS\t{start}\t{end}\t{score:.3f}\t{strand}\t0\t{attrs}\n"
+            row = (
+                f"{sequence_id}\tHybridPredictor\tCDS\t"
+                f"{start}\t{end}\t{score:.3f}\t{strand}\t0\t{attrs}\n"
             )
+            f.write(row)
     print(f"[+] Wrote {len(predictions)} predictions to {output_path}")
 
 
@@ -758,13 +758,13 @@ def main():
 Examples:
   # Interactive mode (no arguments)
   python hybrid_predictor.py
-  
+
   # Command-line mode (skips menu)
   python hybrid_predictor.py --list
   python hybrid_predictor.py 1
   python hybrid_predictor.py NC_000913.3 --email you@example.com
   python hybrid_predictor.py mygenome.fasta
-  
+
   # With ML options
   python hybrid_predictor.py mygenome.fasta --group-threshold 0.15 --final-threshold 0.2
   python hybrid_predictor.py mygenome.fasta --no-group-ml --no-final-ml
@@ -867,7 +867,7 @@ Examples:
                     final_ml_threshold=args.final_threshold,
                 )
 
-            print(f"\n[+] Success!")
+            print("\n[+] Success!")
 
         except NotImplementedError as e:
             print(f"\n[!] {e}", file=sys.stderr)
@@ -893,7 +893,7 @@ Examples:
                 mode, accession, name = result
                 try:
                     predict_ncbi_genome(accession, args.email or NCBI_EMAIL)
-                    print(f"\n[+] Success!")
+                    print("\n[+] Success!")
                     input("\nPress Enter to continue...")
                 except Exception as e:
                     print(f"\n[!] Error: {e}")
@@ -905,7 +905,7 @@ Examples:
                 mode, accession, email = result
                 try:
                     predict_ncbi_genome(accession, email)
-                    print(f"\n[+] Success!")
+                    print("\n[+] Success!")
                     input("\nPress Enter to continue...")
                 except Exception as e:
                     print(f"\n[!] Error: {e}")
@@ -917,7 +917,7 @@ Examples:
                 mode, fasta_path, _ = result
                 try:
                     predict_fasta_file(fasta_path)
-                    print(f"\n[+] Success!")
+                    print("\n[+] Success!")
                     input("\nPress Enter to continue...")
                 except Exception as e:
                     print(f"\n[!] Error: {e}")

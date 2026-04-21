@@ -64,7 +64,7 @@ def add_genome_to_cache(
     genome_data = load_genome_sequence(fasta_path)
     genome_sequence = genome_data["sequence"]
 
-    print(f"  Finding ORF candidates...")
+    print("  Finding ORF candidates...")
     orfs = find_orfs_candidates(genome_sequence, min_length=min_length)
     print(f"  Found {len(orfs):,} ORF candidates")
 
@@ -102,7 +102,7 @@ def precompute_genomes(
             skipped_genomes += 1
 
     print("\n" + "=" * 60)
-    print(f"Precomputation complete!")
+    print("Precomputation complete!")
     print(f"  New genomes processed: {new_genomes}")
     print(f"  Already cached: {skipped_genomes}")
     print(f"  Total in cache: {len(cached_data)}")
@@ -143,7 +143,7 @@ def cache_stats(cached_data: Dict = None) -> None:
         print("Cache is empty")
         return
 
-    print(f"\n=== CACHE STATISTICS ===")
+    print("\n=== CACHE STATISTICS ===")
     print(f"Total genomes cached: {len(cached_data)}")
 
     total_orfs = sum(len(data["orfs"]) for data in cached_data.values())
@@ -158,7 +158,7 @@ def cache_stats(cached_data: Dict = None) -> None:
         size_mb = os.path.getsize(cache_file) / (1024 * 1024)
         print(f"Cache file size: {size_mb:.1f} MB")
 
-    print(f"\nCached genomes:")
+    print("\nCached genomes:")
     for genome_id in sorted(cached_data.keys()):
         num_orfs = len(cached_data[genome_id]["orfs"])
         print(f"  {genome_id}: {num_orfs:,} ORFs")

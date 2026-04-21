@@ -221,7 +221,7 @@ def analyze_score_distributions(
             tp_percentiles = np.percentile(tp_combined, [10, 25, 50, 75, 90])
             fp_percentiles = np.percentile(fp_combined, [10, 25, 50, 75, 90])
 
-            print(f"\nPercentiles:")
+            print("\nPercentiles:")
             print(f"{'Percentile':<15} {'True Positives':>15} {'False Positives':>15}")
             print(f"{'-'*15} {'-'*15} {'-'*15}")
             for i, pct in enumerate([10, 25, 50, 75, 90]):
@@ -586,7 +586,7 @@ def compare_results_file_to_reference(genome_id: str) -> Dict:
 
         if reference_gff is None or not Path(reference_gff).exists():
             print(
-                f"  Reference GFF not found locally, attempting to download from NCBI..."
+                "  Reference GFF not found locally, attempting to download from NCBI..."
             )
 
             # Set up download path
@@ -601,10 +601,10 @@ def compare_results_file_to_reference(genome_id: str) -> Dict:
                     from src.config import NCBI_EMAIL
 
                     Entrez.email = NCBI_EMAIL
-                except:
+                except Exception:
                     Entrez.email = "user@example.com"  # Fallback
 
-                print(f"  Downloading GFF from NCBI...")
+                print("  Downloading GFF from NCBI...")
                 handle = Entrez.efetch(
                     db="nucleotide", id=genome_id, rettype="gff3", retmode="text"
                 )
@@ -616,14 +616,14 @@ def compare_results_file_to_reference(genome_id: str) -> Dict:
                 if len(gff_content) > 100 and "##gff-version" in gff_content:
                     with open(reference_gff, "w") as f:
                         f.write(gff_content)
-                    print(f"  ✓ Downloaded reference GFF successfully")
+                    print("  ✓ Downloaded reference GFF successfully")
                 else:
                     raise ValueError("No valid GFF annotation available from NCBI")
 
             except Exception as e:
                 print(f"  ✗ Could not download GFF from NCBI: {e}")
                 raise FileNotFoundError(
-                    f"Reference GFF not found locally and could not be downloaded from NCBI.\n"
+                    "Reference GFF not found locally and could not be downloaded from NCBI.\n"
                     f"  Genome: {genome_id}\n"
                     f"  Expected location: data/full_dataset/{genome_id}.gff"
                 )
@@ -748,20 +748,20 @@ def analyze_non_cds_genes(gff_path):
     non_coding = len(all_genes) - protein_coding
 
     print(f"\nTotal genes in annotation: {len(all_genes):,}")
+    pct_coding = protein_coding / len(all_genes) * 100
+    pct_noncoding = non_coding / len(all_genes) * 100
     print(
-        f"  • Protein-coding genes (with CDS): {protein_coding:,} ({protein_coding/len(all_genes)*100:.1f}%)"
+        f"  • Protein-coding genes (with CDS): {protein_coding:,} ({pct_coding:.1f}%)"
     )
-    print(
-        f"  • Non-coding genes (RNA, etc.): {non_coding:,} ({non_coding/len(all_genes)*100:.1f}%)"
-    )
+    print(f"  • Non-coding genes (RNA, etc.): {non_coding:,} ({pct_noncoding:.1f}%)")
 
-    print(f"\n INTERPRETATION:")
+    print("\n INTERPRETATION:")
     print(f"   The {non_coding:,} genes without CDS are:")
-    print(f"   - Transfer RNA (tRNA)")
-    print(f"   - Ribosomal RNA (rRNA)")
-    print(f"   - Non-coding RNA (ncRNA)")
-    print(f"   - Pseudogenes (degraded genes that don't produce proteins)")
-    print(f"   - Other regulatory RNA elements")
+    print("   - Transfer RNA (tRNA)")
+    print("   - Ribosomal RNA (rRNA)")
+    print("   - Non-coding RNA (ncRNA)")
+    print("   - Pseudogenes (degraded genes that don't produce proteins)")
+    print("   - Other regulatory RNA elements")
     print()
 
     print("=" * 100)
@@ -870,7 +870,7 @@ def compare_codon_usage(
     codon_diffs = list(zip(all_codons, differences))
     codon_diffs.sort(key=lambda x: abs(x[1]), reverse=True)
 
-    print(f"\nTop 10 most enriched in coding regions:")
+    print("\nTop 10 most enriched in coding regions:")
     print("-" * 80)
     for codon, diff in codon_diffs[:10]:
         if diff > 0:
@@ -879,7 +879,7 @@ def compare_codon_usage(
                 f"Background: {background_codon_model.get(codon, 0):.6f})"
             )
 
-    print(f"\nTop 10 most depleted in coding regions:")
+    print("\nTop 10 most depleted in coding regions:")
     print("-" * 80)
     for codon, diff in reversed(codon_diffs[-10:]):
         if diff < 0:

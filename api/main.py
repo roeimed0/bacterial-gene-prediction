@@ -6,7 +6,6 @@ import sys
 import tempfile
 import traceback
 from pathlib import Path
-from typing import Dict, List
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from api.models import (
+from api.models import (  # noqa: E402
     DeleteFilesRequest,
     DeleteFilesResponse,
     FileInfo,
@@ -151,7 +150,7 @@ async def predict_genes(request: PredictionRequest):
     except Exception as e:
         try:
             tmp_file_path.unlink(missing_ok=True)
-        except:
+        except Exception:
             pass
 
         print(f"Prediction error: {e}")
@@ -233,7 +232,7 @@ async def predict_genes_from_file(
     except Exception as e:
         try:
             tmp_file_path.unlink(missing_ok=True)
-        except:
+        except Exception:
             pass
 
         print(f"Prediction error: {e}")

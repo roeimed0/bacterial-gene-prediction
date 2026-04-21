@@ -103,7 +103,7 @@ def download_genome_and_reference(
     if os.path.exists(gff_path):
         print(f"[SKIP] Reference file {genome_id}.gff already exists")
     else:
-        print(f"Downloading reference GFF...")
+        print("Downloading reference GFF...")
         try:
             handle = Entrez.efetch(
                 db="nuccore", id=genome_id, rettype="gff3", retmode="text"
@@ -155,13 +155,13 @@ def load_reference_genes_from_gff(gff_path: str) -> Set[Tuple[int, int]]:
         # Filter for CDS features (protein-coding sequences)
         if (ref[2] == "CDS").sum() > 0:
             ref_genes = ref[ref[2] == "CDS"][[3, 4]].copy()
-            print(f"  Using CDS features")
+            print("  Using CDS features")
         elif (ref[2] == "gene").sum() > 0:
             ref_genes = ref[ref[2] == "gene"][[3, 4]].copy()
-            print(f"  Using gene features")
+            print("  Using gene features")
         else:
             ref_genes = ref[[3, 4]].copy()
-            print(f"  Using all features")
+            print("  Using all features")
 
         # Rename columns and remove duplicates
         ref_genes.columns = ["start", "end"]
@@ -239,7 +239,7 @@ def print_dna_sequence(
 
     print(f"Position: {start:,} - {end:,}")
     print(f"Length: {len(sequence)} bp")
-    print(f"Sequence:")
+    print("Sequence:")
 
     if full:
         print(sequence)
@@ -277,7 +277,7 @@ def download_all_test_genomes(
 
         if fasta_path and gff_path:
             results[genome_id] = {"fasta": fasta_path, "gff": gff_path}
-            print(f"[SUCCESS]")
+            print("[SUCCESS]")
         else:
             print(f"[FAILED] Could not download {genome_id}")
 
@@ -364,7 +364,7 @@ def cleanup_generated_files(interactive: bool = True) -> Dict[str, int]:
                     print(f"  [!] Error deleting {file.name}: {e}")
 
     if interactive:
-        print(f"\n[+] Cleanup complete!")
+        print("\n[+] Cleanup complete!")
         print(f"    Downloads: {deleted_counts['downloads']} files")
         print(f"    Results:   {deleted_counts['results']} files")
 

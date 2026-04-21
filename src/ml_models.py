@@ -713,7 +713,7 @@ if __name__ == "__main__":
         if model_path.exists():
             classifier.load(str(model_path))
         else:
-            print(f"[!] Model not found, skipping ML...")
+            print("[!] Model not found, skipping ML...")
     except Exception as e:
         print(f"[!] ML error: {e}, skipping...")
 
@@ -725,6 +725,6 @@ if __name__ == "__main__":
         if model_path.exists():
             classifier.load(str(model_path))
         else:
-            print(f"[!] Model not found, skipping ML...")
+            print("[!] Model not found, skipping ML...")
     except Exception as e:
         print(f"[!] ML error: {e}, skipping...")
