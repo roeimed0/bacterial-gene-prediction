@@ -109,6 +109,7 @@ Test suite
 - Added ``tests/conftest.py`` — shared fixtures: ``synthetic_orf``, ``synthetic_candidate``, ``single_orf_group``, ``two_orf_group`` with documented ground-truth constants (:issue:`47`)
 - Added ``tests/test_ml_models.py`` — 32 unit and regression tests for :class:`OrfGroupClassifier` and :class:`HybridGeneFilter` covering feature extraction, feature count, edge cases, and static helpers (:issue:`47`)
 - Added ``tests/test_traditional_methods.py`` — 49 unit tests for the core bioinformatics layer in ``src/traditional_methods.py``: ORF detection on both strands, RBS scoring, codon model building, codon bias ratio, Interpolated Markov Model construction and scoring, score normalization, and combined score calculation (:issue:`14`)
+- Added ``tests/test_api.py`` — 27 async unit tests for the FastAPI backend using ``httpx.ASGITransport``; covers ``GET /``, ``GET /health``, ``GET /catalog``, ``GET /results``, ``GET /files``, request-body validation (422) for ``POST /predict`` and ``POST /predict/ncbi``, security constraints for ``POST /files/delete``, and ``POST /validate`` error handling (:issue:`28`)
 - Added ``tests/fixtures/sequences/``, ``tests/fixtures/gff/``, ``tests/fixtures/models/`` — fixture directory scaffold for future synthetic sequences, reference annotations, and mock model files (:issue:`47`)
 - Added ``tests/integration/`` — package for slow end-to-end pipeline tests (:issue:`47`)
 - Added ``.coveragerc`` — coverage configuration: measures ``src/`` and ``api/``, excludes test scaffolding and boilerplate (:issue:`66`)
