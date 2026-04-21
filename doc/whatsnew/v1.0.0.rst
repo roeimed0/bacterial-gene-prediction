@@ -113,6 +113,7 @@ Test suite
 - Added ``tests/integration/`` — package for slow end-to-end pipeline tests (:issue:`47`)
 - Added ``.coveragerc`` — coverage configuration: measures ``src/`` and ``api/``, excludes test scaffolding and boilerplate (:issue:`66`)
 - Updated CI ``Run tests`` step to report coverage via ``pytest-cov`` (``--cov=src --cov=api --cov-report=term-missing``) and exclude ``@pytest.mark.slow`` tests from the fast tier (:issue:`66`)
+- Added ``tests/test_config.py`` — 32 tests covering ``GENOME_CATALOG`` integrity (100 entries, unique IDs, required keys, known groups), ``TEST_GENOMES`` (15 entries, no duplicates, bacteria + archaea), helper functions ``get_genome_by_id()``, ``get_genome_by_accession()``, ``list_genomes_by_group()``, and scoring constant sanity checks (:issue:`33`)
 
 CI/CD
 ^^^^^
