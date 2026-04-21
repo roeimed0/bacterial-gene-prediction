@@ -9,14 +9,12 @@ import os
 import pickle
 from typing import Dict, List
 
-from .config import CACHE_FILENAME, NCBI_EMAIL, MIN_ORF_LENGTH
-
+from .config import CACHE_FILENAME, MIN_ORF_LENGTH, NCBI_EMAIL
 from .data_management import (
     download_genome_and_reference,
-    load_genome_sequence,
     get_data_dir,
+    load_genome_sequence,
 )
-
 from .traditional_methods import find_orfs_candidates
 
 

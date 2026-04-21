@@ -2,8 +2,9 @@
 API Models - Request and Response schemas
 """
 
-from pydantic import BaseModel, Field
 from typing import List, Optional
+
+from pydantic import BaseModel, Field
 
 
 class PredictionRequest(BaseModel):

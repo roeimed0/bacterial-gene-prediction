@@ -2,30 +2,31 @@
 FastAPI wrapper for Bacterial Gene Prediction
 """
 
-from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pathlib import Path
-import tempfile
 import sys
-from typing import List, Dict
+import tempfile
 import traceback
+from pathlib import Path
+from typing import Dict, List
+
+from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 
 # Add parent directory to path to import from src
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from api.models import (
-    PredictionRequest,
-    NcbiPredictionRequest,
-    PredictionResponse,
-    GenePrediction,
-    HealthResponse,
-    ValidationRequest,
-    ValidationResponse,
-    FileInfo,
-    FileListResponse,
     DeleteFilesRequest,
     DeleteFilesResponse,
+    FileInfo,
+    FileListResponse,
+    GenePrediction,
+    HealthResponse,
+    NcbiPredictionRequest,
+    PredictionRequest,
+    PredictionResponse,
+    ValidationRequest,
+    ValidationResponse,
 )
 
 # Create FastAPI app

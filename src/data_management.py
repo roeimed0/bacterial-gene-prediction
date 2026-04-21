@@ -24,9 +24,10 @@ All downloads are cached - re-running will skip existing files.
 
 import os
 from pathlib import Path
-from Bio import Entrez, SeqIO
+from typing import Dict, List, Set, Tuple
+
 import pandas as pd
-from typing import Tuple, Set, List, Dict
+from Bio import Entrez, SeqIO
 
 from .config import NCBI_EMAIL, TEST_GENOMES
 

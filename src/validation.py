@@ -10,8 +10,8 @@ Key Functions:
 - print_validation_report(): Display validation metrics nicely
 """
 
-from typing import Dict
 from pathlib import Path
+from typing import Dict
 
 
 def validate_predictions(

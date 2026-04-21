@@ -1,16 +1,16 @@
+import math
+from collections import Counter
+from pathlib import Path
+from typing import Dict, List, Tuple
+
 import joblib
 import numpy as np
 import pandas as pd
-import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from pathlib import Path
-from typing import List, Dict, Tuple
-from collections import Counter
 from Bio.Seq import Seq
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
-
 
 """
 Machine learning classifier for ORF groups.

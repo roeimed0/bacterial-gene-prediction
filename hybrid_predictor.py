@@ -10,13 +10,12 @@ Supports modes:
 6. Exit
 """
 
-import sys
 import argparse
 import os
-from pathlib import Path
 import re
-from typing import List, Dict
-
+import sys
+from pathlib import Path
+from typing import Dict, List
 
 script_dir = Path(__file__).parent.resolve()
 src_dir = script_dir / "src"
@@ -479,8 +478,9 @@ def predict_ncbi_genome(
     final_ml_threshold: float = 0.12,
 ):
     """Download genome from NCBI and predict genes"""
-    from Bio import Entrez
     import gzip
+
+    from Bio import Entrez
 
     print(f"\n{'='*80}")
     print(f"MODE: NCBI DOWNLOAD")
@@ -601,20 +601,20 @@ def predict_fasta_file(
 
     try:
         from src.data_management import load_genome_sequence
+        from src.ml_models import HybridGeneFilter, OrfGroupClassifier
         from src.traditional_methods import (
-            find_orfs_candidates,
-            create_training_set,
-            create_intergenic_set,
-            build_all_scoring_models,
-            score_all_orfs,
-            filter_candidates,
-            organize_nested_orfs,
-            select_best_starts,
             FIRST_FILTER_THRESHOLD,
             SECOND_FILTER_THRESHOLD,
             START_SELECTION_WEIGHTS,
+            build_all_scoring_models,
+            create_intergenic_set,
+            create_training_set,
+            filter_candidates,
+            find_orfs_candidates,
+            organize_nested_orfs,
+            score_all_orfs,
+            select_best_starts,
         )
-        from src.ml_models import OrfGroupClassifier, HybridGeneFilter
 
         print(f"\n{'='*80}\nSTEP 1: LOAD FASTA FILE\n{'='*80}")
         genome_info = load_genome_sequence(fasta_path)

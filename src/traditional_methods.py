@@ -14,25 +14,25 @@ These methods form the foundation of programs like Glimmer, GeneMark, and Prodig
 
 import math
 import time
-from Bio.Seq import Seq
 from collections import Counter, defaultdict
-from typing import Dict, List, Tuple
-import numpy as np
-from .config import (
-    KNOWN_RBS_MOTIFS,
-    START_CODONS,
-    STOP_CODONS,
-    MIN_ORF_LENGTH,
-    LENGTH_REFERENCE_BP,
-)
-from .config import (
-    SCORE_WEIGHTS,
-    START_CODON_WEIGHTS,
-    START_SELECTION_WEIGHTS,
-    FIRST_FILTER_THRESHOLD,
-    SECOND_FILTER_THRESHOLD,
-)
 from functools import lru_cache
+from typing import Dict, List, Tuple
+
+import numpy as np
+from Bio.Seq import Seq
+
+from .config import (
+    FIRST_FILTER_THRESHOLD,
+    KNOWN_RBS_MOTIFS,
+    LENGTH_REFERENCE_BP,
+    MIN_ORF_LENGTH,
+    SCORE_WEIGHTS,
+    SECOND_FILTER_THRESHOLD,
+    START_CODON_WEIGHTS,
+    START_CODONS,
+    START_SELECTION_WEIGHTS,
+    STOP_CODONS,
+)
 
 _GLOBAL_CODING_IMM = None
 _GLOBAL_NONCODING_IMM = None

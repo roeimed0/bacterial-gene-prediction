@@ -7,14 +7,14 @@ This module provides tools for comparing predicted ORFs against reference annota
 - Validation metrics (sensitivity, precision, F1)
 """
 
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
 from typing import Dict, List, Set
 
-from .data_management import get_gff_path, load_reference_genes_from_gff
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
 
+from .data_management import get_gff_path, load_reference_genes_from_gff
 
 # =============================================================================
 # COMPLETE ANALYSIS PIPELINE
@@ -541,9 +541,10 @@ def compare_results_file_to_reference(genome_id: str) -> Dict:
     Compare prediction results file to reference GFF file for a given genome_id.
 
     """
-    from pathlib import Path
-    from Bio import Entrez
     import sys
+    from pathlib import Path
+
+    from Bio import Entrez
 
     print("\n" + "=" * 80)
     print("VALIDATION: COMPARING PREDICTIONS TO REFERENCE")
