@@ -10,14 +10,16 @@ Key Functions:
 - print_validation_report(): Display validation metrics nicely
 """
 
-from typing import Dict
 from pathlib import Path
+from typing import Dict
 
 
-def validate_predictions(pred_path: str, ref_path: str = None, genome_id: str = None) -> Dict:
+def validate_predictions(
+    pred_path: str, ref_path: str = None, genome_id: str = None
+) -> Dict:
     """
     Validate predictions against reference annotations.
-    
+
     This is a wrapper around the existing compare_results_file_to_reference()
     function that handles the logic of finding reference files and computing metrics.
     """
@@ -26,13 +28,13 @@ def validate_predictions(pred_path: str, ref_path: str = None, genome_id: str = 
         from src.comparative_analysis import compare_results_file_to_reference
     except ImportError:
         from src.comparative_analysis import compare_results_file_to_reference
-    
+
     # If genome_id not provided, try to extract from prediction filename
     if genome_id is None:
-        genome_id = Path(pred_path).stem.replace('_predictions', '')
-    
+        genome_id = Path(pred_path).stem.replace("_predictions", "")
+
     metrics = compare_results_file_to_reference(genome_id)
-    
+
     return metrics
 
 
@@ -63,6 +65,5 @@ def validate_from_results_directory(genome_id: str) -> Dict:
     Convenience function to validate results using only genome_id.
     """
     return validate_predictions(
-        pred_path=f"results/{genome_id}_predictions.gff",
-        genome_id=genome_id
+        pred_path=f"results/{genome_id}_predictions.gff", genome_id=genome_id
     )

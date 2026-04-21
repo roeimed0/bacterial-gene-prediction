@@ -1,0 +1,139 @@
+.. _whatsnew_100:
+
+What's new in 1.0.0 (April 15, 2026)
+--------------------------------------
+
+Initial release of bacterial-gene-prediction — a hybrid prokaryotic gene
+prediction pipeline combining classical bioinformatics scoring with optional
+LightGBM and CNN+Dense machine learning filters.
+
+.. ---------------------------------------------------------------------------
+.. _whatsnew_100.enhancements:
+
+Enhancements
+~~~~~~~~~~~~
+
+.. _whatsnew_100.enhancements.pipeline:
+
+10-step hybrid prediction pipeline
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- Added ``find_orfs_candidates()`` — scans both strands for ORFs starting with ATG, GTG, or TTG and ending at a canonical stop codon (:issue:`1`)
+- Added ``predict_rbs_simple()`` — scores Shine-Dalgarno signal strength in the -20 to -5 window upstream of each candidate start site
+- Added ``build_codon_model()`` and ``score_codon_bias_ratio()`` — log-odds codon usage scoring against a self-trained genome-specific model
+- Added ``build_interpolated_markov_model()`` and ``score_imm_ratio()`` — Interpolated Markov Model scoring trained on the target genome (orders 1–3)
+- Added ``score_all_orfs()`` — unified scoring combining codon bias, IMM, RBS, length, and start codon type into a ``combined_score``
+- Added ``normalize_all_orf_scores()`` — z-score normalization of all score components for downstream ML feature extraction
+- Added ``create_training_set()`` — self-training strategy selecting high-confidence ORFs from the target genome as positive examples
+- Added ``select_best_starts()`` — resolves overlapping start candidates within each ORF group using weighted scoring
+
+.. _whatsnew_100.enhancements.ml:
+
+Machine learning classifiers
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+- Added :class:`OrfGroupClassifier` — LightGBM binary classifier predicting whether an ORF group contains a real gene; 31 group-level features; threshold 0.1; trained on 27 diverse prokaryotic genomes
+- Added :class:`HybridGeneFilter` — CNN + Dense hybrid classifier combining one-hot encoded DNA sequence (CNN branch) with 25 traditional score features (Dense branch); threshold 0.12
+- Added :class:`CNNBranch` — three-layer Conv1D network (4→64→128→256 channels) with BatchNorm, MaxPool, and AdaptiveMaxPool producing a 128-dim sequence embedding
+- Added :class:`DenseBranch` — three-layer fully connected network (25→64→128→128) with BatchNorm and Dropout producing a 128-dim feature embedding
+- Added :class:`HybridGenePredictor` — fusion module concatenating CNN and Dense embeddings (256-dim) through two FC layers to a single sigmoid output
+- Added ``extract_group_features()`` — extracts 31 group-level statistics per ORF group including combined score stats, RBS stats, relative features, strand fractions, and dominance ratios
+- Added ``extract_features()`` — extracts 25 per-candidate features including normalized scores, sequence composition, codon usage, amino acid properties, and structural signals
+- Added ``models/orf_classifier_lgb.pkl`` — trained LightGBM classifier artifact
+- Added ``models/hybrid_best_model.pkl`` — trained CNN+Dense model artifact with saved weights, threshold, and feature count
+- Added ``models/feature_names.pkl`` — serialized ordered list of 31 LightGBM feature names
+
+.. _whatsnew_100.enhancements.api:
+
+FastAPI backend
+^^^^^^^^^^^^^^^
+- Added ``POST /predict`` — accepts raw FASTA sequence, runs full pipeline, returns predicted gene list (:issue:`1`)
+- Added ``POST /predict/ncbi`` — downloads genome by accession from NCBI then runs prediction
+- Added ``GET /catalog`` — returns the 100-genome curated catalog with organism, accession, and group metadata
+- Added ``POST /validate`` — compares a prediction result against NCBI reference annotation and returns sensitivity, precision, and F1
+- Added ``GET /results`` — lists all saved prediction result files
+- Added ``DELETE /files/delete`` — removes a result file by filename
+- Added Pydantic schemas in ``api/models.py``: :class:`PredictionRequest`, :class:`NcbiPredictionRequest`, :class:`PredictionResponse`, :class:`GenePrediction`, :class:`ValidationResult`
+
+.. _whatsnew_100.enhancements.frontend:
+
+React web frontend
+^^^^^^^^^^^^^^^^^^
+- Added interactive pipeline visualization with per-step cards and ML toggle controls (``gene-prediction-frontend/src/components/PipelineVisualization/``)
+- Added four prediction modes: Catalog browser, NCBI accession download, custom FASTA upload, and results validation (``gene-prediction-frontend/src/components/Modes/``)
+- Added ``ResultsView``, ``ResultsTable``, and ``GenomeViewer`` components for browsing and inspecting predicted genes
+- Added ``FileManager`` component for listing, downloading, and deleting result files
+- Added ``api.js`` service layer wrapping all FastAPI endpoint calls
+
+.. _whatsnew_100.enhancements.cli:
+
+CLI and utilities
+^^^^^^^^^^^^^^^^^
+- Added ``hybrid_predictor.py`` — main CLI entry point supporting five modes: Catalog browse, NCBI download, custom FASTA, validate results, and cleanup
+- Added ``launch_app.bat`` — Windows script to start both FastAPI backend and React frontend in one command
+- Added ``src/data_management.py`` — full data lifecycle: NCBI Entrez download, FASTA loading, GFF parsing, path helpers, and result cleanup
+- Added ``src/cache.py`` — ORF candidate caching layer using pickle to skip recomputation on repeated runs
+- Added ``src/validation.py`` — clean validation wrapper over ``compare_results_file_to_reference()``
+- Added ``src/comparative_analysis.py`` — sensitivity, precision, and F1 computation against NCBI reference GFF; score distribution plots for TP vs FP analysis
+- Added ``src/config.py`` — centralized configuration: ``TEST_GENOMES`` (15-genome benchmark set), ``GENOME_CATALOG`` (100 curated prokaryotes), scoring weights, thresholds, codon tables, and RBS motifs
+
+.. _whatsnew_100.enhancements.other:
+
+Other enhancements
+^^^^^^^^^^^^^^^^^^
+- Added ``notebooks/01_data_collection.ipynb`` — genome download and inspection notebook
+- Added ``notebooks/02_orf_detection.ipynb`` — ORF detection exploration and visualization
+- Added ``notebooks/03_ml_models.ipynb`` — LightGBM model training and evaluation
+- Added ``notebooks/hybrid_dl_classifier.ipynb`` — CNN+Dense model training
+- Added ``notebooks/orf_detection_optimized.ipynb`` — pipeline performance profiling and tuning
+
+.. ---------------------------------------------------------------------------
+.. _whatsnew_100.bug_fixes:
+
+Bug fixes
+~~~~~~~~~
+
+ML models
+^^^^^^^^^
+- Fixed :meth:`OrfGroupClassifier.predict_groups` silently continuing with a truncated feature list when model features were absent from the extracted DataFrame; now raises :class:`ValueError` naming the missing features (:issue:`47`)
+- Fixed :meth:`HybridGeneFilter.predict` silently passing a wrong-shaped tensor to ``DenseBranch(input_dim=25)`` when features were missing from the extracted DataFrame; now raises :class:`ValueError` naming the missing features (:issue:`47`)
+- Fixed :meth:`HybridGeneFilter._calculate_amino_acid_properties` calling the deprecated ``ProteinAnalysis.get_amino_acids_percent()`` method; replaced with the ``amino_acids_percent`` attribute to prevent a breakage on future Biopython upgrades (:issue:`55`)
+
+.. ---------------------------------------------------------------------------
+.. _whatsnew_100.infrastructure:
+
+Infrastructure
+~~~~~~~~~~~~~~
+
+Test suite
+^^^^^^^^^^
+- Added ``pytest.ini`` — pytest configuration: ``testpaths = tests``, ``slow`` marker, ``-v --tb=short`` defaults (:issue:`47`)
+- Added ``tests/conftest.py`` — shared fixtures: ``synthetic_orf``, ``synthetic_candidate``, ``single_orf_group``, ``two_orf_group`` with documented ground-truth constants (:issue:`47`)
+- Added ``tests/test_ml_models.py`` — 32 unit and regression tests for :class:`OrfGroupClassifier` and :class:`HybridGeneFilter` covering feature extraction, feature count, edge cases, and static helpers (:issue:`47`)
+- Added ``tests/fixtures/sequences/``, ``tests/fixtures/gff/``, ``tests/fixtures/models/`` — fixture directory scaffold for future synthetic sequences, reference annotations, and mock model files (:issue:`47`)
+- Added ``tests/integration/`` — package for slow end-to-end pipeline tests (:issue:`47`)
+
+CI/CD
+^^^^^
+- Added ``.github/workflows/ci.yml`` — CI pipeline running lint (black, isort, flake8) and tests (pytest) across Python 3.9, 3.10, and 3.11 on every push and pull request to main
+
+Contribution workflow
+^^^^^^^^^^^^^^^^^^^^^
+- Added ``AGENTS.md`` — project instructions for AI-assisted development: pipeline overview, branch naming convention, PR prefix table, benchmark rules, and module size limits
+- Added ``CONTRIBUTING.md`` — contributor guide: issue-first workflow, branch naming, commit message format, and code style requirements
+- Added ``.github/ISSUE_TEMPLATE/bug_report.md`` — BUG issue template
+- Added ``.github/ISSUE_TEMPLATE/feature_request.md`` — ENH issue template
+- Added ``.github/ISSUE_TEMPLATE/tests.md`` — TST issue template
+- Added ``.github/ISSUE_TEMPLATE/documentation.md`` — DOC issue template
+- Added ``.github/ISSUE_TEMPLATE/refactor.md`` — REF issue template
+- Added ``.github/ISSUE_TEMPLATE/performance.md`` — PERF issue template
+- Added ``.github/PULL_REQUEST_TEMPLATE.md`` — PR template with type-of-change checklist and benchmark impact table
+- Added ``prompts/role_ml_engineer.md`` — ML engineer specialist role for focused AI sessions
+- Added ``prompts/role_tester.md`` — test engineer specialist role
+- Added ``prompts/role_refactor.md`` — refactoring engineer specialist role
+- Added ``prompts/role_docs.md`` — documentation engineer specialist role
+
+.. ---------------------------------------------------------------------------
+.. _whatsnew_100.contributors:
+
+Contributors
+~~~~~~~~~~~~
+- roeimed0
