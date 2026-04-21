@@ -113,6 +113,7 @@ Test suite
 - Added ``tests/integration/`` — package for slow end-to-end pipeline tests (:issue:`47`)
 - Added ``.coveragerc`` — coverage configuration: measures ``src/`` and ``api/``, excludes test scaffolding and boilerplate (:issue:`66`)
 - Updated CI ``Run tests`` step to report coverage via ``pytest-cov`` (``--cov=src --cov=api --cov-report=term-missing``) and exclude ``@pytest.mark.slow`` tests from the fast tier (:issue:`66`)
+- Added ``tests/test_data_management.py`` — 24 tests covering ``get_project_root()``, ``get_data_dir()``, ``get_gff_path()``/``get_fasta_path()`` path helpers, ``load_genome_sequence()`` (return keys, uppercase, length, None on missing file, accession extraction), ``load_reference_genes_from_gff()`` (CDS preference, gene fallback, deduplication, empty set on error), and ``get_reference_orfs_from_gff()`` (required keys, length formula, CDS-only filtering, empty list on error) (:issue:`30`)
 
 CI/CD
 ^^^^^
