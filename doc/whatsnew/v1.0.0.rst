@@ -113,6 +113,7 @@ Test suite
 - Added ``tests/integration/`` — package for slow end-to-end pipeline tests (:issue:`47`)
 - Added ``.coveragerc`` — coverage configuration: measures ``src/`` and ``api/``, excludes test scaffolding and boilerplate (:issue:`66`)
 - Updated CI ``Run tests`` step to report coverage via ``pytest-cov`` (``--cov=src --cov=api --cov-report=term-missing``) and exclude ``@pytest.mark.slow`` tests from the fast tier (:issue:`66`)
+- Added ``tests/test_comparative_analysis.py`` — 14 tests covering metric formulas (sensitivity, precision, F1), exact/partial/zero-overlap scenarios, empty-input regression tests, ``genome_start``/``genome_end`` column variant, GFF comment-line skipping, ``FileNotFoundError`` on missing results; also documents the metric-scale inconsistency between the two comparison functions (:issue:`29`)
 
 CI/CD
 ^^^^^
