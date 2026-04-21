@@ -113,6 +113,7 @@ Test suite
 - Added ``tests/integration/`` — package for slow end-to-end pipeline tests (:issue:`47`)
 - Added ``.coveragerc`` — coverage configuration: measures ``src/`` and ``api/``, excludes test scaffolding and boilerplate (:issue:`66`)
 - Updated CI ``Run tests`` step to report coverage via ``pytest-cov`` (``--cov=src --cov=api --cov-report=term-missing``) and exclude ``@pytest.mark.slow`` tests from the fast tier (:issue:`66`)
+- Added ``tests/test_validation.py`` — 11 tests covering ``validate_predictions()`` delegation, genome-ID extraction from filename, explicit-ID override, ``FileNotFoundError`` propagation, ``print_validation_report()`` output format, and ``validate_from_results_directory()`` wrapper (:issue:`31`)
 
 CI/CD
 ^^^^^
