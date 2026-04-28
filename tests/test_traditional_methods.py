@@ -365,6 +365,57 @@ class TestScoreImmRatio:
         bg_score = score_imm_ratio("GGG" * 20, coding_imm, noncoding_imm, max_order=2)
         assert coding_score > bg_score
 
+    def test_sequential_scoring_no_cache_poisoning_issue_68(self):
+        """Regression: scoring genome B after genome A must not return genome A's
+        cached probabilities.  Previously _GLOBAL_CODING_IMM was set once and the
+        lru_cache keyed only on the k-mer string, so the second model's scores were
+        silently wrong (sign-flipped in the worst case)."""
+        # Model A: ATG is 'coding', CCC is 'noncoding'
+        coding_a = build_interpolated_markov_model(["ATG" * 50], max_order=2)
+        noncoding_a = build_interpolated_markov_model(["CCC" * 50], max_order=2)
+        # Model B: opposite — ATG is 'noncoding', CCC is 'coding'
+        coding_b = build_interpolated_markov_model(["CCC" * 50], max_order=2)
+        noncoding_b = build_interpolated_markov_model(["ATG" * 50], max_order=2)
+
+        test_seq = "ATG" * 50
+
+        score_a = score_imm_ratio(test_seq, coding_a, noncoding_a, max_order=2)
+        # Do NOT clear cache — this is the batch-mode scenario that triggered the bug
+        score_b = score_imm_ratio(test_seq, coding_b, noncoding_b, max_order=2)
+
+        assert score_a > 0, "Model A should score ATG-rich sequence as coding"
+        assert score_b < 0, "Model B should score ATG-rich sequence as non-coding"
+        assert score_a != score_b, "Two opposite models must produce different scores"
+
+    def test_concurrent_scoring_thread_safe_issue_68(self):
+        """Regression: concurrent score_imm_ratio calls must not corrupt each other's
+        results via the previously shared _GLOBAL_CODING_IMM / _GLOBAL_NONCODING_IMM
+        globals."""
+        import threading
+
+        coding_a = build_interpolated_markov_model(["ATG" * 50], max_order=2)
+        noncoding_a = build_interpolated_markov_model(["CCC" * 50], max_order=2)
+        coding_b = build_interpolated_markov_model(["CCC" * 50], max_order=2)
+        noncoding_b = build_interpolated_markov_model(["ATG" * 50], max_order=2)
+
+        test_seq = "ATG" * 50
+        results = {}
+
+        def run(name, coding, noncoding):
+            scores = [
+                score_imm_ratio(test_seq, coding, noncoding, max_order=2)
+                for _ in range(100)
+            ]
+            results[name] = scores
+
+        t1 = threading.Thread(target=run, args=("a", coding_a, noncoding_a))
+        t2 = threading.Thread(target=run, args=("b", coding_b, noncoding_b))
+        t1.start(); t2.start()
+        t1.join(); t2.join()
+
+        assert all(s > 0 for s in results["a"]), "Thread A: all scores should be positive"
+        assert all(s < 0 for s in results["b"]), "Thread B: all scores should be negative"
+
 
 # ===========================================================================
 # Tests: normalize_all_orf_scores()
