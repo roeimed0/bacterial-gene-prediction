@@ -34,8 +34,10 @@ from .config import (
     STOP_CODONS,
 )
 
-_GLOBAL_CODING_IMM = None
-_GLOBAL_NONCODING_IMM = None
+# Registry mapping id(model_list) -> model so that get_interpolated_probability
+# can look up the correct model via the cache key without using global mutation.
+# Each genome's models get separate cache partitions because their ids differ.
+_IMM_MODEL_REGISTRY: Dict[int, List[Dict]] = {}
 
 
 # =============================================================================
@@ -811,13 +813,10 @@ def get_interpolated_probability(
     nucleotide: str,
     context: str,
     codon_pos: int,
-    imm_type: str,
+    model_id: int,
     fallback_prob: float = 0.25,
 ) -> float:
-
-    probabilities = (
-        _GLOBAL_CODING_IMM if imm_type == "coding" else _GLOBAL_NONCODING_IMM
-    )
+    probabilities = _IMM_MODEL_REGISTRY[model_id]
 
     for order in range(len(context), -1, -1):
         current_context = context[-order:] if order > 0 else ""
@@ -848,10 +847,10 @@ def score_imm_ratio(
     sequence: str, coding_imm: List[Dict], noncoding_imm: List[Dict], max_order: int
 ) -> float:
     """Score sequence using frame-aware IMM log-likelihood ratio."""
-    global _GLOBAL_CODING_IMM, _GLOBAL_NONCODING_IMM
-
-    _GLOBAL_CODING_IMM = coding_imm
-    _GLOBAL_NONCODING_IMM = noncoding_imm
+    coding_id = id(coding_imm)
+    noncoding_id = id(noncoding_imm)
+    _IMM_MODEL_REGISTRY[coding_id] = coding_imm
+    _IMM_MODEL_REGISTRY[noncoding_id] = noncoding_imm
 
     if len(sequence) < 3:
         return 0.0
@@ -871,15 +870,17 @@ def score_imm_ratio(
         if is_frame_aware:
             codon_position = i % 3
             coding_prob = get_interpolated_probability(
-                nucleotide, context, codon_position, "coding"
+                nucleotide, context, codon_position, coding_id
             )
             noncoding_prob = get_interpolated_probability(
-                nucleotide, context, codon_position, "noncoding"
+                nucleotide, context, codon_position, noncoding_id
             )
         else:
-            coding_prob = get_interpolated_probability(nucleotide, context, 0, "coding")
+            coding_prob = get_interpolated_probability(
+                nucleotide, context, 0, coding_id
+            )
             noncoding_prob = get_interpolated_probability(
-                nucleotide, context, 0, "noncoding"
+                nucleotide, context, 0, noncoding_id
             )
 
         coding_prob = max(coding_prob, EPSILON)
@@ -925,8 +926,9 @@ def score_codon_bias_ratio(
 # MODEL BUILDING
 # =============================================================================
 def clear_imm_cache():
-    """Clear the LRU cache for IMM scoring."""
+    """Clear the LRU cache and model registry for IMM scoring."""
     get_interpolated_probability.cache_clear()
+    _IMM_MODEL_REGISTRY.clear()
 
 
 def build_all_scoring_models(
