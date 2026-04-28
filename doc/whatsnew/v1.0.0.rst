@@ -91,6 +91,10 @@ Other enhancements
 Bug fixes
 ~~~~~~~~~
 
+IMM scoring
+^^^^^^^^^^^
+- Fixed :func:`score_imm_ratio` corrupting IMM scores across sequential genome runs: ``_GLOBAL_CODING_IMM`` / ``_GLOBAL_NONCODING_IMM`` were overwritten on every call while ``get_interpolated_probability`` cached results keyed only on k-mer strings (not model identity), causing genome B to silently receive genome A's cached probabilities (sign-flip confirmed in reproduction).  Fix: replaced module-level globals with ``_IMM_MODEL_REGISTRY`` keyed on ``id(model)``; ``get_interpolated_probability`` now takes ``model_id: int`` so each genome occupies its own ``@lru_cache`` partition — preserving the 90 % LRU speedup while eliminating both cache poisoning and the concurrent thread-safety race (:issue:`68`)
+
 ML models
 ^^^^^^^^^
 - Fixed :meth:`OrfGroupClassifier.predict_groups` silently continuing with a truncated feature list when model features were absent from the extracted DataFrame; now raises :class:`ValueError` naming the missing features (:issue:`47`)
