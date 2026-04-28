@@ -876,7 +876,9 @@ def score_imm_ratio(
                 nucleotide, context, codon_position, noncoding_id
             )
         else:
-            coding_prob = get_interpolated_probability(nucleotide, context, 0, coding_id)
+            coding_prob = get_interpolated_probability(
+                nucleotide, context, 0, coding_id
+            )
             noncoding_prob = get_interpolated_probability(
                 nucleotide, context, 0, noncoding_id
             )
