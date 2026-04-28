@@ -40,12 +40,15 @@ from .config import (
 # Each genome's models get separate cache partitions because their ids differ.
 _IMM_MODEL_REGISTRY: Dict[int, List[Dict]] = {}
 
-_LOG_EPSILON: float = math.log(1e-10)   # fallback for unseen k-mers
+_LOG_EPSILON: float = math.log(1e-10)  # fallback for unseen k-mers
 _IMM_NUCLEOTIDES: tuple = ("A", "C", "G", "T")
 
 
 def _interpolate_prob(
-    imm_model: List[Dict], codon_pos: int, context: str, nucleotide: str,
+    imm_model: List[Dict],
+    codon_pos: int,
+    context: str,
+    nucleotide: str,
     fallback: float = 0.25,
 ) -> float:
     """Run IMM interpolation without caching — used only at table-build time."""
@@ -73,7 +76,7 @@ def build_flat_log_table(
     n_positions = len(imm_model)  # 3 for frame-aware, 1 for non-frame-aware
     tables: List[Dict[str, float]] = [{} for _ in range(n_positions)]
 
-    for key_len in range(1, max_order + 2):          # key = context + nucleotide
+    for key_len in range(1, max_order + 2):  # key = context + nucleotide
         for chars in itertools.product(_IMM_NUCLEOTIDES, repeat=key_len):
             key = "".join(chars)
             context = key[:-1]
@@ -104,7 +107,7 @@ def _score_imm_fast(
     for i in range(n):
         key = sequence[i - max_order if i >= max_order else 0 : i + 1]
         pos = i % 3
-        c_total  += coding_log[pos].get(key, _LOG_EPSILON)
+        c_total += coding_log[pos].get(key, _LOG_EPSILON)
         nc_total += noncoding_log[pos].get(key, _LOG_EPSILON)
     return (c_total - nc_total) / n
 
@@ -945,7 +948,9 @@ def score_imm_ratio(
                 nucleotide, context, codon_position, noncoding_id
             )
         else:
-            coding_prob = get_interpolated_probability(nucleotide, context, 0, coding_id)
+            coding_prob = get_interpolated_probability(
+                nucleotide, context, 0, coding_id
+            )
             noncoding_prob = get_interpolated_probability(
                 nucleotide, context, 0, noncoding_id
             )
@@ -1035,7 +1040,7 @@ def build_all_scoring_models(
     )
 
     print(f"  Building IMM log tables...")
-    coding_log_table    = build_flat_log_table(coding_imm,    estimated_order)
+    coding_log_table = build_flat_log_table(coding_imm, estimated_order)
     noncoding_log_table = build_flat_log_table(noncoding_imm, estimated_order)
 
     print(f"✓ All models built in {time.time() - start_time:.1f}s")
@@ -1152,9 +1157,9 @@ def score_all_orfs(
     coding_imm = models["coding_imm"]
     noncoding_imm = models["noncoding_imm"]
     max_order = models["max_order"]
-    coding_log    = models.get("coding_log_table")
+    coding_log = models.get("coding_log_table")
     noncoding_log = models.get("noncoding_log_table")
-    use_fast_imm  = coding_log is not None and noncoding_log is not None
+    use_fast_imm = coding_log is not None and noncoding_log is not None
 
     for i, orf in enumerate(all_orfs):
         if i % 25000 == 0 and i > 0:
