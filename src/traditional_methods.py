@@ -17,9 +17,78 @@ import math
 import time
 from collections import Counter, defaultdict
 from functools import lru_cache
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+
+try:
+    import numba as _numba
+
+    @_numba.njit(cache=True)
+    def _score_imm_numba(
+        seq_arr: np.ndarray,
+        coding_t: np.ndarray,
+        noncoding_t: np.ndarray,
+        max_order: int,
+        log_epsilon: float,
+    ) -> float:
+        """Numba-JIT IMM scoring. seq_arr: int32 array (A=0,C=1,G=2,T=3, other=4)."""
+        n = len(seq_arr)
+        if n < 3:
+            return 0.0
+        c_total = nc_total = 0.0
+        for i in range(n):
+            start = i - max_order if i >= max_order else 0
+            kmer_int = 0
+            valid = True
+            for j in range(start, i + 1):
+                nj = seq_arr[j]
+                if nj >= 4:
+                    valid = False
+                    break
+                kmer_int = kmer_int * 4 + nj
+            if valid:
+                L = i - start + 1
+                offset = (4 ** L - 1) // 3
+                idx = offset + kmer_int
+                c_total  += coding_t[i % 3, idx]
+                nc_total += noncoding_t[i % 3, idx]
+            else:
+                c_total  += log_epsilon
+                nc_total += log_epsilon
+        return (c_total - nc_total) / n
+
+    @_numba.njit(cache=True)
+    def _score_codon_bias_numba(
+        seq_arr: np.ndarray,
+        log_ratio_table: np.ndarray,
+    ) -> float:
+        """Numba-JIT codon bias log-ratio scoring.
+
+        seq_arr        : int32 array (A=0, C=1, G=2, T=3, other=4)
+        log_ratio_table: float64 array of shape (64,) indexed by
+                         a*16 + b*4 + c  (base-4 encoding of the codon)
+        """
+        n = len(seq_arr)
+        score = 0.0
+        count = 0
+        for i in range(0, n - 2, 3):
+            a = seq_arr[i]
+            b = seq_arr[i + 1]
+            c = seq_arr[i + 2]
+            if a < 4 and b < 4 and c < 4:
+                score += log_ratio_table[a * 16 + b * 4 + c]
+                count += 1
+        if count == 0:
+            return 0.0
+        return float(score / count)
+
+    _NUMBA_AVAILABLE = True
+
+except ImportError:
+    _NUMBA_AVAILABLE = False
+    _score_imm_numba = None
+    _score_codon_bias_numba = None
 from Bio.Seq import Seq
 
 from .config import (
@@ -108,6 +177,80 @@ def _score_imm_fast(
         c_total += coding_log[pos].get(key, _LOG_EPSILON)
         nc_total += noncoding_log[pos].get(key, _LOG_EPSILON)
     return (c_total - nc_total) / n
+
+
+# Pre-built ASCII→int lookup table (length 128): A=0, C=1, G=2, T=3, other=4.
+# A single numpy fancy-index replaces four boolean scan passes.
+_ASCII_TO_INT: np.ndarray = np.full(128, 4, dtype=np.int32)
+_ASCII_TO_INT[65] = 0  # A
+_ASCII_TO_INT[67] = 1  # C
+_ASCII_TO_INT[71] = 2  # G
+_ASCII_TO_INT[84] = 3  # T
+
+
+def _seq_to_int_fast(s: str) -> np.ndarray:
+    """Vectorised DNA → int32 encoding (A=0, C=1, G=2, T=3, other=4).
+
+    Uses a pre-built ASCII lookup table — one fancy-index op per call,
+    significantly faster than four boolean-scan passes for short ORFs.
+    """
+    return _ASCII_TO_INT[np.frombuffer(s.encode("ascii"), dtype=np.uint8)]
+
+
+def build_numba_log_table(
+    log_table: List[Dict[str, float]], max_order: int
+) -> np.ndarray:
+    """Convert a flat string-keyed log table to an integer-indexed numpy array.
+
+    Index layout for a k-mer of total length L (context L-1 chars + nucleotide):
+        offset(L) = (4^L - 1) // 3   (cumulative count of shorter k-mers)
+        index     = offset(L) + base4_integer_encoding(k-mer)
+
+    Array shape: (n_positions, (4^(max_order+2) - 1) // 3)
+    Typically shape (3, 87381) for max_order=7 — ~4 MB for the pair.
+    """
+    _NUC = {"A": 0, "C": 1, "G": 2, "T": 3}
+    total = (4 ** (max_order + 2) - 1) // 3
+    n_pos = len(log_table)
+    tbl   = np.full((n_pos, total), _LOG_EPSILON, dtype=np.float64)
+
+    for pos in range(n_pos):
+        for key, val in log_table[pos].items():
+            idx, valid = 0, True
+            for ch in key:
+                ni = _NUC.get(ch, -1)
+                if ni == -1:
+                    valid = False
+                    break
+                idx = idx * 4 + ni
+            if valid:
+                offset = (4 ** len(key) - 1) // 3
+                tbl[pos, offset + idx] = val
+
+    return tbl
+
+
+def build_codon_log_ratio_table(
+    codon_model: Dict[str, float],
+    background_codon_model: Dict[str, float],
+) -> np.ndarray:
+    """Build a 64-entry log-ratio table for Numba codon bias scoring.
+
+    Index = a*16 + b*4 + c  (base-4 encoding, A=0 C=1 G=2 T=3).
+    Value = log(coding_freq) - log(background_freq).
+    Codons absent from either model default to 0.0 (neutral).
+    """
+    _NUC = {"A": 0, "C": 1, "G": 2, "T": 3}
+    table = np.zeros(64, dtype=np.float64)
+    all_codons = set(codon_model) | set(background_codon_model)
+    for codon in all_codons:
+        if len(codon) != 3 or any(c not in _NUC for c in codon):
+            continue
+        a = _NUC[codon[0]] * 16 + _NUC[codon[1]] * 4 + _NUC[codon[2]]
+        c_freq  = codon_model.get(codon, 1e-4)
+        bg_freq = background_codon_model.get(codon, 1e-4)
+        table[a] = math.log(c_freq) - math.log(bg_freq)
+    return table
 
 
 # =============================================================================
@@ -1035,8 +1178,22 @@ def build_all_scoring_models(
     coding_log_table = build_flat_log_table(coding_imm, estimated_order)
     noncoding_log_table = build_flat_log_table(noncoding_imm, estimated_order)
 
+    numba_coding_table = numba_noncoding_table = None
+    codon_log_ratio_table = None
+    if _NUMBA_AVAILABLE:
+        print(f"  Building Numba integer tables...")
+        numba_coding_table    = build_numba_log_table(coding_log_table,    estimated_order)
+        numba_noncoding_table = build_numba_log_table(noncoding_log_table, estimated_order)
+        codon_log_ratio_table = build_codon_log_ratio_table(codon_model, background_codon_model)
+        # Warm up both JIT functions so first scoring call has no compile latency
+        _warmup = np.array([0, 1, 2, 3, 0, 1, 2], dtype=np.int32)
+        _score_imm_numba(_warmup, numba_coding_table, numba_noncoding_table,
+                         estimated_order, _LOG_EPSILON)
+        _score_codon_bias_numba(_warmup, codon_log_ratio_table)
+
     print(f"✓ All models built in {time.time() - start_time:.1f}s")
     print(f"  IMM order: {estimated_order}")
+    print(f"  IMM backend: {'numba' if _NUMBA_AVAILABLE else 'python'}")
     print(f"  Training sequences: {len(training_seqs)} ({n_training:,} bp)")
     print(f"  Intergenic sequences: {len(intergenic_seqs)} ({n_intergenic:,} bp)")
 
@@ -1048,6 +1205,9 @@ def build_all_scoring_models(
         "max_order": estimated_order,
         "coding_log_table": coding_log_table,
         "noncoding_log_table": noncoding_log_table,
+        "numba_coding_table": numba_coding_table,
+        "numba_noncoding_table": numba_noncoding_table,
+        "codon_log_ratio_table": codon_log_ratio_table,
     }
 
 
@@ -1144,30 +1304,38 @@ def score_all_orfs(
     print(f"Scoring {len(all_orfs):,} ORFs with traditional methods...")
     start_time = time.time()
 
-    codon_model = models["codon_model"]
+    codon_model         = models["codon_model"]
     background_codon_model = models["background_codon_model"]
-    coding_imm = models["coding_imm"]
-    noncoding_imm = models["noncoding_imm"]
-    max_order = models["max_order"]
-    coding_log = models.get("coding_log_table")
-    noncoding_log = models.get("noncoding_log_table")
-    use_fast_imm = coding_log is not None and noncoding_log is not None
+    max_order           = models["max_order"]
+    numba_coding        = models.get("numba_coding_table")
+    numba_noncoding     = models.get("numba_noncoding_table")
+    codon_ratio_tbl     = models.get("codon_log_ratio_table")
+    coding_log          = models.get("coding_log_table")
+    noncoding_log       = models.get("noncoding_log_table")
+    use_numba = _NUMBA_AVAILABLE and numba_coding is not None and codon_ratio_tbl is not None
+    if use_numba:
+        assert numba_coding is not None
+        assert numba_noncoding is not None
+        assert codon_ratio_tbl is not None
 
     for i, orf in enumerate(all_orfs):
         if i % 25000 == 0 and i > 0:
             print(f"  {i:,}...")
 
-        orf["codon_score"] = score_codon_bias_ratio(
-            orf["sequence"], codon_model, background_codon_model
-        )
-
-        if use_fast_imm:
+        if use_numba:
+            # Encode once — reuse int array for both codon and IMM scoring
+            seq_arr = _seq_to_int_fast(orf["sequence"])
+            orf["codon_score"] = float(_score_codon_bias_numba(seq_arr, codon_ratio_tbl))
+            orf["imm_score"]   = float(_score_imm_numba(
+                seq_arr, numba_coding, numba_noncoding, max_order, _LOG_EPSILON,
+            ))
+        else:
+            # Fallback for environments where numba is not installed
+            orf["codon_score"] = score_codon_bias_ratio(
+                orf["sequence"], codon_model, background_codon_model
+            )
             orf["imm_score"] = _score_imm_fast(
                 orf["sequence"], coding_log, noncoding_log, max_order
-            )
-        else:
-            orf["imm_score"] = score_imm_ratio(
-                orf["sequence"], coding_imm, noncoding_imm, max_order
             )
 
         if "rbs_score" not in orf:
