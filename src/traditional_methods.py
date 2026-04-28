@@ -60,9 +60,7 @@ def _interpolate_prob(
     return fallback
 
 
-def build_flat_log_table(
-    imm_model: List[Dict], max_order: int
-) -> List[Dict[str, float]]:
+def build_flat_log_table(imm_model: List[Dict], max_order: int) -> List[Dict[str, float]]:
     """Pre-bake a {context+nucleotide → log_prob} table for each codon position.
 
     Called once at model-build time.  Enumerates every k-mer of length 1 to
@@ -221,9 +219,7 @@ def predict_rbs_simple(sequence: str, orf: Dict, upstream_length: int = 20) -> D
     upstream_start = start_pos - upstream_length
     upstream_seq = sequence[upstream_start:start_pos]
 
-    purine_regions = find_purine_rich_regions(
-        upstream_seq, min_length=4, min_purine_content=0.6
-    )
+    purine_regions = find_purine_rich_regions(upstream_seq, min_length=4, min_purine_content=0.6)
 
     best_score = -5.0
     best_prediction = None
@@ -336,9 +332,7 @@ def find_orfs_candidates(sequence: str, min_length: int = 100) -> List[Dict]:
                                 }
 
                             # Calculate RBS for this ORF
-                            rbs_result = predict_rbs_simple(
-                                seq, orf, upstream_length=20
-                            )
+                            rbs_result = predict_rbs_simple(seq, orf, upstream_length=20)
                             orf["rbs_score"] = rbs_result["rbs_score"]
                             orf["rbs_motif"] = rbs_result.get("best_motif")
                             orf["rbs_spacing"] = rbs_result.get("spacing", 0)
@@ -697,9 +691,7 @@ def create_intergenic_set(
     _, intergenic_coords_2 = extract_non_orf_regions_conservative(
         sequence, all_orfs, min_rbs_threshold=min_rbs_threshold, min_length=min_length
     )
-    _, intergenic_coords_3 = extract_all_non_orf_regions(
-        sequence, all_orfs, min_length=min_length
-    )
+    _, intergenic_coords_3 = extract_all_non_orf_regions(sequence, all_orfs, min_length=min_length)
 
     all_union_coords = merge_intervals(
         intergenic_coords_1 + intergenic_coords_2 + intergenic_coords_3
@@ -948,12 +940,8 @@ def score_imm_ratio(
                 nucleotide, context, codon_position, noncoding_id
             )
         else:
-            coding_prob = get_interpolated_probability(
-                nucleotide, context, 0, coding_id
-            )
-            noncoding_prob = get_interpolated_probability(
-                nucleotide, context, 0, noncoding_id
-            )
+            coding_prob = get_interpolated_probability(nucleotide, context, 0, coding_id)
+            noncoding_prob = get_interpolated_probability(nucleotide, context, 0, noncoding_id)
 
         coding_prob = max(coding_prob, EPSILON)
         noncoding_prob = max(noncoding_prob, EPSILON)
@@ -1032,14 +1020,12 @@ def build_all_scoring_models(
     estimated_order = min(estimated_order, 8)
     estimated_order = max(estimated_order, 3)
 
-    coding_imm = build_interpolated_markov_model(
-        training_seqs, estimated_order, min_observations
-    )
+    coding_imm = build_interpolated_markov_model(training_seqs, estimated_order, min_observations)
     noncoding_imm = build_interpolated_markov_model(
         intergenic_seqs, estimated_order, min_observations
     )
 
-    print(f"  Building IMM log tables...")
+    print("  Building IMM log tables...")
     coding_log_table = build_flat_log_table(coding_imm, estimated_order)
     noncoding_log_table = build_flat_log_table(noncoding_imm, estimated_order)
 
