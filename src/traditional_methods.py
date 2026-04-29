@@ -84,6 +84,60 @@ try:
             return 0.0
         return float(score / count)
 
+    @_numba.njit(cache=True)
+    def _scan_orfs_numba(
+        seq_arr: np.ndarray,
+        min_length: int,
+        max_active: int = 8000,
+    ) -> np.ndarray:
+        """JIT-compiled ORF scanner for one strand.
+
+        Returns int32 array of shape (n_found, 4):
+          col 0 : start_pos   (0-based, inclusive)
+          col 1 : stop_end    (0-based, exclusive — position after stop codon)
+          col 2 : start_codon integer (ATG=14, GTG=46, TTG=62)
+          col 3 : frame       (0, 1, or 2)
+        """
+        n = len(seq_arr)
+        max_results = n // max(min_length // 2, 1) + 2000
+        results = np.empty((max_results, 4), dtype=np.int32)
+        count = 0
+
+        # Per-frame active start buffer (start_pos, codon_int)
+        act_pos = np.empty(max_active, dtype=np.int32)
+        act_cod = np.empty(max_active, dtype=np.int32)
+
+        for frame in range(3):
+            n_active = 0
+            i = frame
+            while i <= n - 3:
+                a = seq_arr[i]
+                b = seq_arr[i + 1]
+                c = seq_arr[i + 2]
+                if a < 4 and b < 4 and c < 4:
+                    codon = a * 16 + b * 4 + c
+                    # ATG=14, GTG=46, TTG=62
+                    if codon == 14 or codon == 46 or codon == 62:
+                        if n_active < max_active:
+                            act_pos[n_active] = i
+                            act_cod[n_active] = codon
+                            n_active += 1
+                    # TAA=48, TAG=50, TGA=56
+                    elif (codon == 48 or codon == 50 or codon == 56) and n_active > 0:
+                        stop_end = i + 3
+                        for k in range(n_active):
+                            orf_len = stop_end - act_pos[k]
+                            if orf_len >= min_length and count < max_results:
+                                results[count, 0] = act_pos[k]
+                                results[count, 1] = stop_end
+                                results[count, 2] = act_cod[k]
+                                results[count, 3] = frame
+                                count += 1
+                        n_active = 0
+                i += 3
+
+        return results[:count]
+
     _NUMBA_AVAILABLE = True
 
 except ImportError:
@@ -188,6 +242,11 @@ _ASCII_TO_INT[65] = 0  # A
 _ASCII_TO_INT[67] = 1  # C
 _ASCII_TO_INT[71] = 2  # G
 _ASCII_TO_INT[84] = 3  # T
+
+# Maps integer-encoded codon back to its string (for ORF dict construction).
+# Encoding: a*16 + b*4 + c  where A=0,C=1,G=2,T=3.
+# ATG=14, GTG=46, TTG=62  (only start codons needed here)
+_INT_TO_CODON: Dict[int, str] = {14: "ATG", 46: "GTG", 62: "TTG"}
 
 
 def _seq_to_int_fast(s: str) -> np.ndarray:
@@ -415,75 +474,119 @@ def predict_rbs_simple(sequence: str, orf: Dict, upstream_length: int = 20) -> D
 # =============================================================================
 
 
+def _build_orf_dicts(
+    raw: np.ndarray,
+    seq: str,
+    seq_len: int,
+    is_forward: bool,
+) -> List[Dict]:
+    """Convert _scan_orfs_numba output into ORF dicts with RBS scores."""
+    orfs = []
+    for row in raw:
+        start_pos = int(row[0])
+        stop_end = int(row[1])
+        codon_str = _INT_TO_CODON[int(row[2])]
+        frame = int(row[3])
+        orf_length = stop_end - start_pos
+
+        if is_forward:
+            orf: Dict = {
+                "start": start_pos + 1,
+                "end": stop_end,
+                "genome_start": start_pos + 1,
+                "genome_end": stop_end,
+                "length": orf_length,
+                "frame": frame,
+                "strand": "forward",
+                "start_codon": codon_str,
+                "sequence": seq[start_pos:stop_end],
+            }
+        else:
+            orf = {
+                "start": start_pos + 1,
+                "end": stop_end,
+                "genome_start": seq_len - stop_end + 1,
+                "genome_end": seq_len - start_pos,
+                "length": orf_length,
+                "frame": frame,
+                "strand": "reverse",
+                "start_codon": codon_str,
+                "sequence": seq[start_pos:stop_end],
+            }
+
+        rbs = predict_rbs_simple(seq, orf, upstream_length=20)
+        orf["rbs_score"] = rbs["rbs_score"]
+        orf["rbs_motif"] = rbs.get("best_motif")
+        orf["rbs_spacing"] = rbs.get("spacing", 0)
+        orf["rbs_sequence"] = rbs.get("best_sequence")
+        orfs.append(orf)
+    return orfs
+
+
 def find_orfs_candidates(sequence: str, min_length: int = 100) -> List[Dict]:
     """Detect all ORF candidates with dual coordinates and RBS scores."""
 
     if hasattr(score_motif_similarity, "cache_clear"):
         score_motif_similarity.cache_clear()
 
-    orfs = []
-
-    reverse_seq = str(Seq(sequence).reverse_complement())
-
-    sequences = [("forward", sequence), ("reverse", reverse_seq)]
     seq_len = len(sequence)
+    reverse_seq = str(Seq(sequence).reverse_complement())
 
     print("Detecting ORFs and calculating RBS...")
 
-    for strand_name, seq in sequences:
-        for frame in range(3):
-            active_starts = []
-
-            for i in range(frame, len(seq) - 2, 3):
-                codon = seq[i : i + 3]
-
-                if len(codon) != 3:
-                    break
-
-                if codon in START_CODONS:
-                    active_starts.append((i, codon))
-
-                elif codon in STOP_CODONS and active_starts:
-                    for start_pos, start_codon in active_starts:
-                        orf_length = i + 3 - start_pos
-
-                        if orf_length >= min_length:
-                            # Create ORF with dual coordinates
-                            if strand_name == "forward":
-                                orf = {
-                                    "start": start_pos + 1,
-                                    "end": i + 3,
-                                    "genome_start": start_pos + 1,
-                                    "genome_end": i + 3,
-                                    "length": orf_length,
-                                    "frame": frame,
-                                    "strand": "forward",
-                                    "start_codon": start_codon,
-                                    "sequence": seq[start_pos : i + 3],
-                                }
-                            else:  # reverse strand
-                                orf = {
-                                    "start": start_pos + 1,
-                                    "end": i + 3,
-                                    "genome_start": seq_len - (i + 3) + 1,
-                                    "genome_end": seq_len - start_pos,
-                                    "length": orf_length,
-                                    "frame": frame,
-                                    "strand": "reverse",
-                                    "start_codon": start_codon,
-                                    "sequence": seq[start_pos : i + 3],
-                                }
-
-                            # Calculate RBS for this ORF
-                            rbs_result = predict_rbs_simple(seq, orf, upstream_length=20)
-                            orf["rbs_score"] = rbs_result["rbs_score"]
-                            orf["rbs_motif"] = rbs_result.get("best_motif")
-                            orf["rbs_spacing"] = rbs_result.get("spacing", 0)
-                            orf["rbs_sequence"] = rbs_result.get("best_sequence")
-
-                            orfs.append(orf)
-
-                    active_starts = []
+    if _NUMBA_AVAILABLE:
+        fwd_arr = _seq_to_int_fast(sequence)
+        rev_arr = _seq_to_int_fast(reverse_seq)
+        fwd_raw = _scan_orfs_numba(fwd_arr, min_length)
+        rev_raw = _scan_orfs_numba(rev_arr, min_length)
+        orfs = _build_orf_dicts(fwd_raw, sequence, seq_len, True)
+        orfs += _build_orf_dicts(rev_raw, reverse_seq, seq_len, False)
+    else:
+        orfs = []
+        for strand_name, seq in [("forward", sequence), ("reverse", reverse_seq)]:
+            for frame in range(3):
+                active_starts = []
+                for i in range(frame, len(seq) - 2, 3):
+                    codon = seq[i : i + 3]
+                    if len(codon) != 3:
+                        break
+                    if codon in START_CODONS:
+                        active_starts.append((i, codon))
+                    elif codon in STOP_CODONS and active_starts:
+                        for start_pos, start_codon in active_starts:
+                            orf_length = i + 3 - start_pos
+                            if orf_length >= min_length:
+                                if strand_name == "forward":
+                                    orf = {
+                                        "start": start_pos + 1,
+                                        "end": i + 3,
+                                        "genome_start": start_pos + 1,
+                                        "genome_end": i + 3,
+                                        "length": orf_length,
+                                        "frame": frame,
+                                        "strand": "forward",
+                                        "start_codon": start_codon,
+                                        "sequence": seq[start_pos : i + 3],
+                                    }
+                                else:
+                                    orf = {
+                                        "start": start_pos + 1,
+                                        "end": i + 3,
+                                        "genome_start": seq_len - (i + 3) + 1,
+                                        "genome_end": seq_len - start_pos,
+                                        "length": orf_length,
+                                        "frame": frame,
+                                        "strand": "reverse",
+                                        "start_codon": start_codon,
+                                        "sequence": seq[start_pos : i + 3],
+                                    }
+                                rbs = predict_rbs_simple(seq, orf, upstream_length=20)
+                                orf["rbs_score"] = rbs["rbs_score"]
+                                orf["rbs_motif"] = rbs.get("best_motif")
+                                orf["rbs_spacing"] = rbs.get("spacing", 0)
+                                orf["rbs_sequence"] = rbs.get("best_sequence")
+                                orfs.append(orf)
+                        active_starts = []
 
     print(f"Complete: {len(orfs):,} ORFs detected with RBS scores")
     return orfs
