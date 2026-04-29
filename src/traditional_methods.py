@@ -171,6 +171,106 @@ try:
                 counts[codon_pos, (4 * power_k - 1) // 3 + kmer_int] += 1
                 k += 1
 
+    @_numba.njit(cache=True)
+    def _score_rbs_batch(
+        upstream_windows: np.ndarray,
+    ) -> np.ndarray:
+        """Batch Shine-Dalgarno / RBS scoring for all ORFs in one JIT pass.
+
+        upstream_windows : int32 array of shape (n_orfs, 20)
+                           A=0, C=1, G=2, T=3, other/missing=4
+                           Row i holds the 20 bp upstream of ORF i's ATG
+                           (positions filled with 4 when start < 20).
+
+        Returns float64 array of shape (n_orfs,) with RBS scores.
+        Replicates predict_rbs_simple() logic exactly for sequences without N.
+
+        Motifs hardcoded (KNOWN_RBS_MOTIFS, A=0 C=1 G=2 T=3):
+          AGGAGG=[0,2,2,0,2,2]  GGAGG=[2,2,0,2,2]  AGGAG=[0,2,2,0,2]
+          GAGG=[2,0,2,2]        AGGA=[0,2,2,0]     GGAG=[2,2,0,2]
+        """
+        n_orfs, win_len = upstream_windows.shape
+        scores = np.full(n_orfs, -5.0, dtype=np.float64)
+
+        # Motif data: (6, 6) padded array (-1 = padding), lengths, weights
+        motifs = np.array(
+            [
+                [0, 2, 2, 0, 2, 2],  # AGGAGG  len=6  weight=1.000
+                [2, 2, 0, 2, 2, -1],  # GGAGG   len=5  weight=0.833
+                [0, 2, 2, 0, 2, -1],  # AGGAG   len=5  weight=0.833
+                [2, 0, 2, 2, -1, -1],  # GAGG    len=4  weight=0.667
+                [0, 2, 2, 0, -1, -1],  # AGGA    len=4  weight=0.667
+                [2, 2, 0, 2, -1, -1],  # GGAG    len=4  weight=0.667
+            ],
+            dtype=np.int32,
+        )
+        m_lens = np.array([6, 5, 5, 4, 4, 4], dtype=np.int32)
+        m_weights = m_lens / 6.0
+
+        for orf_idx in range(n_orfs):
+            best = -5.0
+
+            # Slide candidate SD windows of length 4..8 across the 20bp region
+            # (original find_purine_rich_regions uses range(5, min(9, ...)) — max length 8)
+            for cand_len in range(4, 9):
+                for cand_start in range(win_len - cand_len + 1):
+                    spacing = win_len - (cand_start + cand_len)
+                    if spacing < 4 or spacing > 12:
+                        continue
+
+                    # Count purines (A=0, G=2) in candidate window
+                    n_pur = 0
+                    valid = True
+                    for j in range(cand_len):
+                        nuc = upstream_windows[orf_idx, cand_start + j]
+                        if nuc == 4:  # missing / before sequence start
+                            valid = False
+                            break
+                        if nuc == 0 or nuc == 2:
+                            n_pur += 1
+                    if not valid:
+                        continue
+                    pur_frac = n_pur / cand_len
+                    if pur_frac < 0.6:
+                        continue
+
+                    # Spacing score
+                    if 6 <= spacing <= 8:
+                        sp_score = 3.0
+                    elif 5 <= spacing <= 10:
+                        sp_score = 2.5
+                    else:
+                        sp_score = 1.5
+
+                    # Motif similarity (sliding overlap, same as score_motif_similarity)
+                    best_mot = 0.0
+                    for m in range(6):
+                        m_len = m_lens[m]
+                        m_w = m_weights[m]
+                        for offset in range(max(cand_len, m_len)):
+                            matches = 0
+                            total = 0
+                            for i in range(cand_len):
+                                m_pos = i + offset
+                                if 0 <= m_pos < m_len:
+                                    total += 1
+                                    seq_nuc = upstream_windows[orf_idx, cand_start + i]
+                                    if seq_nuc == motifs[m, m_pos]:
+                                        matches += 1
+                            if total > 0:
+                                mot_score = (matches / total) * total * m_w
+                                if mot_score > best_mot:
+                                    best_mot = mot_score
+
+                    pur_bonus = (pur_frac - 0.6) * 2.0
+                    combined = sp_score * 2.0 + best_mot * 1.5 + pur_bonus
+                    if combined > best:
+                        best = combined
+
+            scores[orf_idx] = best
+
+        return scores
+
     _NUMBA_AVAILABLE = True
 
 except ImportError:
@@ -504,6 +604,27 @@ def predict_rbs_simple(sequence: str, orf: Dict, upstream_length: int = 20) -> D
 # =============================================================================
 
 
+def _extract_upstream_windows(
+    seq_arr: np.ndarray, starts: np.ndarray, window: int = 20
+) -> np.ndarray:
+    """Extract (n_orfs, window) int32 upstream-region matrix from encoded sequence.
+
+    Matches predict_rbs_simple exactly: upstream_seq = sequence[start_1based-20 : start_1based]
+    which in 0-based indexing is seq[s-19 : s+1] — the window INCLUDES the first base
+    of the start codon (position s).  Positions before seq start are filled with 4 (unknown).
+    """
+    n = len(starts)
+    out = np.full((n, window), 4, dtype=np.int32)
+    for i in range(n):
+        s = int(starts[i])
+        # s_end = s+1: include first base of ATG codon to match predict_rbs_simple
+        s_end = s + 1
+        s_start = max(0, s_end - window)
+        avail = s_end - s_start
+        out[i, window - avail : window] = seq_arr[s_start:s_end]
+    return out
+
+
 _ORF_COLUMNS = [
     "start",
     "end",
@@ -554,13 +675,22 @@ def _build_orf_df(
     codon_strs = [_INT_TO_CODON[int(c)] for c in raw[:, 2]]
     sequences = [seq[int(s) : int(e)] for s, e in zip(starts, stop_ends)]
 
-    rbs_scores, rbs_motifs, rbs_spacings, rbs_sequences = [], [], [], []
-    for i in range(len(raw)):
-        rbs = predict_rbs_simple(seq, {"start": int(starts[i]) + 1}, upstream_length=20)
-        rbs_scores.append(rbs["rbs_score"])
-        rbs_motifs.append(rbs.get("best_motif"))
-        rbs_spacings.append(rbs.get("spacing", 0))
-        rbs_sequences.append(rbs.get("best_sequence"))
+    if _NUMBA_AVAILABLE:
+        # Batch RBS scoring: one Numba call replaces 176K predict_rbs_simple calls
+        seq_arr_local = _seq_to_int_fast(seq)
+        upstream = _extract_upstream_windows(seq_arr_local, starts, window=20)
+        rbs_scores = list(_score_rbs_batch(upstream))
+        rbs_motifs = [None] * len(raw)
+        rbs_spacings = [0] * len(raw)
+        rbs_sequences = [None] * len(raw)
+    else:
+        rbs_scores, rbs_motifs, rbs_spacings, rbs_sequences = [], [], [], []
+        for i in range(len(raw)):
+            rbs = predict_rbs_simple(seq, {"start": int(starts[i]) + 1}, upstream_length=20)
+            rbs_scores.append(rbs["rbs_score"])
+            rbs_motifs.append(rbs.get("best_motif"))
+            rbs_spacings.append(rbs.get("spacing", 0))
+            rbs_sequences.append(rbs.get("best_sequence"))
 
     return pd.DataFrame(
         {
@@ -1422,6 +1552,7 @@ def build_all_scoring_models(
             _LOG_EPSILON,
         )
         _score_codon_bias_numba(_warmup, codon_log_ratio_table)
+        _score_rbs_batch(np.zeros((1, 20), dtype=np.int32))
 
     print(f"✓ All models built in {time.time() - start_time:.1f}s")
     print(f"  IMM order: {estimated_order}")
