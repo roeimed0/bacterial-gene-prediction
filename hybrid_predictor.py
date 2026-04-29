@@ -321,9 +321,7 @@ def validate_menu():
 
             if not ncbi_files:
                 print("[!] No NCBI prediction files found in results/")
-                print(
-                    "    Only files with NCBI accessions (NC_XXXXXX.X) can be auto-validated."
-                )
+                print("    Only files with NCBI accessions (NC_XXXXXX.X) can be auto-validated.")
                 print("    Use option [1] for manual validation.")
                 input("\nPress Enter to continue...")
                 return None
@@ -335,9 +333,7 @@ def validate_menu():
                 genome = get_genome_by_accession(genome_id)
 
                 if genome:
-                    print(
-                        f"  [{i}] {file.name:<45} ({size_kb:>6.1f} KB) - {genome['name']}"
-                    )
+                    print(f"  [{i}] {file.name:<45} ({size_kb:>6.1f} KB) - {genome['name']}")
                 else:
                     print(f"  [{i}] {file.name:<45} ({size_kb:>6.1f} KB) - {genome_id}")
 
@@ -345,9 +341,7 @@ def validate_menu():
 
             while True:
                 file_choice = (
-                    input(f"Choose file [1-{len(ncbi_files)}] or 'B' to go back: ")
-                    .strip()
-                    .upper()
+                    input(f"Choose file [1-{len(ncbi_files)}] or 'B' to go back: ").strip().upper()
                 )
 
                 if file_choice == "B":
@@ -505,9 +499,7 @@ def predict_ncbi_genome(
     try:
         # Search for the nucleotide record
         print("  Fetching sequence...")
-        handle = Entrez.efetch(
-            db="nucleotide", id=accession, rettype="fasta", retmode="text"
-        )
+        handle = Entrez.efetch(db="nucleotide", id=accession, rettype="fasta", retmode="text")
 
         # Save to file
         with open(fasta_path, "w") as f:
@@ -590,9 +582,7 @@ def predict_fasta_file(
     print(f"ML group filtering: {'Enabled' if use_ml else 'Disabled'}")
     if use_ml:
         print(f"  Group ML threshold: {ml_threshold}")
-    print(
-        f"Final ML filtration: {'Enabled' if use_final_filtration_ml else 'Disabled'}"
-    )
+    print(f"Final ML filtration: {'Enabled' if use_final_filtration_ml else 'Disabled'}")
     if use_final_filtration_ml:
         print(f"  Final ML threshold: {final_ml_threshold}")
 
@@ -696,9 +686,7 @@ def predict_fasta_file(
                     post_filter_count = len(final_predictions)
                     print(f"Candidates before hybrid ML: {pre_filter_count:,}")
                     print(f"Candidates after hybrid ML:  {post_filter_count:,}")
-                    print(
-                        f"Candidates removed:          {pre_filter_count - post_filter_count:,}"
-                    )
+                    print(f"Candidates removed:          {pre_filter_count - post_filter_count:,}")
                 else:
                     print(
                         f"[!] Hybrid model not found at {model_path},"
@@ -771,9 +759,7 @@ Examples:
         """,
     )
 
-    parser.add_argument(
-        "input", nargs="?", help="Catalog number, NCBI accession, or FASTA file"
-    )
+    parser.add_argument("input", nargs="?", help="Catalog number, NCBI accession, or FASTA file")
     parser.add_argument("--email", help="Email for NCBI (required for downloads)")
 
     # ML filtering options
@@ -789,9 +775,7 @@ Examples:
         default=0.12,
         help="Final hybrid ML filtration threshold (default: 0.12)",
     )
-    parser.add_argument(
-        "--no-group-ml", action="store_true", help="Disable ML group filtering"
-    )
+    parser.add_argument("--no-group-ml", action="store_true", help="Disable ML group filtering")
     parser.add_argument(
         "--no-final-ml", action="store_true", help="Disable final hybrid ML filtration"
     )
@@ -804,9 +788,7 @@ Examples:
         choices=["Proteobacteria", "Firmicutes", "Actinobacteria", "Archaea"],
         help="Filter list by taxonomic group",
     )
-    parser.add_argument(
-        "-i", "--interactive", action="store_true", help="Force interactive mode"
-    )
+    parser.add_argument("-i", "--interactive", action="store_true", help="Force interactive mode")
 
     args = parser.parse_args()
 
@@ -821,9 +803,7 @@ Examples:
             print(f"\nShowing: {args.group} ({len(genomes)} genomes)")
         else:
             genomes = GENOME_CATALOG
-            print(
-                "\nUse --group to filter by: Proteobacteria, Firmicutes, Actinobacteria, Archaea"
-            )
+            print("\nUse --group to filter by: Proteobacteria, Firmicutes, Actinobacteria, Archaea")
 
         print()
         current_group = None

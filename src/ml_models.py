@@ -131,17 +131,13 @@ class OrfGroupClassifier:
                 "combined_max": max(combined_scores),
                 "combined_mean": np.mean(combined_scores),
                 "combined_std": np.std(combined_scores),
-                "combined_entropy": self._entropy_from_probs(
-                    np.maximum(combined_scores, 0)
-                ),
+                "combined_entropy": self._entropy_from_probs(np.maximum(combined_scores, 0)),
                 "combined_margin_top2": (
                     np.sort(combined_scores)[-1] - np.sort(combined_scores)[-2]
                     if len(combined_scores) > 1
                     else combined_scores[0]
                 ),
-                "frac_top_orfs": np.sum(
-                    np.array(combined_scores) >= 0.8 * max(combined_scores)
-                )
+                "frac_top_orfs": np.sum(np.array(combined_scores) >= 0.8 * max(combined_scores))
                 / len(combined_scores),
                 "rbs_max": max(rbs_scores),
                 "rbs_mean": np.mean(rbs_scores),
@@ -164,15 +160,12 @@ class OrfGroupClassifier:
             max_start = max(start_scores)
             max_start_select = max(start_select_scores)
 
-            rel_combined = [
-                c / max_combined if max_combined > 0 else 0 for c in combined_scores
-            ]
+            rel_combined = [c / max_combined if max_combined > 0 else 0 for c in combined_scores]
             rel_rbs = [c / max_rbs if max_rbs > 0 else 0 for c in rbs_scores]
             rel_codon = [c / max_codon if max_codon > 0 else 0 for c in codon_scores]
             rel_start = [c / max_start if max_start > 0 else 0 for c in start_scores]
             rel_start_select = [
-                c / max_start_select if max_start_select > 0 else 0
-                for c in start_select_scores
+                c / max_start_select if max_start_select > 0 else 0 for c in start_select_scores
             ]
 
             group_features.update(
@@ -187,9 +180,7 @@ class OrfGroupClassifier:
                     "rel_start_max": np.max(rel_start),
                     "rel_start_select_mean": np.mean(rel_start_select),
                     "rel_start_select_max": np.max(rel_start_select),
-                    "frac_top_combined": np.sum(
-                        np.array(combined_scores) >= 0.95 * max_combined
-                    )
+                    "frac_top_combined": np.sum(np.array(combined_scores) >= 0.95 * max_combined)
                     / len(combined_scores),
                     "frac_top_start_select": np.sum(
                         np.array(start_select_scores) >= 0.95 * max_start_select
@@ -273,9 +264,7 @@ class OrfGroupClassifier:
         )
 
         # Filter groups
-        filtered_groups = {
-            gid: orfs for gid, orfs in groups.items() if gid in kept_group_ids
-        }
+        filtered_groups = {gid: orfs for gid, orfs in groups.items() if gid in kept_group_ids}
 
         return filtered_groups
 
@@ -398,9 +387,7 @@ class HybridGeneFilter:
         with open(model_path, "rb") as f:
             data = pickle.load(f)
 
-        model = HybridGenePredictor(
-            num_traditional_features=data["num_traditional_features"]
-        )
+        model = HybridGenePredictor(num_traditional_features=data["num_traditional_features"])
         model.load_state_dict(data["model_state_dict"])
         model.eval()
 
@@ -496,9 +483,7 @@ class HybridGeneFilter:
             hydro_values = [kd_scale.get(aa, 0.0) for aa in protein]
             return {
                 "hydro_mean": float(np.mean(hydro_values)) if hydro_values else 0.0,
-                "hydro_std": (
-                    float(np.std(hydro_values)) if len(hydro_values) > 1 else 0.0
-                ),
+                "hydro_std": (float(np.std(hydro_values)) if len(hydro_values) > 1 else 0.0),
                 "charge_mean": float(charge_mean),
                 "aromatic_frac": float(aromatic_frac),
                 "small_frac": float(small_frac),
@@ -514,9 +499,7 @@ class HybridGeneFilter:
                 polar_frac=0.0,
             )
 
-    def extract_features(
-        self, candidates: List[Dict], genome_id: str = "unknown"
-    ) -> pd.DataFrame:
+    def extract_features(self, candidates: List[Dict], genome_id: str = "unknown") -> pd.DataFrame:
         rows = []
         for candidate in candidates:
             sequence = candidate.get("sequence", "").upper()
@@ -553,9 +536,7 @@ class HybridGeneFilter:
             feature_dict["purine_content"] = (a + g) / seq_len if seq_len > 0 else 0.0
             feature_dict["effective_num_codons"] = self._calculate_enc(sequence)
             feature_dict["codon_bias_index"] = self._calculate_cbi(sequence)
-            feature_dict["has_hairpin_near_stop"] = self._detect_hairpin_near_stop(
-                sequence
-            )
+            feature_dict["has_hairpin_near_stop"] = self._detect_hairpin_near_stop(sequence)
             aa_props = self._calculate_amino_acid_properties(sequence)
             feature_dict.update(
                 {
@@ -618,9 +599,7 @@ class HybridGeneFilter:
         X_features = torch.tensor(df[self.feature_names].values, dtype=torch.float32)
 
         # Determine max sequence length
-        max_seq_len = max(
-            (len(c.get("sequence", "")) for c in candidates), default=1000
-        )
+        max_seq_len = max((len(c.get("sequence", "")) for c in candidates), default=1000)
 
         # Process in batches to avoid OOM
         all_probs = []
@@ -639,9 +618,7 @@ class HybridGeneFilter:
                 batch_candidates = candidates[i:batch_end]
 
                 # One-hot encode batch
-                X_sequences_batch = self._one_hot_encode_dna(
-                    batch_candidates, max_len=max_seq_len
-                )
+                X_sequences_batch = self._one_hot_encode_dna(batch_candidates, max_len=max_seq_len)
                 X_features_batch = X_features[i:batch_end]
 
                 # Move to device
@@ -690,9 +667,7 @@ class HybridGeneFilter:
         Returns:
             Filtered list of candidates
         """
-        preds, probs, gene_ids = self.predict(
-            candidates, genome_id, threshold, batch_size
-        )
+        preds, probs, gene_ids = self.predict(candidates, genome_id, threshold, batch_size)
 
         kept = []
         for cand, p in zip(candidates, probs):

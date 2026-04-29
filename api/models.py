@@ -10,9 +10,7 @@ from pydantic import BaseModel, Field
 class PredictionRequest(BaseModel):
     """Request body for gene prediction"""
 
-    sequence: str = Field(
-        ..., description="Genome sequence in FASTA format or raw DNA sequence"
-    )
+    sequence: str = Field(..., description="Genome sequence in FASTA format or raw DNA sequence")
     filename: Optional[str] = Field(
         None, description="Optional filename for output (without extension)"
     )

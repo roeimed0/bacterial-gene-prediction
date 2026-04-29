@@ -111,16 +111,10 @@ def analyze_score_distributions(
         fp_max = np.max(fp_scores)
 
         # Display comparison
-        print(
-            f"{'Metric':<15} {'True Positives':>15} {'False Positives':>15} {'Difference':>15}"
-        )
+        print(f"{'Metric':<15} {'True Positives':>15} {'False Positives':>15} {'Difference':>15}")
         print(f"{'-'*15} {'-'*15} {'-'*15} {'-'*15}")
-        print(
-            f"{'Mean':<15} {tp_mean:>15.4f} {fp_mean:>15.4f} {tp_mean-fp_mean:>15.4f}"
-        )
-        print(
-            f"{'Median':<15} {tp_median:>15.4f} {fp_median:>15.4f} {tp_median-fp_median:>15.4f}"
-        )
+        print(f"{'Mean':<15} {tp_mean:>15.4f} {fp_mean:>15.4f} {tp_mean-fp_mean:>15.4f}")
+        print(f"{'Median':<15} {tp_median:>15.4f} {fp_median:>15.4f} {tp_median-fp_median:>15.4f}")
         print(f"{'Std Dev':<15} {tp_std:>15.4f} {fp_std:>15.4f} {tp_std-fp_std:>15.4f}")
         print(f"{'Min':<15} {tp_min:>15.4f} {fp_min:>15.4f} {tp_min-fp_min:>15.4f}")
         print(f"{'Max':<15} {tp_max:>15.4f} {fp_max:>15.4f} {tp_max-fp_max:>15.4f}")
@@ -177,9 +171,7 @@ def analyze_score_distributions(
                 f"{'Metric':<15} {'True Positives':>15} {'False Positives':>15} {'Difference':>15}"
             )
             print(f"{'-'*15} {'-'*15} {'-'*15} {'-'*15}")
-            print(
-                f"{'Mean':<15} {tp_mean:>15.4f} {fp_mean:>15.4f} {tp_mean-fp_mean:>15.4f}"
-            )
+            print(f"{'Mean':<15} {tp_mean:>15.4f} {fp_mean:>15.4f} {tp_mean-fp_mean:>15.4f}")
             print(
                 f"{'Median':<15} {tp_median:>15.4f} {fp_median:>15.4f} {tp_median-fp_median:>15.4f}"
             )
@@ -190,12 +182,8 @@ def analyze_score_distributions(
         print("COMBINED SCORE DISTRIBUTION")
         print("=" * 80)
 
-        tp_combined = [
-            orf["combined_score"] for orf in tp_orfs if "combined_score" in orf
-        ]
-        fp_combined = [
-            orf["combined_score"] for orf in fp_orfs if "combined_score" in orf
-        ]
+        tp_combined = [orf["combined_score"] for orf in tp_orfs if "combined_score" in orf]
+        fp_combined = [orf["combined_score"] for orf in fp_orfs if "combined_score" in orf]
 
         if tp_combined and fp_combined:
             tp_mean = np.mean(tp_combined)
@@ -209,9 +197,7 @@ def analyze_score_distributions(
                 f"{'Metric':<15} {'True Positives':>15} {'False Positives':>15} {'Difference':>15}"
             )
             print(f"{'-'*15} {'-'*15} {'-'*15} {'-'*15}")
-            print(
-                f"{'Mean':<15} {tp_mean:>15.4f} {fp_mean:>15.4f} {tp_mean-fp_mean:>15.4f}"
-            )
+            print(f"{'Mean':<15} {tp_mean:>15.4f} {fp_mean:>15.4f} {tp_mean-fp_mean:>15.4f}")
             print(
                 f"{'Median':<15} {tp_median:>15.4f} {fp_median:>15.4f} {tp_median-fp_median:>15.4f}"
             )
@@ -225,9 +211,7 @@ def analyze_score_distributions(
             print(f"{'Percentile':<15} {'True Positives':>15} {'False Positives':>15}")
             print(f"{'-'*15} {'-'*15} {'-'*15}")
             for i, pct in enumerate([10, 25, 50, 75, 90]):
-                print(
-                    f"{f'{pct}th':<15} {tp_percentiles[i]:>15.4f} {fp_percentiles[i]:>15.4f}"
-                )
+                print(f"{f'{pct}th':<15} {tp_percentiles[i]:>15.4f} {fp_percentiles[i]:>15.4f}")
 
     return stats
 
@@ -237,9 +221,7 @@ def analyze_score_distributions(
 # =============================================================================
 
 
-def plot_score_distributions(
-    all_orfs: List[Dict], reference_genes: Set, genome_id: str = None
-):
+def plot_score_distributions(all_orfs: List[Dict], reference_genes: Set, genome_id: str = None):
     """Create comprehensive visualization of score distributions for TP vs FP."""
     print("Classifying ORFs...")
     tp_orfs = []
@@ -378,9 +360,7 @@ def plot_score_distributions(
                 label=f"TP (n={len(tp_scores):,})",
                 density=True,
             )
-            ax.axvline(
-                np.mean(tp_scores), color="darkgreen", linestyle="--", linewidth=2
-            )
+            ax.axvline(np.mean(tp_scores), color="darkgreen", linestyle="--", linewidth=2)
             ax.axvline(np.mean(fp_scores), color="darkred", linestyle="--", linewidth=2)
 
             ax.set_xlabel(component.replace("_", " ").title())
@@ -393,12 +373,8 @@ def plot_score_distributions(
     if "combined_score" in all_orfs[0]:
         ax = axes2[5]
 
-        tp_combined = [
-            orf["combined_score"] for orf in tp_orfs if "combined_score" in orf
-        ]
-        fp_combined = [
-            orf["combined_score"] for orf in fp_orfs if "combined_score" in orf
-        ]
+        tp_combined = [orf["combined_score"] for orf in tp_orfs if "combined_score" in orf]
+        fp_combined = [orf["combined_score"] for orf in fp_orfs if "combined_score" in orf]
 
         if tp_combined and fp_combined:
             ax.hist(
@@ -467,9 +443,7 @@ def plot_score_distributions(
 # =============================================================================
 
 
-def compare_orfs_to_reference(
-    orfs: List[Dict], genome_id: str, cached_data: Dict = None
-) -> Dict:
+def compare_orfs_to_reference(orfs: List[Dict], genome_id: str, cached_data: Dict = None) -> Dict:
     """Compare predicted ORFs to reference CDS using GFF file."""
     # Get GFF path
     gff_path = get_gff_path(genome_id)
@@ -585,9 +559,7 @@ def compare_results_file_to_reference(genome_id: str) -> Dict:
         reference_gff = get_gff_path(genome_id)
 
         if reference_gff is None or not Path(reference_gff).exists():
-            print(
-                "  Reference GFF not found locally, attempting to download from NCBI..."
-            )
+            print("  Reference GFF not found locally, attempting to download from NCBI...")
 
             # Set up download path
             full_dataset_dir = Path("data") / "full_dataset"
@@ -750,9 +722,7 @@ def analyze_non_cds_genes(gff_path):
     print(f"\nTotal genes in annotation: {len(all_genes):,}")
     pct_coding = protein_coding / len(all_genes) * 100
     pct_noncoding = non_coding / len(all_genes) * 100
-    print(
-        f"  • Protein-coding genes (with CDS): {protein_coding:,} ({pct_coding:.1f}%)"
-    )
+    print(f"  • Protein-coding genes (with CDS): {protein_coding:,} ({pct_coding:.1f}%)")
     print(f"  • Non-coding genes (RNA, etc.): {non_coding:,} ({pct_noncoding:.1f}%)")
 
     print("\n INTERPRETATION:")
@@ -862,9 +832,7 @@ def compare_codon_usage(
     print("=" * 80)
     print(f"Total codons analyzed: {len(all_codons)}")
     print(f"Average coding frequency: {sum(coding_freqs)/len(coding_freqs):.6f}")
-    print(
-        f"Average background frequency: {sum(background_freqs)/len(background_freqs):.6f}"
-    )
+    print(f"Average background frequency: {sum(background_freqs)/len(background_freqs):.6f}")
 
     # Find codons with biggest differences
     codon_diffs = list(zip(all_codons, differences))

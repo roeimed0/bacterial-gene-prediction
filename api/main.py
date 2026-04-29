@@ -211,9 +211,7 @@ async def predict_genes_from_file(
                 )
             )
 
-        sequence_length = (
-            max(p.end for p in gene_predictions) if gene_predictions else 0
-        )
+        sequence_length = max(p.end for p in gene_predictions) if gene_predictions else 0
         genome_id = Path(file.filename).stem
 
         return PredictionResponse(
@@ -275,9 +273,7 @@ async def predict_ncbi(request: NcbiPredictionRequest):
                 )
             )
 
-        sequence_length = (
-            max(p.end for p in gene_predictions) if gene_predictions else 0
-        )
+        sequence_length = max(p.end for p in gene_predictions) if gene_predictions else 0
 
         return PredictionResponse(
             genome_id=request.accession,
@@ -372,8 +368,7 @@ async def validate_predictions(request: ValidationRequest):
             version = 2
             while True:
                 versioned_path = (
-                    results_dir
-                    / f"{request.genome_id}_validation_report_v{version}.txt"
+                    results_dir / f"{request.genome_id}_validation_report_v{version}.txt"
                 )
                 if not versioned_path.exists():
                     report_path = versioned_path
@@ -526,9 +521,7 @@ async def delete_files(request: DeleteFilesRequest):
                     str(file_path).startswith(str(project_root / "data"))
                     or str(file_path).startswith(str(project_root / "results"))
                 ):
-                    errors.append(
-                        f"Cannot delete {path_str}: Outside allowed directories"
-                    )
+                    errors.append(f"Cannot delete {path_str}: Outside allowed directories")
                     failed += 1
                     continue
 
