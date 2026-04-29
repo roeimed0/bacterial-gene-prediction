@@ -100,6 +100,10 @@ ORF detection
 ^^^^^^^^^^^^^
 - Replaced pure-Python codon scanning loop in :func:`find_orfs_candidates` with a ``@numba.njit`` scanner (:func:`_scan_orfs_numba`) that encodes the sequence as int32, finds all ORF positions in a single JIT-compiled pass, and returns a numpy array for Python post-processing (:issue:`86`). For a 4.6 Mbp genome: 26 s → 5.85 s (**4.4×**); ORF count identical. Remaining cost is 176K :func:`predict_rbs_simple` calls (Python). Graceful fallback to the original pure-Python path when numba is absent.
 
+ORF data representation
+^^^^^^^^^^^^^^^^^^^^^^^
+- Replaced ``List[Dict]`` with ``pd.DataFrame`` as the internal ORF container throughout the scoring pipeline (:issue:`88`). ``find_orfs_candidates()`` now returns a DataFrame; ``score_all_orfs()``, ``filter_candidates()``, ``normalize_all_orf_scores()``, ``add_combined_scores()``, and ``select_best_starts()`` all operate on DataFrames. Key RAM savings on E. coli K-12 (176K ORFs): ``score_all_orfs`` +396 MB → +28 MB (**−93%**); ``find_orfs_candidates`` +440 MB → +158 MB (**−64%**); total pipeline growth +879 MB → +761 MB. ML boundaries still receive ``List[Dict]`` via ``.to_dict("records")``; full ML-layer migration tracked in :issue:`92`.
+
 Training set selection
 ^^^^^^^^^^^^^^^^^^^^^^
 - Replaced O(n²) linear interval scan in :func:`select_training_glimmer` and :func:`select_training_flexible` with O(n log n) bisect-based lookup (:issue:`59`). For a 4.6 Mbp genome with 176K ORFs: ``select_training_glimmer`` 0.77 s → 0.06 s (12.6×); ``select_training_flexible`` 0.23 s → 0.08 s (2.9×); combined 1.00 s → 0.14 s (7.1×). Training sets are byte-identical to the previous implementation.

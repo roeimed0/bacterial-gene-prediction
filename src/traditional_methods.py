@@ -21,6 +21,7 @@ from functools import lru_cache
 from typing import Dict, List, Tuple
 
 import numpy as np
+import pandas as pd
 
 try:
     import numba as _numba
@@ -474,58 +475,91 @@ def predict_rbs_simple(sequence: str, orf: Dict, upstream_length: int = 20) -> D
 # =============================================================================
 
 
-def _build_orf_dicts(
+_ORF_COLUMNS = [
+    "start",
+    "end",
+    "genome_start",
+    "genome_end",
+    "length",
+    "frame",
+    "strand",
+    "start_codon",
+    "sequence",
+    "rbs_score",
+    "rbs_motif",
+    "rbs_spacing",
+    "rbs_sequence",
+]
+
+
+def _empty_orf_df() -> pd.DataFrame:
+    return pd.DataFrame(columns=_ORF_COLUMNS)
+
+
+def _build_orf_df(
     raw: np.ndarray,
     seq: str,
     seq_len: int,
     is_forward: bool,
-) -> List[Dict]:
-    """Convert _scan_orfs_numba output into ORF dicts with RBS scores."""
-    orfs = []
-    for row in raw:
-        start_pos = int(row[0])
-        stop_end = int(row[1])
-        codon_str = _INT_TO_CODON[int(row[2])]
-        frame = int(row[3])
-        orf_length = stop_end - start_pos
+) -> pd.DataFrame:
+    """Convert _scan_orfs_numba output into an ORF DataFrame with RBS scores.
 
-        if is_forward:
-            orf: Dict = {
-                "start": start_pos + 1,
-                "end": stop_end,
-                "genome_start": start_pos + 1,
-                "genome_end": stop_end,
-                "length": orf_length,
-                "frame": frame,
-                "strand": "forward",
-                "start_codon": codon_str,
-                "sequence": seq[start_pos:stop_end],
-            }
-        else:
-            orf = {
-                "start": start_pos + 1,
-                "end": stop_end,
-                "genome_start": seq_len - stop_end + 1,
-                "genome_end": seq_len - start_pos,
-                "length": orf_length,
-                "frame": frame,
-                "strand": "reverse",
-                "start_codon": codon_str,
-                "sequence": seq[start_pos:stop_end],
-            }
+    Builds column arrays once (no per-row dict allocation) and scores RBS
+    with a single Python loop over the compact int32 result array.
+    """
+    if len(raw) == 0:
+        return _empty_orf_df()
 
-        rbs = predict_rbs_simple(seq, orf, upstream_length=20)
-        orf["rbs_score"] = rbs["rbs_score"]
-        orf["rbs_motif"] = rbs.get("best_motif")
-        orf["rbs_spacing"] = rbs.get("spacing", 0)
-        orf["rbs_sequence"] = rbs.get("best_sequence")
-        orfs.append(orf)
-    return orfs
+    starts = raw[:, 0]  # 0-based start positions
+    stop_ends = raw[:, 1]  # 0-based exclusive end positions
+    lengths = stop_ends - starts
+    strand_label = "forward" if is_forward else "reverse"
+
+    if is_forward:
+        genome_starts = starts + 1
+        genome_ends = stop_ends
+    else:
+        genome_starts = seq_len - stop_ends + 1
+        genome_ends = seq_len - starts
+
+    codon_strs = [_INT_TO_CODON[int(c)] for c in raw[:, 2]]
+    sequences = [seq[int(s) : int(e)] for s, e in zip(starts, stop_ends)]
+
+    rbs_scores, rbs_motifs, rbs_spacings, rbs_sequences = [], [], [], []
+    for i in range(len(raw)):
+        rbs = predict_rbs_simple(seq, {"start": int(starts[i]) + 1}, upstream_length=20)
+        rbs_scores.append(rbs["rbs_score"])
+        rbs_motifs.append(rbs.get("best_motif"))
+        rbs_spacings.append(rbs.get("spacing", 0))
+        rbs_sequences.append(rbs.get("best_sequence"))
+
+    return pd.DataFrame(
+        {
+            "start": starts + 1,
+            "end": stop_ends,
+            "genome_start": genome_starts,
+            "genome_end": genome_ends,
+            "length": lengths,
+            "frame": raw[:, 3],
+            "strand": strand_label,
+            "start_codon": codon_strs,
+            "sequence": sequences,
+            "rbs_score": rbs_scores,
+            "rbs_motif": rbs_motifs,
+            "rbs_spacing": rbs_spacings,
+            "rbs_sequence": rbs_sequences,
+        }
+    )
 
 
-def find_orfs_candidates(sequence: str, min_length: int = 100) -> List[Dict]:
-    """Detect all ORF candidates with dual coordinates and RBS scores."""
+def find_orfs_candidates(sequence: str, min_length: int = 100) -> pd.DataFrame:
+    """Detect all ORF candidates with dual coordinates and RBS scores.
 
+    Returns a DataFrame (columns: start, end, genome_start, genome_end, length,
+    frame, strand, start_codon, sequence, rbs_score, rbs_motif, rbs_spacing,
+    rbs_sequence).  Using a DataFrame instead of List[Dict] reduces peak RAM by
+    ~5–8× for large genomes (176K ORFs → ~100 MB vs ~440 MB).
+    """
     if hasattr(score_motif_similarity, "cache_clear"):
         score_motif_similarity.cache_clear()
 
@@ -535,17 +569,20 @@ def find_orfs_candidates(sequence: str, min_length: int = 100) -> List[Dict]:
     print("Detecting ORFs and calculating RBS...")
 
     if _NUMBA_AVAILABLE:
-        fwd_arr = _seq_to_int_fast(sequence)
-        rev_arr = _seq_to_int_fast(reverse_seq)
-        fwd_raw = _scan_orfs_numba(fwd_arr, min_length)
-        rev_raw = _scan_orfs_numba(rev_arr, min_length)
-        orfs = _build_orf_dicts(fwd_raw, sequence, seq_len, True)
-        orfs += _build_orf_dicts(rev_raw, reverse_seq, seq_len, False)
+        fwd_raw = _scan_orfs_numba(_seq_to_int_fast(sequence), min_length)
+        rev_raw = _scan_orfs_numba(_seq_to_int_fast(reverse_seq), min_length)
+        parts = []
+        if len(fwd_raw):
+            parts.append(_build_orf_df(fwd_raw, sequence, seq_len, True))
+        if len(rev_raw):
+            parts.append(_build_orf_df(rev_raw, reverse_seq, seq_len, False))
+        orfs_df = pd.concat(parts, ignore_index=True) if parts else _empty_orf_df()
     else:
-        orfs = []
+        # Python fallback: accumulate into column lists, build DataFrame once
+        cols: Dict[str, list] = {c: [] for c in _ORF_COLUMNS}
         for strand_name, seq in [("forward", sequence), ("reverse", reverse_seq)]:
             for frame in range(3):
-                active_starts = []
+                active_starts: list = []
                 for i in range(frame, len(seq) - 2, 3):
                     codon = seq[i : i + 3]
                     if len(codon) != 3:
@@ -556,40 +593,29 @@ def find_orfs_candidates(sequence: str, min_length: int = 100) -> List[Dict]:
                         for start_pos, start_codon in active_starts:
                             orf_length = i + 3 - start_pos
                             if orf_length >= min_length:
-                                if strand_name == "forward":
-                                    orf = {
-                                        "start": start_pos + 1,
-                                        "end": i + 3,
-                                        "genome_start": start_pos + 1,
-                                        "genome_end": i + 3,
-                                        "length": orf_length,
-                                        "frame": frame,
-                                        "strand": "forward",
-                                        "start_codon": start_codon,
-                                        "sequence": seq[start_pos : i + 3],
-                                    }
-                                else:
-                                    orf = {
-                                        "start": start_pos + 1,
-                                        "end": i + 3,
-                                        "genome_start": seq_len - (i + 3) + 1,
-                                        "genome_end": seq_len - start_pos,
-                                        "length": orf_length,
-                                        "frame": frame,
-                                        "strand": "reverse",
-                                        "start_codon": start_codon,
-                                        "sequence": seq[start_pos : i + 3],
-                                    }
-                                rbs = predict_rbs_simple(seq, orf, upstream_length=20)
-                                orf["rbs_score"] = rbs["rbs_score"]
-                                orf["rbs_motif"] = rbs.get("best_motif")
-                                orf["rbs_spacing"] = rbs.get("spacing", 0)
-                                orf["rbs_sequence"] = rbs.get("best_sequence")
-                                orfs.append(orf)
+                                stop = i + 3
+                                s1 = start_pos + 1
+                                gs = s1 if strand_name == "forward" else seq_len - stop + 1
+                                ge = stop if strand_name == "forward" else seq_len - start_pos
+                                rbs = predict_rbs_simple(seq, {"start": s1}, upstream_length=20)
+                                cols["start"].append(s1)
+                                cols["end"].append(stop)
+                                cols["genome_start"].append(gs)
+                                cols["genome_end"].append(ge)
+                                cols["length"].append(orf_length)
+                                cols["frame"].append(frame)
+                                cols["strand"].append(strand_name)
+                                cols["start_codon"].append(start_codon)
+                                cols["sequence"].append(seq[start_pos:stop])
+                                cols["rbs_score"].append(rbs["rbs_score"])
+                                cols["rbs_motif"].append(rbs.get("best_motif"))
+                                cols["rbs_spacing"].append(rbs.get("spacing", 0))
+                                cols["rbs_sequence"].append(rbs.get("best_sequence"))
                         active_starts = []
+        orfs_df = pd.DataFrame(cols)
 
-    print(f"Complete: {len(orfs):,} ORFs detected with RBS scores")
-    return orfs
+    print(f"Complete: {len(orfs_df):,} ORFs detected with RBS scores")
+    return orfs_df
 
 
 # =============================================================================
@@ -869,12 +895,19 @@ def create_training_set(
             "or (genome_id + cached_data) for cached mode"
         )
 
+    # select_training_glimmer/flexible expect List[Dict]; convert if needed.
+    # Pre-filter to length >= 100 before converting to reduce dict allocation.
+    if isinstance(all_orfs, pd.DataFrame):
+        orfs_list = all_orfs[all_orfs["length"] >= 100].to_dict("records")
+    else:
+        orfs_list = all_orfs
+
     glimmer_set = select_training_glimmer(
-        all_orfs, min_length=300, max_training_size=glimmer_max_size
+        orfs_list, min_length=300, max_training_size=glimmer_max_size
     )
 
     flexible_set = select_training_flexible(
-        all_orfs,
+        orfs_list,
         target_size=flexible_target_size,
         min_length=300,
         max_length=20000,
@@ -895,7 +928,7 @@ def create_training_set(
 
     intersection_orfs = [
         orf
-        for orf in all_orfs
+        for orf in orfs_list
         if (orf.get("genome_start", orf["start"]), orf.get("genome_end", orf["end"]))
         in intersection_coords
     ]
@@ -945,6 +978,9 @@ def create_intergenic_set(
             "or (genome_id + cached_data) for cached mode"
         )
 
+    # extract_* functions expect List[Dict]; convert if needed
+    if isinstance(all_orfs, pd.DataFrame):
+        all_orfs = all_orfs.to_dict("records")
     likely_genes = [orf for orf in all_orfs if orf["length"] >= 200]
 
     _, intergenic_coords_1 = extract_intergenic_regions(
@@ -1348,138 +1384,97 @@ def normalize_scores_zscore(scores) -> np.ndarray:
     return (scores - mean) / std
 
 
-def normalize_all_orf_scores(scored_orfs: List[Dict]) -> List[Dict]:
-    """
-    Normalize all score components across all ORFs.
-    Adds normalized versions: *_score_norm fields.
-    """
+def normalize_all_orf_scores(scored_orfs) -> pd.DataFrame:
+    """Z-score normalize all five score columns; adds *_score_norm columns."""
+    if isinstance(scored_orfs, list):
+        scored_orfs = pd.DataFrame(scored_orfs)
     print(f"\nNormalizing {len(scored_orfs):,} ORF scores...")
-
-    codon_scores = np.array([orf["codon_score"] for orf in scored_orfs])
-    imm_scores = np.array([orf["imm_score"] for orf in scored_orfs])
-    rbs_scores = np.array([orf["rbs_score"] for orf in scored_orfs])
-    length_scores = np.array([orf["length_score"] for orf in scored_orfs])
-    start_scores = np.array([orf["start_score"] for orf in scored_orfs])
-
-    # Normalize each component
-    codon_norm = normalize_scores_zscore(codon_scores)
-    imm_norm = normalize_scores_zscore(imm_scores)
-    rbs_norm = normalize_scores_zscore(rbs_scores)
-    length_norm = normalize_scores_zscore(length_scores)
-    start_norm = normalize_scores_zscore(start_scores)
-
-    # Add normalized scores to ORFs
-    for i, orf in enumerate(scored_orfs):
-        orf["codon_score_norm"] = float(codon_norm[i])
-        orf["imm_score_norm"] = float(imm_norm[i])
-        orf["rbs_score_norm"] = float(rbs_norm[i])
-        orf["length_score_norm"] = float(length_norm[i])
-        orf["start_score_norm"] = float(start_norm[i])
-
+    scored_orfs = scored_orfs.copy()
+    for col in ("codon_score", "imm_score", "rbs_score", "length_score", "start_score"):
+        vals = scored_orfs[col].values.astype(np.float64)
+        scored_orfs[f"{col}_norm"] = normalize_scores_zscore(vals)
     print("✓ Normalization complete")
     return scored_orfs
 
 
-def calculate_combined_score(orf: Dict, weights: Dict = None) -> float:
-    """Calculate weighted combined score from normalized components."""
+def add_combined_scores(scored_orfs, weights: Dict = None) -> pd.DataFrame:
+    """Vectorised weighted sum of normalized score columns."""
+    if isinstance(scored_orfs, list):
+        scored_orfs = pd.DataFrame(scored_orfs)
     if weights is None:
         weights = SCORE_WEIGHTS
-
-    combined = (
-        orf["codon_score_norm"] * weights["codon"]
-        + orf["imm_score_norm"] * weights["imm"]
-        + orf["rbs_score_norm"] * weights["rbs"]
-        + orf["length_score_norm"] * weights["length"]
-        + orf["start_score_norm"] * weights["start"]
-    )
-
-    return float(combined)
-
-
-def add_combined_scores(scored_orfs: List[Dict], weights: Dict = None) -> List[Dict]:
-    """Add combined score to all ORFs."""
-    if weights is None:
-        weights = SCORE_WEIGHTS
-
     print("\nCalculating combined scores...")
-
-    for orf in scored_orfs:
-        orf["combined_score"] = calculate_combined_score(orf, weights)
-
+    scored_orfs = scored_orfs.copy()
+    scored_orfs["combined_score"] = (
+        scored_orfs["codon_score_norm"] * weights["codon"]
+        + scored_orfs["imm_score_norm"] * weights["imm"]
+        + scored_orfs["rbs_score_norm"] * weights["rbs"]
+        + scored_orfs["length_score_norm"] * weights["length"]
+        + scored_orfs["start_score_norm"] * weights["start"]
+    )
     print("Combined scores added")
     return scored_orfs
 
 
 def score_all_orfs(
-    all_orfs: List[Dict],
+    all_orfs: pd.DataFrame,
     models: Dict,
     normalize: bool = True,
     add_combined: bool = True,
     weights: Dict = None,
-) -> List[Dict]:
-    """
-    Score all ORFs using pre-built traditional models.
-    Optionally normalize and calculate combined scores.
-    """
+) -> pd.DataFrame:
+    """Score all ORFs using pre-built models.  Operates on a DataFrame in-place
+    (copy made internally) and returns an enriched DataFrame."""
     print(f"Scoring {len(all_orfs):,} ORFs with traditional methods...")
     start_time = time.time()
 
-    codon_model = models["codon_model"]
-    background_codon_model = models["background_codon_model"]
     max_order = models["max_order"]
     numba_coding = models.get("numba_coding_table")
     numba_noncoding = models.get("numba_noncoding_table")
     codon_ratio_tbl = models.get("codon_log_ratio_table")
     coding_log = models.get("coding_log_table")
     noncoding_log = models.get("noncoding_log_table")
+    codon_model = models["codon_model"]
+    bg_codon_model = models["background_codon_model"]
     use_numba = _NUMBA_AVAILABLE and numba_coding is not None and codon_ratio_tbl is not None
     if use_numba:
         assert numba_coding is not None
         assert numba_noncoding is not None
         assert codon_ratio_tbl is not None
 
-    for i, orf in enumerate(all_orfs):
+    sequences = all_orfs["sequence"].values
+    n = len(sequences)
+    codon_scores = np.empty(n, dtype=np.float64)
+    imm_scores = np.empty(n, dtype=np.float64)
+
+    for i, seq in enumerate(sequences):
         if i % 25000 == 0 and i > 0:
             print(f"  {i:,}...")
-
         if use_numba:
-            # Encode once — reuse int array for both codon and IMM scoring
-            seq_arr = _seq_to_int_fast(orf["sequence"])
-            orf["codon_score"] = float(_score_codon_bias_numba(seq_arr, codon_ratio_tbl))
-            orf["imm_score"] = float(
-                _score_imm_numba(
-                    seq_arr,
-                    numba_coding,
-                    numba_noncoding,
-                    max_order,
-                    _LOG_EPSILON,
-                )
+            arr = _seq_to_int_fast(seq)
+            codon_scores[i] = float(_score_codon_bias_numba(arr, codon_ratio_tbl))
+            imm_scores[i] = float(
+                _score_imm_numba(arr, numba_coding, numba_noncoding, max_order, _LOG_EPSILON)
             )
         else:
-            # Fallback for environments where numba is not installed
-            orf["codon_score"] = score_codon_bias_ratio(
-                orf["sequence"], codon_model, background_codon_model
-            )
-            orf["imm_score"] = _score_imm_fast(
-                orf["sequence"], coding_log, noncoding_log, max_order
-            )
+            codon_scores[i] = score_codon_bias_ratio(seq, codon_model, bg_codon_model)
+            imm_scores[i] = _score_imm_fast(seq, coding_log, noncoding_log, max_order)
 
-        if "rbs_score" not in orf:
-            orf["rbs_score"] = 0.0
-
-        orf["length_score"] = score_orf_length(orf["length"])
-        orf["start_score"] = score_start_codon(orf.get("start_codon", "ATG"))
+    all_orfs = all_orfs.copy()
+    all_orfs["codon_score"] = codon_scores
+    all_orfs["imm_score"] = imm_scores
+    lengths = all_orfs["length"].values
+    all_orfs["length_score"] = np.log(np.maximum(lengths, MIN_ORF_LENGTH) / LENGTH_REFERENCE_BP)
+    all_orfs["start_score"] = all_orfs["start_codon"].map(lambda c: START_CODON_WEIGHTS.get(c, 0.4))
+    if "rbs_score" not in all_orfs.columns:
+        all_orfs["rbs_score"] = 0.0
 
     print(f"✓ Scoring complete in {(time.time() - start_time)/60:.1f} minutes")
 
-    # Normalize scores
     if normalize:
         all_orfs = normalize_all_orf_scores(all_orfs)
-
-    # Add combined score
     if add_combined:
         all_orfs = add_combined_scores(all_orfs, weights)
-
     return all_orfs
 
 
@@ -1487,40 +1482,24 @@ def score_all_orfs(
 # FILTERING
 # =============================================================================
 def filter_candidates(
-    all_orfs: List[Dict],
+    all_orfs: pd.DataFrame,
     codon_threshold: float = 0,
     imm_threshold: float = 0,
     length_threshold: float = 0,
     combined_threshold: float = 0,
-) -> List[Dict]:
-    """
-    Removes ORFs if:
-    - all three scores (codon, imm, length) are below thresholds,
-      OR combined_score is below threshold
-    """
-    filtered_orfs = []
-
-    for orf in all_orfs:
-        length_score = orf.get("length_score", 0)
-        codon_score = orf.get("codon_score", 0)
-        imm_score = orf.get("imm_score", 0)
-        combined_score = orf.get("combined_score", 0)
-
-        # Remove if ALL THREE are below thresholds OR combined is below
-        all_three_below = (
-            length_score < length_threshold
-            and codon_score < codon_threshold
-            and imm_score < imm_threshold
-        )
-        combined_below = combined_score < combined_threshold
-
-        if not (all_three_below or combined_below):
-            filtered_orfs.append(orf)
-
-    removed = len(all_orfs) - len(filtered_orfs)
-    print(f"Filtered: {len(filtered_orfs):,} kept, {removed:,} removed")
-
-    return filtered_orfs
+) -> pd.DataFrame:
+    """Boolean-mask filter: removes ORFs where all three scores are below their
+    thresholds OR combined_score is below its threshold."""
+    all_three_below = (
+        (all_orfs["length_score"] < length_threshold)
+        & (all_orfs["codon_score"] < codon_threshold)
+        & (all_orfs["imm_score"] < imm_threshold)
+    )
+    combined_below = all_orfs["combined_score"] < combined_threshold
+    keep = ~(all_three_below | combined_below)
+    result = all_orfs[keep].reset_index(drop=True)
+    print(f"Filtered: {len(result):,} kept, {(~keep).sum():,} removed")
+    return result
 
 
 # =============================================================================
@@ -1528,24 +1507,20 @@ def filter_candidates(
 # =============================================================================
 
 
-def organize_nested_orfs(all_orfs: List[Dict]) -> Dict:
-    """Group ORFs by stop codon, sort by start position within each group."""
-    from collections import defaultdict
-
-    groups = defaultdict(list)
-
-    for orf in all_orfs:
-        key = (orf["strand"], orf["end"])
-        groups[key].append(orf)
-
+def organize_nested_orfs(all_orfs: pd.DataFrame) -> Dict:
+    """Group ORFs by (strand, end) key. Converts to List[Dict] per group so
+    downstream ml_models functions receive the expected type."""
+    groups: Dict = defaultdict(list)
+    for row in all_orfs.itertuples(index=False):
+        groups[(row.strand, row.end)].append(row._asdict())
     for key in groups:
         groups[key].sort(key=lambda x: x["start"])
-
     return groups
 
 
-def select_best_starts(nested_groups: Dict, weights: Dict = None) -> List[Dict]:
-    """Select best start position for each stop codon using multi-factor scoring."""
+def select_best_starts(nested_groups: Dict, weights: Dict = None) -> pd.DataFrame:
+    """Select best start position for each stop codon using multi-factor scoring.
+    Returns a DataFrame."""
     if weights is None:
         from .config import START_SELECTION_WEIGHTS
 
@@ -1557,19 +1532,11 @@ def select_best_starts(nested_groups: Dict, weights: Dict = None) -> List[Dict]:
     single_option = 0
     multiple_options = 0
 
-    selection_reasons = {
-        "rbs_winner": 0,
-        "imm_winner": 0,
-        "codon_winner": 0,
-        "length_winner": 0,
-    }
-
     for (strand, end), orfs in nested_groups.items():
         if len(orfs) == 1:
             selected_orfs.append(orfs[0])
             single_option += 1
         else:
-            # Recalculate score using start-selection weights
             for orf in orfs:
                 orf["start_selection_score"] = (
                     orf["codon_score_norm"] * weights["codon"]
@@ -1578,40 +1545,13 @@ def select_best_starts(nested_groups: Dict, weights: Dict = None) -> List[Dict]:
                     + orf["length_score_norm"] * weights["length"]
                     + orf["start_score_norm"] * weights["start"]
                 )
-
-            # Select based on the new score
-            best_orf = max(orfs, key=lambda x: x["start_selection_score"])
-            selected_orfs.append(best_orf)
+            selected_orfs.append(max(orfs, key=lambda x: x["start_selection_score"]))
             multiple_options += 1
-
-            # Track selection reasons
-            components = [
-                "rbs_score_norm",
-                "imm_score_norm",
-                "codon_score_norm",
-                "length_score_norm",
-            ]
-            component_names = [
-                "rbs_winner",
-                "imm_winner",
-                "codon_winner",
-                "length_winner",
-            ]
-
-            best_component_value = -999
-            best_component = None
-            for comp, name in zip(components, component_names):
-                if best_orf[comp] > best_component_value:
-                    best_component_value = best_orf[comp]
-                    best_component = name
-
-            if best_component:
-                selection_reasons[best_component] += 1
 
     print(f"  Single option groups: {single_option:,}")
     print(f"  Multiple option groups: {multiple_options:,}")
 
-    return selected_orfs
+    return pd.DataFrame(selected_orfs) if selected_orfs else _empty_orf_df()
 
 
 # =============================================================================

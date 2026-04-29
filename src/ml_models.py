@@ -667,6 +667,10 @@ class HybridGeneFilter:
         Returns:
             Filtered list of candidates
         """
+        # Accept DataFrame or List[Dict]
+        if hasattr(candidates, "to_dict"):
+            candidates = candidates.to_dict("records")
+
         preds, probs, gene_ids = self.predict(candidates, genome_id, threshold, batch_size)
 
         kept = []
