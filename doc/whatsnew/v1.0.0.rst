@@ -96,6 +96,10 @@ Other enhancements
 Performance improvements
 ~~~~~~~~~~~~~~~~~~~~~~~
 
+ORF detection
+^^^^^^^^^^^^^
+- Replaced pure-Python codon scanning loop in :func:`find_orfs_candidates` with a ``@numba.njit`` scanner (:func:`_scan_orfs_numba`) that encodes the sequence as int32, finds all ORF positions in a single JIT-compiled pass, and returns a numpy array for Python post-processing (:issue:`86`). For a 4.6 Mbp genome: 26 s → 5.85 s (**4.4×**); ORF count identical. Remaining cost is 176K :func:`predict_rbs_simple` calls (Python). Graceful fallback to the original pure-Python path when numba is absent.
+
 Training set selection
 ^^^^^^^^^^^^^^^^^^^^^^
 - Replaced O(n²) linear interval scan in :func:`select_training_glimmer` and :func:`select_training_flexible` with O(n log n) bisect-based lookup (:issue:`59`). For a 4.6 Mbp genome with 176K ORFs: ``select_training_glimmer`` 0.77 s → 0.06 s (12.6×); ``select_training_flexible`` 0.23 s → 0.08 s (2.9×); combined 1.00 s → 0.14 s (7.1×). Training sets are byte-identical to the previous implementation.
