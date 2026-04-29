@@ -12,6 +12,7 @@ This module implements classic (non-ML) approaches to bacterial gene prediction:
 These methods form the foundation of programs like Glimmer, GeneMark, and Prodigal.
 """
 
+import itertools
 import math
 import time
 from collections import Counter, defaultdict
@@ -38,6 +39,75 @@ from .config import (
 # can look up the correct model via the cache key without using global mutation.
 # Each genome's models get separate cache partitions because their ids differ.
 _IMM_MODEL_REGISTRY: Dict[int, List[Dict]] = {}
+
+_LOG_EPSILON: float = math.log(1e-10)  # fallback for unseen k-mers
+_IMM_NUCLEOTIDES: tuple = ("A", "C", "G", "T")
+
+
+def _interpolate_prob(
+    imm_model: List[Dict],
+    codon_pos: int,
+    context: str,
+    nucleotide: str,
+    fallback: float = 0.25,
+) -> float:
+    """Run IMM interpolation without caching — used only at table-build time."""
+    probabilities = imm_model[codon_pos]
+    for order in range(len(context), -1, -1):
+        ctx = context[-order:] if order > 0 else ""
+        if ctx in probabilities and nucleotide in probabilities[ctx]:
+            return probabilities[ctx][nucleotide]
+    return fallback
+
+
+def build_flat_log_table(imm_model: List[Dict], max_order: int) -> List[Dict[str, float]]:
+    """Pre-bake a {context+nucleotide → log_prob} table for each codon position.
+
+    Called once at model-build time.  Enumerates every k-mer of length 1 to
+    max_order+1 over {A,C,G,T}, resolves the IMM interpolation, and stores the
+    log-probability directly.  During scoring the hot loop performs two
+    dict.get() calls per nucleotide — no math.log, no max(), no lru_cache.
+
+    Table size: ~87K keys × 3 positions × 8 bytes ≈ 2 MB per model.
+    Build time: ~100 ms (one-time).
+    """
+    n_positions = len(imm_model)  # 3 for frame-aware, 1 for non-frame-aware
+    tables: List[Dict[str, float]] = [{} for _ in range(n_positions)]
+
+    for key_len in range(1, max_order + 2):  # key = context + nucleotide
+        for chars in itertools.product(_IMM_NUCLEOTIDES, repeat=key_len):
+            key = "".join(chars)
+            context = key[:-1]
+            nucleotide = key[-1]
+            for pos in range(n_positions):
+                prob = _interpolate_prob(imm_model, pos, context, nucleotide)
+                tables[pos][key] = math.log(max(prob, 1e-10))
+
+    return tables
+
+
+def _score_imm_fast(
+    sequence: str,
+    coding_log: List[Dict[str, float]],
+    noncoding_log: List[Dict[str, float]],
+    max_order: int,
+) -> float:
+    """Fast IMM log-likelihood ratio using pre-baked log tables.
+
+    Replaces per-nucleotide math.log() + max(EPSILON) + lru_cache lookup with
+    two dict.get() calls per nucleotide.  Numerically identical to
+    score_imm_ratio() for the same model.
+    """
+    n = len(sequence)
+    if n < 3:
+        return 0.0
+    c_total = nc_total = 0.0
+    for i in range(n):
+        key = sequence[i - max_order if i >= max_order else 0 : i + 1]
+        pos = i % 3
+        c_total += coding_log[pos].get(key, _LOG_EPSILON)
+        nc_total += noncoding_log[pos].get(key, _LOG_EPSILON)
+    return (c_total - nc_total) / n
 
 
 # =============================================================================
@@ -149,9 +219,7 @@ def predict_rbs_simple(sequence: str, orf: Dict, upstream_length: int = 20) -> D
     upstream_start = start_pos - upstream_length
     upstream_seq = sequence[upstream_start:start_pos]
 
-    purine_regions = find_purine_rich_regions(
-        upstream_seq, min_length=4, min_purine_content=0.6
-    )
+    purine_regions = find_purine_rich_regions(upstream_seq, min_length=4, min_purine_content=0.6)
 
     best_score = -5.0
     best_prediction = None
@@ -264,9 +332,7 @@ def find_orfs_candidates(sequence: str, min_length: int = 100) -> List[Dict]:
                                 }
 
                             # Calculate RBS for this ORF
-                            rbs_result = predict_rbs_simple(
-                                seq, orf, upstream_length=20
-                            )
+                            rbs_result = predict_rbs_simple(seq, orf, upstream_length=20)
                             orf["rbs_score"] = rbs_result["rbs_score"]
                             orf["rbs_motif"] = rbs_result.get("best_motif")
                             orf["rbs_spacing"] = rbs_result.get("spacing", 0)
@@ -625,9 +691,7 @@ def create_intergenic_set(
     _, intergenic_coords_2 = extract_non_orf_regions_conservative(
         sequence, all_orfs, min_rbs_threshold=min_rbs_threshold, min_length=min_length
     )
-    _, intergenic_coords_3 = extract_all_non_orf_regions(
-        sequence, all_orfs, min_length=min_length
-    )
+    _, intergenic_coords_3 = extract_all_non_orf_regions(sequence, all_orfs, min_length=min_length)
 
     all_union_coords = merge_intervals(
         intergenic_coords_1 + intergenic_coords_2 + intergenic_coords_3
@@ -876,6 +940,8 @@ def score_imm_ratio(
                 nucleotide, context, codon_position, noncoding_id
             )
         else:
+            coding_prob = get_interpolated_probability(nucleotide, context, 0, coding_id)
+            noncoding_prob = get_interpolated_probability(nucleotide, context, 0, noncoding_id)
             coding_prob = get_interpolated_probability(
                 nucleotide, context, 0, coding_id
             )
@@ -960,12 +1026,14 @@ def build_all_scoring_models(
     estimated_order = min(estimated_order, 8)
     estimated_order = max(estimated_order, 3)
 
-    coding_imm = build_interpolated_markov_model(
-        training_seqs, estimated_order, min_observations
-    )
+    coding_imm = build_interpolated_markov_model(training_seqs, estimated_order, min_observations)
     noncoding_imm = build_interpolated_markov_model(
         intergenic_seqs, estimated_order, min_observations
     )
+
+    print("  Building IMM log tables...")
+    coding_log_table = build_flat_log_table(coding_imm, estimated_order)
+    noncoding_log_table = build_flat_log_table(noncoding_imm, estimated_order)
 
     print(f"✓ All models built in {time.time() - start_time:.1f}s")
     print(f"  IMM order: {estimated_order}")
@@ -978,6 +1046,8 @@ def build_all_scoring_models(
         "coding_imm": coding_imm,
         "noncoding_imm": noncoding_imm,
         "max_order": estimated_order,
+        "coding_log_table": coding_log_table,
+        "noncoding_log_table": noncoding_log_table,
     }
 
 
@@ -1079,6 +1149,9 @@ def score_all_orfs(
     coding_imm = models["coding_imm"]
     noncoding_imm = models["noncoding_imm"]
     max_order = models["max_order"]
+    coding_log = models.get("coding_log_table")
+    noncoding_log = models.get("noncoding_log_table")
+    use_fast_imm = coding_log is not None and noncoding_log is not None
 
     for i, orf in enumerate(all_orfs):
         if i % 25000 == 0 and i > 0:
@@ -1088,9 +1161,14 @@ def score_all_orfs(
             orf["sequence"], codon_model, background_codon_model
         )
 
-        orf["imm_score"] = score_imm_ratio(
-            orf["sequence"], coding_imm, noncoding_imm, max_order
-        )
+        if use_fast_imm:
+            orf["imm_score"] = _score_imm_fast(
+                orf["sequence"], coding_log, noncoding_log, max_order
+            )
+        else:
+            orf["imm_score"] = score_imm_ratio(
+                orf["sequence"], coding_imm, noncoding_imm, max_order
+            )
 
         if "rbs_score" not in orf:
             orf["rbs_score"] = 0.0

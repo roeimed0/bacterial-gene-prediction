@@ -15,9 +15,14 @@ Covers:
 import numpy as np
 import pytest
 
+import math
+
 from src.traditional_methods import (
+    _LOG_EPSILON,
+    _score_imm_fast,
     add_combined_scores,
     build_codon_model,
+    build_flat_log_table,
     build_interpolated_markov_model,
     clear_imm_cache,
     find_orfs_candidates,
@@ -415,6 +420,164 @@ class TestScoreImmRatio:
 
         assert all(s > 0 for s in results["a"]), "Thread A: all scores should be positive"
         assert all(s < 0 for s in results["b"]), "Thread B: all scores should be negative"
+
+
+# ===========================================================================
+# Tests: build_flat_log_table()
+# ===========================================================================
+
+
+class TestBuildFlatLogTable:
+    """Tests for the pre-baked IMM log-probability table (Fix A optimisation)."""
+
+    _CODING_SEQS   = ["ATG" + "CAG" * 30 + "TAA"] * 5
+    _NONCODING_SEQS = ["GGG" * 31] * 5
+    _MAX_ORDER = 2
+
+    @pytest.fixture(scope="class")
+    def imm_model(self):
+        return build_interpolated_markov_model(self._CODING_SEQS, self._MAX_ORDER)
+
+    @pytest.fixture(scope="class")
+    def log_table(self, imm_model):
+        return build_flat_log_table(imm_model, self._MAX_ORDER)
+
+    # ── Structure ────────────────────────────────────────────────────────────
+
+    def test_returns_list_of_three_dicts(self, log_table):
+        assert isinstance(log_table, list)
+        assert len(log_table) == 3
+        assert all(isinstance(d, dict) for d in log_table)
+
+    def test_all_values_are_non_positive(self, log_table):
+        """Log-probabilities must be ≤ 0 (probabilities ≤ 1)."""
+        for pos_dict in log_table:
+            for val in pos_dict.values():
+                assert val <= 0.0, f"Log-prob {val} > 0 — probability > 1"
+
+    def test_all_values_are_at_least_log_epsilon(self, log_table):
+        """No value should be below log(1e-10) — the EPSILON floor."""
+        for pos_dict in log_table:
+            for val in pos_dict.values():
+                assert val >= _LOG_EPSILON - 1e-12
+
+    def test_single_nucleotide_keys_present(self, log_table):
+        """Empty-context keys (length-1: just the nucleotide) must exist in every position."""
+        for nuc in ("A", "C", "G", "T"):
+            for pos_dict in log_table:
+                assert nuc in pos_dict, f"Single-nucleotide key '{nuc}' missing"
+
+    def test_key_lengths_up_to_max_order_plus_one(self, log_table):
+        """Keys should be at most max_order+1 characters (context + nucleotide)."""
+        for pos_dict in log_table:
+            for key in pos_dict:
+                assert len(key) <= self._MAX_ORDER + 1
+
+    def test_log_value_matches_manual_log_of_probability(self, imm_model, log_table):
+        """Pre-baked log value must equal math.log(probability) from the model directly."""
+        from src.traditional_methods import _interpolate_prob
+        for pos in range(3):
+            for nuc in ("A", "C", "G", "T"):
+                key = nuc  # empty context
+                expected = math.log(max(_interpolate_prob(imm_model, pos, "", nuc), 1e-10))
+                assert abs(log_table[pos][key] - expected) < 1e-12
+
+    def test_table_size_grows_with_order(self):
+        """Higher max_order must produce a larger table."""
+        model = build_interpolated_markov_model(self._CODING_SEQS, max_order=3)
+        table_2 = build_flat_log_table(model, max_order=2)
+        table_3 = build_flat_log_table(model, max_order=3)
+        assert len(table_3[0]) > len(table_2[0])
+
+    def test_empty_model_returns_fallback_values(self):
+        """An empty model (no training data) should fill the table with log(fallback)."""
+        empty_model = [{}, {}, {}]
+        table = build_flat_log_table(empty_model, max_order=1)
+        for pos_dict in table:
+            for val in pos_dict.values():
+                assert val == pytest.approx(math.log(0.25))
+
+
+# ===========================================================================
+# Tests: _score_imm_fast()
+# ===========================================================================
+
+
+class TestScoreImmFast:
+    """Tests for the fast IMM scoring path using pre-baked log tables."""
+
+    _CODING_SEQS    = ["ATG" + "CAG" * 30 + "TAA"] * 5
+    _NONCODING_SEQS = ["GGG" * 31] * 5
+    _MAX_ORDER = 2
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        coding_imm   = build_interpolated_markov_model(self._CODING_SEQS,    self._MAX_ORDER)
+        noncoding_imm = build_interpolated_markov_model(self._NONCODING_SEQS, self._MAX_ORDER)
+        coding_log   = build_flat_log_table(coding_imm,    self._MAX_ORDER)
+        noncoding_log = build_flat_log_table(noncoding_imm, self._MAX_ORDER)
+        return coding_imm, noncoding_imm, coding_log, noncoding_log
+
+    # ── Edge cases ───────────────────────────────────────────────────────────
+
+    def test_sequence_shorter_than_three_returns_zero(self, models):
+        _, _, c_log, nc_log = models
+        assert _score_imm_fast("AT", c_log, nc_log, self._MAX_ORDER) == 0.0
+
+    def test_empty_sequence_returns_zero(self, models):
+        _, _, c_log, nc_log = models
+        assert _score_imm_fast("", c_log, nc_log, self._MAX_ORDER) == 0.0
+
+    def test_returns_float(self, models):
+        _, _, c_log, nc_log = models
+        result = _score_imm_fast("ATG" + "CAG" * 10 + "TAA", c_log, nc_log, self._MAX_ORDER)
+        assert isinstance(result, float)
+
+    # ── Correctness vs score_imm_ratio ──────────────────────────────────────
+
+    def test_identical_to_score_imm_ratio_on_coding_sequence(self, models):
+        """Regression: fast path must produce bit-identical scores to old path."""
+        clear_imm_cache()
+        coding_imm, noncoding_imm, c_log, nc_log = models
+        seq = "ATG" + "CAG" * 20 + "TAA"
+        old = score_imm_ratio(seq, coding_imm, noncoding_imm, self._MAX_ORDER)
+        new = _score_imm_fast(seq, c_log, nc_log, self._MAX_ORDER)
+        assert old == pytest.approx(new, abs=1e-12)
+
+    def test_identical_to_score_imm_ratio_on_noncoding_sequence(self, models):
+        clear_imm_cache()
+        coding_imm, noncoding_imm, c_log, nc_log = models
+        seq = "GGG" * 30
+        old = score_imm_ratio(seq, coding_imm, noncoding_imm, self._MAX_ORDER)
+        new = _score_imm_fast(seq, c_log, nc_log, self._MAX_ORDER)
+        assert old == pytest.approx(new, abs=1e-12)
+
+    def test_identical_on_100_random_sequences(self, models):
+        """Regression: scores must match for all sequence types."""
+        import random
+        random.seed(42)
+        clear_imm_cache()
+        coding_imm, noncoding_imm, c_log, nc_log = models
+        for _ in range(100):
+            length = random.randint(30, 300)
+            seq = "".join(random.choice("ACGT") for _ in range(length))
+            old = score_imm_ratio(seq, coding_imm, noncoding_imm, self._MAX_ORDER)
+            new = _score_imm_fast(seq, c_log, nc_log, self._MAX_ORDER)
+            assert old == pytest.approx(new, abs=1e-12), f"Mismatch on seq[:20]={seq[:20]!r}"
+
+    def test_coding_scores_higher_than_noncoding(self, models):
+        """Sanity: ATG-rich coding-like sequence scores higher than GGG noncoding."""
+        _, _, c_log, nc_log = models
+        coding_score   = _score_imm_fast("ATG" + "CAG" * 20 + "TAA", c_log, nc_log, self._MAX_ORDER)
+        noncoding_score = _score_imm_fast("GGG" * 20, c_log, nc_log, self._MAX_ORDER)
+        assert coding_score > noncoding_score
+
+    def test_unknown_nucleotide_uses_fallback(self, models):
+        """Sequences with N should not crash — unknown k-mer falls back to LOG_EPSILON."""
+        _, _, c_log, nc_log = models
+        result = _score_imm_fast("ATGNNNNTAA" * 5, c_log, nc_log, self._MAX_ORDER)
+        assert isinstance(result, float)
+        assert not math.isnan(result) and not math.isinf(result)
 
 
 # ===========================================================================

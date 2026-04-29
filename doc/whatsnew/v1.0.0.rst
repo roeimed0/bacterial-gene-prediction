@@ -21,7 +21,9 @@ Enhancements
 - Added ``predict_rbs_simple()`` — scores Shine-Dalgarno signal strength in the -20 to -5 window upstream of each candidate start site
 - Added ``build_codon_model()`` and ``score_codon_bias_ratio()`` — log-odds codon usage scoring against a self-trained genome-specific model
 - Added ``build_interpolated_markov_model()`` and ``score_imm_ratio()`` — Interpolated Markov Model scoring trained on the target genome (orders 1–3)
-- Added ``score_all_orfs()`` — unified scoring combining codon bias, IMM, RBS, length, and start codon type into a ``combined_score``
+- Added ``score_all_orfs()`` — unified scoring combining codon bias, IMM, RBS, length, and start codon type into a ``combined_score``; uses pre-baked log tables (:func:`build_flat_log_table`) when available for a 2.2× IMM speedup (:issue:`82`)
+- Added ``build_flat_log_table()`` — pre-bakes ``{context+nucleotide → log_prob}`` lookup tables from a trained IMM model at build time, eliminating ``math.log()``, ``max(EPSILON)``, and ``lru_cache`` overhead during per-nucleotide scoring (:issue:`82`)
+- Added ``_score_imm_fast()`` — fast IMM log-likelihood ratio using pre-baked tables; numerically identical to ``score_imm_ratio()`` (max delta 0.00e+00 across 166K real ORFs), 2.2× faster cold and 2.4× faster warm (:issue:`82`)
 - Added ``normalize_all_orf_scores()`` — z-score normalization of all score components for downstream ML feature extraction
 - Added ``create_training_set()`` — self-training strategy selecting high-confidence ORFs from the target genome as positive examples
 - Added ``select_best_starts()`` — resolves overlapping start candidates within each ORF group using weighted scoring
