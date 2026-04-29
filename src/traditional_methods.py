@@ -103,7 +103,6 @@ try:
         results = np.empty((max_results, 4), dtype=np.int32)
         count = 0
 
-        # Per-frame active start buffer (start_pos, codon_int)
         act_pos = np.empty(max_active, dtype=np.int32)
         act_cod = np.empty(max_active, dtype=np.int32)
 
@@ -116,13 +115,11 @@ try:
                 c = seq_arr[i + 2]
                 if a < 4 and b < 4 and c < 4:
                     codon = a * 16 + b * 4 + c
-                    # ATG=14, GTG=46, TTG=62
                     if codon == 14 or codon == 46 or codon == 62:
                         if n_active < max_active:
                             act_pos[n_active] = i
                             act_cod[n_active] = codon
                             n_active += 1
-                    # TAA=48, TAG=50, TGA=56
                     elif (codon == 48 or codon == 50 or codon == 56) and n_active > 0:
                         stop_end = i + 3
                         for k in range(n_active):
@@ -137,6 +134,41 @@ try:
                 i += 3
 
         return results[:count]
+
+    @_numba.njit(cache=True)
+    def _count_imm_kmers(
+        seq_arr: np.ndarray,
+        max_order: int,
+        counts: np.ndarray,
+    ) -> None:
+        """Count all k-mers (k=0..max_order) for every codon position in-place.
+
+        counts has shape (3, max_idx) where max_idx = (4^(max_order+2)-1)//3.
+        Index layout mirrors build_numba_log_table / _scan_orfs_numba:
+          offset(L) = (4^L - 1) // 3
+          index     = offset(L) + base4_encoding(k-mer of length L)
+        where L = context_length + 1 (the +1 is the current nucleotide).
+        """
+        n = len(seq_arr)
+        for i in range(n):
+            nuc = seq_arr[i]
+            if nuc >= 4:
+                continue
+            codon_pos = i % 3
+
+            counts[codon_pos, 1 + nuc] += 1
+
+            kmer_int = nuc
+            power_k = 1
+            k = 1
+            while k <= max_order and k <= i:
+                power_k *= 4
+                prev = seq_arr[i - k]
+                if prev >= 4:
+                    break
+                kmer_int += prev * power_k
+                counts[codon_pos, (4 * power_k - 1) // 3 + kmer_int] += 1
+                k += 1
 
     _NUMBA_AVAILABLE = True
 
@@ -1089,48 +1121,95 @@ def build_codon_model(sequences: List[Dict]) -> Dict[str, float]:
 # INTERPOLATED MARKOV MODELS (IMM)
 # =============================================================================
 
+_IMM_NUCS = ("A", "C", "G", "T")
+
+
+def _decode_context(ctx_int: int, k: int) -> str:
+    """Decode a base-4 integer into a context string of length k.
+
+    ctx_int = c_{k-1}*4^{k-2} + ... + c_1*4^0  (nearest context char has lowest power).
+    Returned string is c_{k-1}...c_1 (left = farthest from nucleotide).
+    """
+    if k == 0:
+        return ""
+    chars = []
+    for _ in range(k):
+        chars.append(_IMM_NUCS[ctx_int & 3])
+        ctx_int >>= 2
+    return "".join(reversed(chars))
+
+
+def _build_imm_from_counts(
+    counts: "np.ndarray",
+    max_order: int,
+    min_observations: int,
+) -> List[Dict]:
+    """Convert a (3, max_idx) count array to a List[Dict] probability model."""
+    position_probs: List[Dict] = [{}, {}, {}]
+    for pos in range(3):
+        for L in range(1, max_order + 2):  # L = context_length + 1
+            offset = (4**L - 1) // 3
+            n_contexts = 4 ** (L - 1)
+            for ctx_int in range(n_contexts):
+                base = offset + ctx_int * 4
+                total = int(counts[pos, base : base + 4].sum())
+                if total < min_observations:
+                    continue
+                context = _decode_context(ctx_int, L - 1)
+                nuc_probs: Dict[str, float] = {}
+                for nuc_int in range(4):
+                    cnt = int(counts[pos, base + nuc_int])
+                    if cnt > 0:
+                        nuc_probs[_IMM_NUCS[nuc_int]] = cnt / total
+                position_probs[pos][context] = nuc_probs
+    return position_probs
+
 
 def build_interpolated_markov_model(
     training_sequences: List[str], max_order: int, min_observations: int = 10
 ) -> List[Dict]:
-    """Build frame-aware IMM (3 position-specific models)."""
-    # Initialize 3 models, one for each codon position
-    position_models = [
-        defaultdict(lambda: defaultdict(int)),  # Position 0 (1st base of codon)
-        defaultdict(lambda: defaultdict(int)),  # Position 1 (2nd base of codon)
-        defaultdict(lambda: defaultdict(int)),  # Position 2 (3rd base of codon)
-    ]
+    """Build frame-aware IMM (3 position-specific models).
 
-    # Build counts for each position
+    When Numba is available the k-mer counting is done with a JIT-compiled
+    function (_count_imm_kmers) that fills a (3, max_idx) integer array in a
+    single pass — replacing the O(total_bp × max_order) Python loop.
+    The probability conversion is always done in Python.
+    Output is byte-identical to the pure-Python path for sequences without N.
+    """
+    if not training_sequences:
+        return [{}, {}, {}]
+
+    if _NUMBA_AVAILABLE:
+        max_idx = (4 ** (max_order + 2) - 1) // 3
+        counts = np.zeros((3, max_idx), dtype=np.int64)
+        for seq_str in training_sequences:
+            _count_imm_kmers(_seq_to_int_fast(seq_str), max_order, counts)
+        return _build_imm_from_counts(counts, max_order, min_observations)
+
+    # Pure-Python fallback
+    position_models = [
+        defaultdict(lambda: defaultdict(int)),
+        defaultdict(lambda: defaultdict(int)),
+        defaultdict(lambda: defaultdict(int)),
+    ]
     for sequence in training_sequences:
         for i in range(len(sequence)):
             nucleotide = sequence[i]
             codon_position = i % 3
-
-            # Build context with different orders
             for order in range(min(i + 1, max_order + 1)):
-                if order == 0:
-                    context = ""
-                else:
-                    context = sequence[i - order : i]
-
+                context = "" if order == 0 else sequence[i - order : i]
                 position_models[codon_position][context][nucleotide] += 1
 
-    # Convert counts to probabilities
     position_probabilities = []
-
     for pos in range(3):
         probabilities = {}
         for context, nucleotide_counts in position_models[pos].items():
             total_count = sum(nucleotide_counts.values())
-
             if total_count >= min_observations:
-                probabilities[context] = {}
-                for nucleotide, count in nucleotide_counts.items():
-                    probabilities[context][nucleotide] = count / total_count
-
+                probabilities[context] = {
+                    nuc: cnt / total_count for nuc, cnt in nucleotide_counts.items()
+                }
         position_probabilities.append(probabilities)
-
     return position_probabilities
 
 
