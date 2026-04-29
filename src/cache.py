@@ -117,9 +117,7 @@ def get_cached_genome(genome_id: str, cached_data: Dict = None) -> Dict:
         cached_data = load_cache()
 
     if genome_id not in cached_data:
-        raise KeyError(
-            f"Genome {genome_id} not in cache. Run precompute_genomes() first."
-        )
+        raise KeyError(f"Genome {genome_id} not in cache. Run precompute_genomes() first.")
 
     return cached_data[genome_id]
 

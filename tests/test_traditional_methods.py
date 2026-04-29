@@ -18,12 +18,17 @@ import pytest
 import math
 
 from src.traditional_methods import (
+    _ASCII_TO_INT,
     _LOG_EPSILON,
+    _NUMBA_AVAILABLE,
     _score_imm_fast,
+    _seq_to_int_fast,
     add_combined_scores,
+    build_codon_log_ratio_table,
     build_codon_model,
     build_flat_log_table,
     build_interpolated_markov_model,
+    build_numba_log_table,
     clear_imm_cache,
     find_orfs_candidates,
     normalize_all_orf_scores,
@@ -578,6 +583,264 @@ class TestScoreImmFast:
         result = _score_imm_fast("ATGNNNNTAA" * 5, c_log, nc_log, self._MAX_ORDER)
         assert isinstance(result, float)
         assert not math.isnan(result) and not math.isinf(result)
+
+
+# ===========================================================================
+# Tests: _seq_to_int_fast() and build_numba_log_table()
+# ===========================================================================
+
+
+class TestSeqToIntFast:
+    """Tests for the vectorised DNA→int32 encoder."""
+
+    def test_known_nucleotides_map_correctly(self):
+        arr = _seq_to_int_fast("ACGT")
+        assert list(arr) == [0, 1, 2, 3]
+
+    def test_unknown_nucleotide_maps_to_four(self):
+        arr = _seq_to_int_fast("N")
+        assert arr[0] == 4
+
+    def test_output_dtype_is_int32(self):
+        import numpy as np
+        arr = _seq_to_int_fast("ACGT")
+        assert arr.dtype == np.int32
+
+    def test_output_length_matches_input(self):
+        seq = "ATGCATGCATGC"
+        assert len(_seq_to_int_fast(seq)) == len(seq)
+
+    def test_lut_constant_covers_all_four_bases(self):
+        assert _ASCII_TO_INT[65] == 0  # A
+        assert _ASCII_TO_INT[67] == 1  # C
+        assert _ASCII_TO_INT[71] == 2  # G
+        assert _ASCII_TO_INT[84] == 3  # T
+
+    def test_lut_default_is_four_for_unknown(self):
+        # Every entry not explicitly set should be 4
+        import numpy as np
+        other_indices = [i for i in range(128) if i not in (65, 67, 71, 84)]
+        assert all(_ASCII_TO_INT[i] == 4 for i in other_indices)
+
+    def test_round_trip_on_coding_sequence(self):
+        seq = "ATG" + "CAG" * 10 + "TAA"
+        arr = _seq_to_int_fast(seq)
+        assert len(arr) == len(seq)
+        assert arr[0] == 0   # A
+        assert arr[1] == 3   # T
+        assert arr[2] == 2   # G
+
+
+class TestBuildNumbaLogTable:
+    """Tests for the integer-indexed numpy log table."""
+
+    _CODING_SEQS    = ["ATG" + "CAG" * 30 + "TAA"] * 5
+    _MAX_ORDER = 2
+
+    @pytest.fixture(scope="class")
+    def log_table(self):
+        imm = build_interpolated_markov_model(self._CODING_SEQS, self._MAX_ORDER)
+        return build_flat_log_table(imm, self._MAX_ORDER)
+
+    @pytest.fixture(scope="class")
+    def numba_table(self, log_table):
+        return build_numba_log_table(log_table, self._MAX_ORDER)
+
+    def test_returns_numpy_array(self, numba_table):
+        import numpy as np
+        assert isinstance(numba_table, np.ndarray)
+
+    def test_shape_is_positions_by_entries(self, numba_table):
+        # 3 positions, (4^(max_order+2)-1)//3 entries
+        expected_cols = (4 ** (self._MAX_ORDER + 2) - 1) // 3
+        assert numba_table.shape == (3, expected_cols)
+
+    def test_all_values_non_positive(self, numba_table):
+        assert (numba_table <= 0).all()
+
+    def test_all_values_at_least_log_epsilon(self, numba_table):
+        assert (numba_table >= _LOG_EPSILON - 1e-12).all()
+
+    def test_single_nucleotide_entries_match_flat_table(self, log_table, numba_table):
+        """Index for single-char key 'A' (no context) must match flat table value."""
+        # key='A': len=1, offset=(4^1-1)//3=1, idx=1+0=1 (A=0)
+        assert abs(numba_table[0, 1] - log_table[0].get("A", _LOG_EPSILON)) < 1e-12
+
+
+@pytest.mark.skipif(not _NUMBA_AVAILABLE, reason="numba not installed")
+class TestScoreImmNumba:
+    """Regression tests for the Numba JIT scoring path."""
+
+    _CODING_SEQS    = ["ATG" + "CAG" * 30 + "TAA"] * 5
+    _NONCODING_SEQS = ["GGG" * 31] * 5
+    _MAX_ORDER = 2
+
+    @pytest.fixture(scope="class")
+    def tables(self):
+        from src.traditional_methods import _score_imm_numba
+        coding_imm    = build_interpolated_markov_model(self._CODING_SEQS,    self._MAX_ORDER)
+        noncoding_imm = build_interpolated_markov_model(self._NONCODING_SEQS, self._MAX_ORDER)
+        flat_c  = build_flat_log_table(coding_imm,    self._MAX_ORDER)
+        flat_nc = build_flat_log_table(noncoding_imm, self._MAX_ORDER)
+        c_tbl   = build_numba_log_table(flat_c,  self._MAX_ORDER)
+        nc_tbl  = build_numba_log_table(flat_nc, self._MAX_ORDER)
+        return coding_imm, noncoding_imm, c_tbl, nc_tbl, _score_imm_numba
+
+    def test_short_sequence_returns_zero(self, tables):
+        import numpy as np
+        _, _, c_tbl, nc_tbl, fn = tables
+        arr = np.array([0, 1], dtype=np.int32)
+        assert fn(arr, c_tbl, nc_tbl, self._MAX_ORDER, _LOG_EPSILON) == 0.0
+
+    def test_identical_to_score_imm_ratio_on_coding_seq(self, tables):
+        coding_imm, noncoding_imm, c_tbl, nc_tbl, fn = tables
+        seq = "ATG" + "CAG" * 20 + "TAA"
+        clear_imm_cache()
+        old = score_imm_ratio(seq, coding_imm, noncoding_imm, self._MAX_ORDER)
+        new = float(fn(_seq_to_int_fast(seq), c_tbl, nc_tbl, self._MAX_ORDER, _LOG_EPSILON))
+        assert old == pytest.approx(new, abs=1e-12)
+
+    def test_identical_to_score_imm_ratio_on_noncoding_seq(self, tables):
+        coding_imm, noncoding_imm, c_tbl, nc_tbl, fn = tables
+        seq = "GGG" * 30
+        clear_imm_cache()
+        old = score_imm_ratio(seq, coding_imm, noncoding_imm, self._MAX_ORDER)
+        new = float(fn(_seq_to_int_fast(seq), c_tbl, nc_tbl, self._MAX_ORDER, _LOG_EPSILON))
+        assert old == pytest.approx(new, abs=1e-12)
+
+    def test_identical_on_100_random_sequences(self, tables):
+        import random
+        random.seed(99)
+        coding_imm, noncoding_imm, c_tbl, nc_tbl, fn = tables
+        clear_imm_cache()
+        for _ in range(100):
+            seq = "".join(random.choice("ACGT") for _ in range(random.randint(30, 300)))
+            old = score_imm_ratio(seq, coding_imm, noncoding_imm, self._MAX_ORDER)
+            new = float(fn(_seq_to_int_fast(seq), c_tbl, nc_tbl, self._MAX_ORDER, _LOG_EPSILON))
+            assert old == pytest.approx(new, abs=1e-12), f"mismatch on {seq[:20]!r}"
+
+    def test_coding_scores_higher_than_noncoding(self, tables):
+        _, _, c_tbl, nc_tbl, fn = tables
+        s_cod = float(fn(_seq_to_int_fast("ATG" + "CAG" * 20 + "TAA"),
+                         c_tbl, nc_tbl, self._MAX_ORDER, _LOG_EPSILON))
+        s_non = float(fn(_seq_to_int_fast("GGG" * 20),
+                         c_tbl, nc_tbl, self._MAX_ORDER, _LOG_EPSILON))
+        assert s_cod > s_non
+
+    def test_unknown_nucleotide_no_crash(self, tables):
+        _, _, c_tbl, nc_tbl, fn = tables
+        result = float(fn(_seq_to_int_fast("ATGNNNNTAA" * 5),
+                          c_tbl, nc_tbl, self._MAX_ORDER, _LOG_EPSILON))
+        assert not math.isnan(result) and not math.isinf(result)
+
+
+# ===========================================================================
+# Tests: build_codon_log_ratio_table() and _score_codon_bias_numba()
+# ===========================================================================
+
+
+class TestBuildCodonLogRatioTable:
+    _CODING_SEQS    = [{"sequence": "ATG" + "CAG" * 30 + "TAA"}] * 5
+    _NONCODING_SEQS = [{"sequence": "GGG" * 31}] * 5
+
+    @pytest.fixture(scope="class")
+    def models(self):
+        c  = build_codon_model(self._CODING_SEQS)
+        bg = build_codon_model(self._NONCODING_SEQS)
+        return c, bg
+
+    @pytest.fixture(scope="class")
+    def table(self, models):
+        return build_codon_log_ratio_table(*models)
+
+    def test_returns_numpy_array(self, table):
+        import numpy as np
+        assert isinstance(table, np.ndarray)
+
+    def test_shape_is_64(self, table):
+        assert table.shape == (64,)
+
+    def test_all_values_are_finite(self, table):
+        import numpy as np
+        assert np.all(np.isfinite(table))
+
+    def test_neutral_for_unseen_codon(self):
+        # Empty models → all unseen → all entries = log(1e-4) - log(1e-4) = 0.0
+        table = build_codon_log_ratio_table({}, {})
+        assert (table == 0.0).all()
+
+    def test_known_codon_has_nonzero_ratio(self, table):
+        # CAG is in coding but not noncoding → ratio should be nonzero
+        assert any(v != 0.0 for v in table)
+
+    def test_atg_index(self, models):
+        # ATG: A=0, T=3, G=2 → 0*16 + 3*4 + 2 = 14
+        c, bg = models
+        table = build_codon_log_ratio_table(c, bg)
+        c_freq  = c.get("ATG",  1e-4)
+        bg_freq = bg.get("ATG", 1e-4)
+        expected = math.log(c_freq) - math.log(bg_freq)
+        assert abs(table[14] - expected) < 1e-12
+
+
+@pytest.mark.skipif(not _NUMBA_AVAILABLE, reason="numba not installed")
+class TestScoreCodonBiasNumba:
+    _CODING_SEQS    = [{"sequence": "ATG" + "CAG" * 30 + "TAA"}] * 5
+    _NONCODING_SEQS = [{"sequence": "GGG" * 31}] * 5
+
+    @pytest.fixture(scope="class")
+    def setup(self):
+        from src.traditional_methods import _score_codon_bias_numba
+        c  = build_codon_model(self._CODING_SEQS)
+        bg = build_codon_model(self._NONCODING_SEQS)
+        tbl = build_codon_log_ratio_table(c, bg)
+        return c, bg, tbl, _score_codon_bias_numba
+
+    def test_empty_sequence_returns_zero(self, setup):
+        import numpy as np
+        _, _, tbl, fn = setup
+        assert fn(np.array([], dtype=np.int32), tbl) == 0.0
+
+    def test_all_n_returns_zero(self, setup):
+        _, _, tbl, fn = setup
+        arr = _seq_to_int_fast("NNN" * 10)
+        assert fn(arr, tbl) == 0.0
+
+    def test_returns_float(self, setup):
+        _, _, tbl, fn = setup
+        result = fn(_seq_to_int_fast("ATG" + "CAG" * 10 + "TAA"), tbl)
+        assert isinstance(float(result), float)
+
+    def test_identical_to_score_codon_bias_ratio_on_coding_seq(self, setup):
+        """Regression: Numba path must produce same result as Python fallback."""
+        c, bg, tbl, fn = setup
+        seq = "ATG" + "CAG" * 20 + "TAA"
+        old = score_codon_bias_ratio(seq, c, bg)
+        new = float(fn(_seq_to_int_fast(seq), tbl))
+        assert old == pytest.approx(new, abs=1e-10)
+
+    def test_identical_to_score_codon_bias_ratio_on_noncoding_seq(self, setup):
+        c, bg, tbl, fn = setup
+        seq = "GGG" * 30
+        old = score_codon_bias_ratio(seq, c, bg)
+        new = float(fn(_seq_to_int_fast(seq), tbl))
+        assert old == pytest.approx(new, abs=1e-10)
+
+    def test_identical_on_100_random_sequences(self, setup):
+        import random
+        random.seed(7)
+        c, bg, tbl, fn = setup
+        for _ in range(100):
+            seq = "".join(random.choice("ACGT") for _ in range(random.randint(9, 300)))
+            old = score_codon_bias_ratio(seq, c, bg)
+            new = float(fn(_seq_to_int_fast(seq), tbl))
+            assert old == pytest.approx(new, abs=1e-10), f"mismatch on {seq[:20]!r}"
+
+    def test_coding_scores_higher_than_noncoding(self, setup):
+        _, _, tbl, fn = setup
+        s_cod = float(fn(_seq_to_int_fast("ATG" + "CAG" * 20 + "TAA"), tbl))
+        s_non = float(fn(_seq_to_int_fast("GGG" * 20), tbl))
+        assert s_cod > s_non
 
 
 # ===========================================================================

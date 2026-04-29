@@ -14,9 +14,7 @@ from pathlib import Path
 from typing import Dict
 
 
-def validate_predictions(
-    pred_path: str, ref_path: str = None, genome_id: str = None
-) -> Dict:
+def validate_predictions(pred_path: str, ref_path: str = None, genome_id: str = None) -> Dict:
     """
     Validate predictions against reference annotations.
 

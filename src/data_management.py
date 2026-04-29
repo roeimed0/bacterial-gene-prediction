@@ -85,9 +85,7 @@ def download_genome_and_reference(
     else:
         print(f"Downloading genome {genome_id}...")
         try:
-            handle = Entrez.efetch(
-                db="nuccore", id=genome_id, rettype="fasta", retmode="text"
-            )
+            handle = Entrez.efetch(db="nuccore", id=genome_id, rettype="fasta", retmode="text")
             genome_record = SeqIO.read(handle, "fasta")
             handle.close()
 
@@ -105,9 +103,7 @@ def download_genome_and_reference(
     else:
         print("Downloading reference GFF...")
         try:
-            handle = Entrez.efetch(
-                db="nuccore", id=genome_id, rettype="gff3", retmode="text"
-            )
+            handle = Entrez.efetch(db="nuccore", id=genome_id, rettype="gff3", retmode="text")
             with open(gff_path, "w") as f:
                 f.write(handle.read())
             handle.close()
@@ -271,9 +267,7 @@ def download_all_test_genomes(
         print(f"\n[{i}/{len(TEST_GENOMES)}] Processing: {genome_id}")
         print("-" * 60)
 
-        fasta_path, gff_path = download_genome_and_reference(
-            genome_id, output_dir, email
-        )
+        fasta_path, gff_path = download_genome_and_reference(genome_id, output_dir, email)
 
         if fasta_path and gff_path:
             results[genome_id] = {"fasta": fasta_path, "gff": gff_path}
