@@ -1176,7 +1176,7 @@ def build_all_scoring_models(
     numba_coding_table = numba_noncoding_table = None
     codon_log_ratio_table = None
     if _NUMBA_AVAILABLE:
-        print(f"  Building Numba integer tables...")
+        print("  Building Numba integer tables...")
         numba_coding_table = build_numba_log_table(coding_log_table, estimated_order)
         numba_noncoding_table = build_numba_log_table(noncoding_log_table, estimated_order)
         codon_log_ratio_table = build_codon_log_ratio_table(codon_model, background_codon_model)
