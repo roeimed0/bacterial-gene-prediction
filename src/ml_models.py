@@ -233,8 +233,8 @@ class OrfGroupClassifier:
         # Extract feature matrix in the order the model was trained on
         X = df[model_features].values
 
-        # Get probabilities (probability of class 1 = real gene)
-        probabilities = self.model.predict_proba(X)[:, 1]
+        # Get probabilities — n_jobs=1 avoids a 1.3s loky cpu_count() call
+        probabilities = self.model.predict_proba(X, num_threads=1)[:, 1]
 
         # Apply threshold
         predictions = (probabilities >= threshold).astype(int)
@@ -667,6 +667,10 @@ class HybridGeneFilter:
         Returns:
             Filtered list of candidates
         """
+        # Accept DataFrame or List[Dict]
+        if hasattr(candidates, "to_dict"):
+            candidates = candidates.to_dict("records")
+
         preds, probs, gene_ids = self.predict(candidates, genome_id, threshold, batch_size)
 
         kept = []

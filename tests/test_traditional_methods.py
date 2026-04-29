@@ -95,9 +95,11 @@ def _make_normalized_orf(c=0.6, i=0.4, r=0.7, l=0.5, s=0.6):
 
 
 class TestFindOrfCandidates:
-    def test_returns_list(self):
+    def test_returns_dataframe(self):
+        import pandas as pd
+
         orfs = find_orfs_candidates(FORWARD_ONLY_SEQ)
-        assert isinstance(orfs, list)
+        assert isinstance(orfs, pd.DataFrame)
 
     def test_detects_at_least_one_forward_orf(self):
         orfs = find_orfs_candidates(FORWARD_ONLY_SEQ)
@@ -105,15 +107,14 @@ class TestFindOrfCandidates:
 
     def test_forward_orf_has_atg_start_codon(self):
         orfs = find_orfs_candidates(FORWARD_ONLY_SEQ)
-        forward_orfs = [o for o in orfs if o["strand"] == "forward"]
-        assert any(o["start_codon"] == "ATG" for o in forward_orfs)
+        forward_orfs = orfs[orfs["strand"] == "forward"]
+        assert (forward_orfs["start_codon"] == "ATG").any()
 
     def test_detects_reverse_strand_orf(self):
         orfs = find_orfs_candidates(REVERSE_STRAND_SEQ)
-        reverse_orfs = [o for o in orfs if o["strand"] == "reverse"]
-        assert len(reverse_orfs) >= 1
+        assert (orfs["strand"] == "reverse").sum() >= 1
 
-    def test_orf_has_required_keys(self):
+    def test_orf_has_required_columns(self):
         orfs = find_orfs_candidates(FORWARD_ONLY_SEQ)
         required = {
             "start",
@@ -127,40 +128,32 @@ class TestFindOrfCandidates:
             "sequence",
             "rbs_score",
         }
-        for orf in orfs:
-            assert required.issubset(orf.keys()), f"ORF missing keys: {required - orf.keys()}"
+        assert required.issubset(set(orfs.columns))
 
     def test_start_codon_is_valid(self):
         orfs = find_orfs_candidates(FORWARD_ONLY_SEQ)
-        valid = {"ATG", "GTG", "TTG"}
-        for orf in orfs:
-            assert orf["start_codon"] in valid
+        assert orfs["start_codon"].isin({"ATG", "GTG", "TTG"}).all()
 
     def test_strand_is_forward_or_reverse(self):
         orfs = find_orfs_candidates(FORWARD_ONLY_SEQ)
-        for orf in orfs:
-            assert orf["strand"] in {"forward", "reverse"}
+        assert orfs["strand"].isin({"forward", "reverse"}).all()
 
     def test_all_orfs_meet_minimum_length(self):
         orfs = find_orfs_candidates(FORWARD_ONLY_SEQ, min_length=100)
-        for orf in orfs:
-            assert orf["length"] >= 100
+        assert (orfs["length"] >= 100).all()
 
     def test_length_matches_coordinate_span(self):
         orfs = find_orfs_candidates(FORWARD_ONLY_SEQ)
-        for orf in orfs:
-            assert orf["end"] - orf["start"] + 1 == orf["length"]
+        assert ((orfs["end"] - orfs["start"] + 1) == orfs["length"]).all()
 
-    def test_sequence_too_short_returns_empty_list(self):
-        # 21 bp ORF — well below default min_length=100
+    def test_sequence_too_short_returns_empty_dataframe(self):
         short_seq = "ATG" + "CAG" * 5 + "TAA"
         orfs = find_orfs_candidates(short_seq, min_length=100)
-        assert orfs == []
+        assert len(orfs) == 0
 
     def test_rbs_score_is_numeric(self):
         orfs = find_orfs_candidates(FORWARD_ONLY_SEQ)
-        for orf in orfs:
-            assert isinstance(orf["rbs_score"], (int, float))
+        assert orfs["rbs_score"].dtype.kind == "f"
 
 
 # ===========================================================================
@@ -898,42 +891,37 @@ class TestNormalizeAllOrfScores:
             _make_scored_orf(codon=1.5, imm=0.8, rbs=3.0, length=1.2, start=1.0),
         ]
 
-    def test_returns_list(self):
-        result = normalize_all_orf_scores(self._make_orfs())
-        assert isinstance(result, list)
+    def test_returns_dataframe(self):
+        import pandas as pd
 
-    def test_normalized_keys_added(self):
-        orfs = self._make_orfs()
-        normalize_all_orf_scores(orfs)
-        expected = {
+        result = normalize_all_orf_scores(self._make_orfs())
+        assert isinstance(result, pd.DataFrame)
+
+    def test_normalized_columns_added(self):
+        result = normalize_all_orf_scores(self._make_orfs())
+        for col in (
             "codon_score_norm",
             "imm_score_norm",
             "rbs_score_norm",
             "length_score_norm",
             "start_score_norm",
-        }
-        for orf in orfs:
-            assert expected.issubset(orf.keys())
+        ):
+            assert col in result.columns
 
     def test_normalized_scores_have_near_zero_mean(self):
-        orfs = self._make_orfs()
-        normalize_all_orf_scores(orfs)
-        codon_norms = [o["codon_score_norm"] for o in orfs]
-        assert abs(np.mean(codon_norms)) < 1e-6
+        result = normalize_all_orf_scores(self._make_orfs())
+        assert abs(result["codon_score_norm"].mean()) < 1e-6
 
     def test_identical_scores_normalize_to_zero(self):
-        # When std == 0, z-score should be 0 for all
         orfs = [_make_scored_orf(codon=1.0) for _ in range(3)]
-        normalize_all_orf_scores(orfs)
-        for orf in orfs:
-            assert orf["codon_score_norm"] == 0.0
+        result = normalize_all_orf_scores(orfs)
+        assert (result["codon_score_norm"] == 0.0).all()
 
     def test_raw_scores_preserved_after_normalization(self):
         orfs = self._make_orfs()
         originals = [o["codon_score"] for o in orfs]
-        normalize_all_orf_scores(orfs)
-        for orf, original in zip(orfs, originals):
-            assert orf["codon_score"] == original
+        result = normalize_all_orf_scores(orfs)
+        assert list(result["codon_score"]) == originals
 
 
 # ===========================================================================
@@ -942,26 +930,24 @@ class TestNormalizeAllOrfScores:
 
 
 class TestAddCombinedScores:
-    def test_returns_list(self):
-        orfs = [_make_normalized_orf()]
-        assert isinstance(add_combined_scores(orfs), list)
+    def test_returns_dataframe(self):
+        import pandas as pd
 
-    def test_combined_score_key_added(self):
-        orfs = [_make_normalized_orf() for _ in range(3)]
-        add_combined_scores(orfs)
-        for orf in orfs:
-            assert "combined_score" in orf
+        result = add_combined_scores([_make_normalized_orf()])
+        assert isinstance(result, pd.DataFrame)
+
+    def test_combined_score_column_added(self):
+        result = add_combined_scores([_make_normalized_orf() for _ in range(3)])
+        assert "combined_score" in result.columns
 
     def test_combined_score_is_float(self):
-        orfs = [_make_normalized_orf()]
-        add_combined_scores(orfs)
-        assert isinstance(orfs[0]["combined_score"], float)
+        result = add_combined_scores([_make_normalized_orf()])
+        assert result["combined_score"].dtype.kind == "f"
 
     def test_combined_score_equals_default_weighted_sum(self):
         from src.config import SCORE_WEIGHTS
 
-        orf = _make_normalized_orf(c=1.0, i=2.0, r=3.0, l=4.0, s=5.0)
-        add_combined_scores([orf])
+        result = add_combined_scores([_make_normalized_orf(c=1.0, i=2.0, r=3.0, l=4.0, s=5.0)])
         expected = (
             1.0 * SCORE_WEIGHTS["codon"]
             + 2.0 * SCORE_WEIGHTS["imm"]
@@ -969,25 +955,23 @@ class TestAddCombinedScores:
             + 4.0 * SCORE_WEIGHTS["length"]
             + 5.0 * SCORE_WEIGHTS["start"]
         )
-        assert abs(orf["combined_score"] - expected) < 1e-9
+        assert abs(result.iloc[0]["combined_score"] - expected) < 1e-9
 
     def test_custom_weights_applied(self):
-        weights = {
-            "codon": 2.0,
-            "imm": 0.0,
-            "rbs": 0.0,
-            "length": 0.0,
-            "start": 0.0,
-        }
-        orf = _make_normalized_orf(c=3.0, i=99.0, r=99.0, l=99.0, s=99.0)
-        add_combined_scores([orf], weights=weights)
-        assert abs(orf["combined_score"] - 6.0) < 1e-9  # 2.0 * 3.0
+        weights = {"codon": 2.0, "imm": 0.0, "rbs": 0.0, "length": 0.0, "start": 0.0}
+        result = add_combined_scores(
+            [_make_normalized_orf(c=3.0, i=99.0, r=99.0, l=99.0, s=99.0)], weights=weights
+        )
+        assert abs(result.iloc[0]["combined_score"] - 6.0) < 1e-9
 
     def test_higher_component_scores_yield_higher_combined_score(self):
-        orf_low = _make_normalized_orf(c=0.0, i=0.0, r=0.0, l=0.0, s=0.0)
-        orf_high = _make_normalized_orf(c=1.0, i=1.0, r=1.0, l=1.0, s=1.0)
-        add_combined_scores([orf_low, orf_high])
-        assert orf_high["combined_score"] > orf_low["combined_score"]
+        result = add_combined_scores(
+            [
+                _make_normalized_orf(c=0.0, i=0.0, r=0.0, l=0.0, s=0.0),
+                _make_normalized_orf(c=1.0, i=1.0, r=1.0, l=1.0, s=1.0),
+            ]
+        )
+        assert result.iloc[1]["combined_score"] > result.iloc[0]["combined_score"]
 
 
 # ===========================================================================

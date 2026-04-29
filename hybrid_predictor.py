@@ -14,7 +14,8 @@ import argparse
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List
+
+import pandas as pd
 
 script_dir = Path(__file__).parent.resolve()
 src_dir = script_dir / "src"
@@ -718,11 +719,12 @@ def predict_fasta_file(
         raise
 
 
-def write_gff(predictions: List[Dict], output_path: str, sequence_id: str = "sequence"):
-    """Write predictions to GFF3 format."""
+def write_gff(predictions, output_path: str, sequence_id: str = "sequence"):
+    """Write predictions to GFF3 format. Accepts List[Dict] or DataFrame."""
+    rows = predictions.to_dict("records") if isinstance(predictions, pd.DataFrame) else predictions
     with open(output_path, "w") as f:
         f.write("##gff-version 3\n")
-        for i, pred in enumerate(predictions, 1):
+        for i, pred in enumerate(rows, 1):
             start = pred.get("genome_start", pred.get("start"))
             end = pred.get("genome_end", pred.get("end"))
             strand = "+" if pred.get("strand") == "forward" else "-"
