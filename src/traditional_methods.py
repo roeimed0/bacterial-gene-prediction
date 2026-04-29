@@ -12,6 +12,7 @@ This module implements classic (non-ML) approaches to bacterial gene prediction:
 These methods form the foundation of programs like Glimmer, GeneMark, and Prodigal.
 """
 
+import bisect
 import itertools
 import math
 import time
@@ -496,12 +497,18 @@ def find_orfs_candidates(sequence: str, min_length: int = 100) -> List[Dict]:
 def select_training_glimmer(
     all_orfs: List[Dict], min_length: int = 300, max_training_size: int = 2000
 ) -> List[Dict]:
-    """GLIMMER Pure - select long, non-overlapping ORFs."""
+    """GLIMMER Pure - select long, non-overlapping ORFs.
+
+    Overlap check is O(log k) via bisect on the sorted start-position list.
+    For non-overlapping intervals stored in start order, the end positions are
+    also sorted, so two bisect probes suffice to rule out any overlap.
+    """
     long_orfs = [orf for orf in all_orfs if orf["length"] >= min_length]
     long_orfs.sort(key=lambda x: x["length"], reverse=True)
 
     training_set = []
-    covered_intervals = []
+    cov_starts: List[int] = []  # sorted start positions of covered intervals
+    cov_ends: List[int] = []  # cov_ends[i] is the end of the interval at cov_starts[i]
 
     for orf in long_orfs:
         start = orf.get("genome_start", orf["start"])
@@ -509,15 +516,20 @@ def select_training_glimmer(
         if start > end:
             start, end = end, start
 
-        overlaps = False
-        for cov_start, cov_end in covered_intervals:
-            if not (end < cov_start or start > cov_end):
-                overlaps = True
-                break
+        # Find where this interval would be inserted (by start position)
+        i = bisect.bisect_left(cov_starts, start)
+
+        # Check overlap with the predecessor (its end must be < our start)
+        overlaps = (i > 0 and cov_ends[i - 1] >= start) or (
+            # Check overlap with the successor (its start must be > our end)
+            i < len(cov_starts)
+            and cov_starts[i] <= end
+        )
 
         if not overlaps:
             training_set.append(orf)
-            covered_intervals.append((start, end))
+            cov_starts.insert(i, start)
+            cov_ends.insert(i, end)
             if max_training_size is not None and len(training_set) >= max_training_size:
                 break
 
@@ -532,8 +544,12 @@ def select_training_flexible(
     max_overlap_fraction: float = 0.3,
     prefer_atg: bool = True,
 ) -> List[Dict]:
-    """Flexible training set selection with controlled overlap."""
+    """Flexible training set selection with controlled overlap.
 
+    Overlap check is O(log k) on average via bisect: we find the rightmost
+    interval whose start ≤ candidate_end, then walk left only until we reach
+    an interval whose end < candidate_start (no further overlap possible).
+    """
     filtered = [orf for orf in all_orfs if min_length <= orf["length"] <= max_length]
 
     if prefer_atg:
@@ -548,6 +564,8 @@ def select_training_flexible(
         candidates = sorted(filtered, key=lambda x: x["length"], reverse=True)
 
     selected = []
+    # Per-strand sorted list of (start, end) for O(log k) lookup
+    strand_ivs: Dict[str, List[Tuple[int, int]]] = {"forward": [], "reverse": []}
 
     for orf in candidates:
         orf_start = orf.get("genome_start", orf["start"])
@@ -557,24 +575,23 @@ def select_training_flexible(
 
         orf_strand = orf.get("strand", "forward")
         orf_length = orf["length"]
+        ivs = strand_ivs[orf_strand]
 
+        # Find rightmost interval with start ≤ orf_end
+        i = bisect.bisect_right(ivs, (orf_end, orf_end)) - 1
         max_overlap = 0.0
-        for sel in selected:
-            if sel.get("strand", "forward") != orf_strand:
-                continue
-
-            sel_start = sel.get("genome_start", sel["start"])
-            sel_end = sel.get("genome_end", sel["end"])
-            if sel_start > sel_end:
-                sel_start, sel_end = sel_end, sel_start
-
+        while i >= 0:
+            sel_start, sel_end = ivs[i]
+            if sel_end < orf_start:
+                break  # this and all earlier intervals end before us — no overlap
             overlap_bp = max(0, min(orf_end, sel_end) - max(orf_start, sel_start) + 1)
-            overlap_frac = overlap_bp / orf_length
-            max_overlap = max(max_overlap, overlap_frac)
+            max_overlap = max(max_overlap, overlap_bp / orf_length)
+            i -= 1
 
         if max_overlap <= max_overlap_fraction:
             selected.append(orf)
-
+            pos = bisect.bisect_left(ivs, (orf_start, orf_end))
+            ivs.insert(pos, (orf_start, orf_end))
             if len(selected) >= target_size:
                 break
 

@@ -12,10 +12,10 @@ Covers:
   - add_combined_scores()
 """
 
+import math
+
 import numpy as np
 import pytest
-
-import math
 
 from src.traditional_methods import (
     _ASCII_TO_INT,
@@ -35,6 +35,8 @@ from src.traditional_methods import (
     predict_rbs_simple,
     score_codon_bias_ratio,
     score_imm_ratio,
+    select_training_flexible,
+    select_training_glimmer,
 )
 
 # ---------------------------------------------------------------------------
@@ -126,9 +128,7 @@ class TestFindOrfCandidates:
             "rbs_score",
         }
         for orf in orfs:
-            assert required.issubset(
-                orf.keys()
-            ), f"ORF missing keys: {required - orf.keys()}"
+            assert required.issubset(orf.keys()), f"ORF missing keys: {required - orf.keys()}"
 
     def test_start_codon_is_valid(self):
         orfs = find_orfs_candidates(FORWARD_ONLY_SEQ)
@@ -257,9 +257,7 @@ class TestScoreCodonBiasRatio:
     _GGG_SEQ = "GGG" * 20  # matches background model
 
     def test_returns_float(self):
-        score = score_codon_bias_ratio(
-            self._CAG_SEQ, self._CODING_MODEL, self._BG_MODEL
-        )
+        score = score_codon_bias_ratio(self._CAG_SEQ, self._CODING_MODEL, self._BG_MODEL)
         assert isinstance(score, float)
 
     def test_empty_sequence_returns_zero(self):
@@ -269,18 +267,12 @@ class TestScoreCodonBiasRatio:
         assert score_codon_bias_ratio("AT", self._CODING_MODEL, self._BG_MODEL) == 0.0
 
     def test_coding_like_sequence_scores_positive(self):
-        score = score_codon_bias_ratio(
-            self._CAG_SEQ, self._CODING_MODEL, self._BG_MODEL
-        )
+        score = score_codon_bias_ratio(self._CAG_SEQ, self._CODING_MODEL, self._BG_MODEL)
         assert score > 0
 
     def test_coding_sequence_scores_higher_than_noncoding(self):
-        coding_score = score_codon_bias_ratio(
-            self._CAG_SEQ, self._CODING_MODEL, self._BG_MODEL
-        )
-        bg_score = score_codon_bias_ratio(
-            self._GGG_SEQ, self._CODING_MODEL, self._BG_MODEL
-        )
+        coding_score = score_codon_bias_ratio(self._CAG_SEQ, self._CODING_MODEL, self._BG_MODEL)
+        bg_score = score_codon_bias_ratio(self._GGG_SEQ, self._CODING_MODEL, self._BG_MODEL)
         assert coding_score > bg_score
 
 
@@ -313,8 +305,7 @@ class TestBuildInterpolatedMarkovModel:
             for context, dist in pos_model.items():
                 total = sum(dist.values())
                 assert abs(total - 1.0) < 1e-6, (
-                    f"Position {pos_idx}, context '{context}': "
-                    f"probabilities sum to {total}"
+                    f"Position {pos_idx}, context '{context}': " f"probabilities sum to {total}"
                 )
 
     def test_all_probabilities_non_negative(self):
@@ -349,26 +340,18 @@ class TestScoreImmRatio:
 
     def test_returns_float(self):
         coding_imm = build_interpolated_markov_model(self._CODING_SEQS, max_order=2)
-        noncoding_imm = build_interpolated_markov_model(
-            self._NONCODING_SEQS, max_order=2
-        )
-        score = score_imm_ratio(
-            "ATG" + "CAG" * 10 + "TAA", coding_imm, noncoding_imm, max_order=2
-        )
+        noncoding_imm = build_interpolated_markov_model(self._NONCODING_SEQS, max_order=2)
+        score = score_imm_ratio("ATG" + "CAG" * 10 + "TAA", coding_imm, noncoding_imm, max_order=2)
         assert isinstance(score, float)
 
     def test_sequence_shorter_than_three_returns_zero(self):
         coding_imm = build_interpolated_markov_model(self._CODING_SEQS, max_order=2)
-        noncoding_imm = build_interpolated_markov_model(
-            self._NONCODING_SEQS, max_order=2
-        )
+        noncoding_imm = build_interpolated_markov_model(self._NONCODING_SEQS, max_order=2)
         assert score_imm_ratio("AT", coding_imm, noncoding_imm, max_order=2) == 0.0
 
     def test_coding_like_sequence_scores_higher_than_noncoding(self):
         coding_imm = build_interpolated_markov_model(self._CODING_SEQS, max_order=2)
-        noncoding_imm = build_interpolated_markov_model(
-            self._NONCODING_SEQS, max_order=2
-        )
+        noncoding_imm = build_interpolated_markov_model(self._NONCODING_SEQS, max_order=2)
         coding_score = score_imm_ratio(
             "ATG" + "CAG" * 20 + "TAA", coding_imm, noncoding_imm, max_order=2
         )
@@ -412,16 +395,15 @@ class TestScoreImmRatio:
         results = {}
 
         def run(name, coding, noncoding):
-            scores = [
-                score_imm_ratio(test_seq, coding, noncoding, max_order=2)
-                for _ in range(100)
-            ]
+            scores = [score_imm_ratio(test_seq, coding, noncoding, max_order=2) for _ in range(100)]
             results[name] = scores
 
         t1 = threading.Thread(target=run, args=("a", coding_a, noncoding_a))
         t2 = threading.Thread(target=run, args=("b", coding_b, noncoding_b))
-        t1.start(); t2.start()
-        t1.join(); t2.join()
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
 
         assert all(s > 0 for s in results["a"]), "Thread A: all scores should be positive"
         assert all(s < 0 for s in results["b"]), "Thread B: all scores should be negative"
@@ -435,7 +417,7 @@ class TestScoreImmRatio:
 class TestBuildFlatLogTable:
     """Tests for the pre-baked IMM log-probability table (Fix A optimisation)."""
 
-    _CODING_SEQS   = ["ATG" + "CAG" * 30 + "TAA"] * 5
+    _CODING_SEQS = ["ATG" + "CAG" * 30 + "TAA"] * 5
     _NONCODING_SEQS = ["GGG" * 31] * 5
     _MAX_ORDER = 2
 
@@ -481,6 +463,7 @@ class TestBuildFlatLogTable:
     def test_log_value_matches_manual_log_of_probability(self, imm_model, log_table):
         """Pre-baked log value must equal math.log(probability) from the model directly."""
         from src.traditional_methods import _interpolate_prob
+
         for pos in range(3):
             for nuc in ("A", "C", "G", "T"):
                 key = nuc  # empty context
@@ -511,15 +494,15 @@ class TestBuildFlatLogTable:
 class TestScoreImmFast:
     """Tests for the fast IMM scoring path using pre-baked log tables."""
 
-    _CODING_SEQS    = ["ATG" + "CAG" * 30 + "TAA"] * 5
+    _CODING_SEQS = ["ATG" + "CAG" * 30 + "TAA"] * 5
     _NONCODING_SEQS = ["GGG" * 31] * 5
     _MAX_ORDER = 2
 
     @pytest.fixture(scope="class")
     def models(self):
-        coding_imm   = build_interpolated_markov_model(self._CODING_SEQS,    self._MAX_ORDER)
+        coding_imm = build_interpolated_markov_model(self._CODING_SEQS, self._MAX_ORDER)
         noncoding_imm = build_interpolated_markov_model(self._NONCODING_SEQS, self._MAX_ORDER)
-        coding_log   = build_flat_log_table(coding_imm,    self._MAX_ORDER)
+        coding_log = build_flat_log_table(coding_imm, self._MAX_ORDER)
         noncoding_log = build_flat_log_table(noncoding_imm, self._MAX_ORDER)
         return coding_imm, noncoding_imm, coding_log, noncoding_log
 
@@ -560,6 +543,7 @@ class TestScoreImmFast:
     def test_identical_on_100_random_sequences(self, models):
         """Regression: scores must match for all sequence types."""
         import random
+
         random.seed(42)
         clear_imm_cache()
         coding_imm, noncoding_imm, c_log, nc_log = models
@@ -573,7 +557,7 @@ class TestScoreImmFast:
     def test_coding_scores_higher_than_noncoding(self, models):
         """Sanity: ATG-rich coding-like sequence scores higher than GGG noncoding."""
         _, _, c_log, nc_log = models
-        coding_score   = _score_imm_fast("ATG" + "CAG" * 20 + "TAA", c_log, nc_log, self._MAX_ORDER)
+        coding_score = _score_imm_fast("ATG" + "CAG" * 20 + "TAA", c_log, nc_log, self._MAX_ORDER)
         noncoding_score = _score_imm_fast("GGG" * 20, c_log, nc_log, self._MAX_ORDER)
         assert coding_score > noncoding_score
 
@@ -603,6 +587,7 @@ class TestSeqToIntFast:
 
     def test_output_dtype_is_int32(self):
         import numpy as np
+
         arr = _seq_to_int_fast("ACGT")
         assert arr.dtype == np.int32
 
@@ -619,6 +604,7 @@ class TestSeqToIntFast:
     def test_lut_default_is_four_for_unknown(self):
         # Every entry not explicitly set should be 4
         import numpy as np
+
         other_indices = [i for i in range(128) if i not in (65, 67, 71, 84)]
         assert all(_ASCII_TO_INT[i] == 4 for i in other_indices)
 
@@ -626,15 +612,15 @@ class TestSeqToIntFast:
         seq = "ATG" + "CAG" * 10 + "TAA"
         arr = _seq_to_int_fast(seq)
         assert len(arr) == len(seq)
-        assert arr[0] == 0   # A
-        assert arr[1] == 3   # T
-        assert arr[2] == 2   # G
+        assert arr[0] == 0  # A
+        assert arr[1] == 3  # T
+        assert arr[2] == 2  # G
 
 
 class TestBuildNumbaLogTable:
     """Tests for the integer-indexed numpy log table."""
 
-    _CODING_SEQS    = ["ATG" + "CAG" * 30 + "TAA"] * 5
+    _CODING_SEQS = ["ATG" + "CAG" * 30 + "TAA"] * 5
     _MAX_ORDER = 2
 
     @pytest.fixture(scope="class")
@@ -648,6 +634,7 @@ class TestBuildNumbaLogTable:
 
     def test_returns_numpy_array(self, numba_table):
         import numpy as np
+
         assert isinstance(numba_table, np.ndarray)
 
     def test_shape_is_positions_by_entries(self, numba_table):
@@ -671,23 +658,25 @@ class TestBuildNumbaLogTable:
 class TestScoreImmNumba:
     """Regression tests for the Numba JIT scoring path."""
 
-    _CODING_SEQS    = ["ATG" + "CAG" * 30 + "TAA"] * 5
+    _CODING_SEQS = ["ATG" + "CAG" * 30 + "TAA"] * 5
     _NONCODING_SEQS = ["GGG" * 31] * 5
     _MAX_ORDER = 2
 
     @pytest.fixture(scope="class")
     def tables(self):
         from src.traditional_methods import _score_imm_numba
-        coding_imm    = build_interpolated_markov_model(self._CODING_SEQS,    self._MAX_ORDER)
+
+        coding_imm = build_interpolated_markov_model(self._CODING_SEQS, self._MAX_ORDER)
         noncoding_imm = build_interpolated_markov_model(self._NONCODING_SEQS, self._MAX_ORDER)
-        flat_c  = build_flat_log_table(coding_imm,    self._MAX_ORDER)
+        flat_c = build_flat_log_table(coding_imm, self._MAX_ORDER)
         flat_nc = build_flat_log_table(noncoding_imm, self._MAX_ORDER)
-        c_tbl   = build_numba_log_table(flat_c,  self._MAX_ORDER)
-        nc_tbl  = build_numba_log_table(flat_nc, self._MAX_ORDER)
+        c_tbl = build_numba_log_table(flat_c, self._MAX_ORDER)
+        nc_tbl = build_numba_log_table(flat_nc, self._MAX_ORDER)
         return coding_imm, noncoding_imm, c_tbl, nc_tbl, _score_imm_numba
 
     def test_short_sequence_returns_zero(self, tables):
         import numpy as np
+
         _, _, c_tbl, nc_tbl, fn = tables
         arr = np.array([0, 1], dtype=np.int32)
         assert fn(arr, c_tbl, nc_tbl, self._MAX_ORDER, _LOG_EPSILON) == 0.0
@@ -710,6 +699,7 @@ class TestScoreImmNumba:
 
     def test_identical_on_100_random_sequences(self, tables):
         import random
+
         random.seed(99)
         coding_imm, noncoding_imm, c_tbl, nc_tbl, fn = tables
         clear_imm_cache()
@@ -721,16 +711,25 @@ class TestScoreImmNumba:
 
     def test_coding_scores_higher_than_noncoding(self, tables):
         _, _, c_tbl, nc_tbl, fn = tables
-        s_cod = float(fn(_seq_to_int_fast("ATG" + "CAG" * 20 + "TAA"),
-                         c_tbl, nc_tbl, self._MAX_ORDER, _LOG_EPSILON))
-        s_non = float(fn(_seq_to_int_fast("GGG" * 20),
-                         c_tbl, nc_tbl, self._MAX_ORDER, _LOG_EPSILON))
+        s_cod = float(
+            fn(
+                _seq_to_int_fast("ATG" + "CAG" * 20 + "TAA"),
+                c_tbl,
+                nc_tbl,
+                self._MAX_ORDER,
+                _LOG_EPSILON,
+            )
+        )
+        s_non = float(
+            fn(_seq_to_int_fast("GGG" * 20), c_tbl, nc_tbl, self._MAX_ORDER, _LOG_EPSILON)
+        )
         assert s_cod > s_non
 
     def test_unknown_nucleotide_no_crash(self, tables):
         _, _, c_tbl, nc_tbl, fn = tables
-        result = float(fn(_seq_to_int_fast("ATGNNNNTAA" * 5),
-                          c_tbl, nc_tbl, self._MAX_ORDER, _LOG_EPSILON))
+        result = float(
+            fn(_seq_to_int_fast("ATGNNNNTAA" * 5), c_tbl, nc_tbl, self._MAX_ORDER, _LOG_EPSILON)
+        )
         assert not math.isnan(result) and not math.isinf(result)
 
 
@@ -740,12 +739,12 @@ class TestScoreImmNumba:
 
 
 class TestBuildCodonLogRatioTable:
-    _CODING_SEQS    = [{"sequence": "ATG" + "CAG" * 30 + "TAA"}] * 5
+    _CODING_SEQS = [{"sequence": "ATG" + "CAG" * 30 + "TAA"}] * 5
     _NONCODING_SEQS = [{"sequence": "GGG" * 31}] * 5
 
     @pytest.fixture(scope="class")
     def models(self):
-        c  = build_codon_model(self._CODING_SEQS)
+        c = build_codon_model(self._CODING_SEQS)
         bg = build_codon_model(self._NONCODING_SEQS)
         return c, bg
 
@@ -755,6 +754,7 @@ class TestBuildCodonLogRatioTable:
 
     def test_returns_numpy_array(self, table):
         import numpy as np
+
         assert isinstance(table, np.ndarray)
 
     def test_shape_is_64(self, table):
@@ -762,6 +762,7 @@ class TestBuildCodonLogRatioTable:
 
     def test_all_values_are_finite(self, table):
         import numpy as np
+
         assert np.all(np.isfinite(table))
 
     def test_neutral_for_unseen_codon(self):
@@ -777,7 +778,7 @@ class TestBuildCodonLogRatioTable:
         # ATG: A=0, T=3, G=2 → 0*16 + 3*4 + 2 = 14
         c, bg = models
         table = build_codon_log_ratio_table(c, bg)
-        c_freq  = c.get("ATG",  1e-4)
+        c_freq = c.get("ATG", 1e-4)
         bg_freq = bg.get("ATG", 1e-4)
         expected = math.log(c_freq) - math.log(bg_freq)
         assert abs(table[14] - expected) < 1e-12
@@ -785,19 +786,21 @@ class TestBuildCodonLogRatioTable:
 
 @pytest.mark.skipif(not _NUMBA_AVAILABLE, reason="numba not installed")
 class TestScoreCodonBiasNumba:
-    _CODING_SEQS    = [{"sequence": "ATG" + "CAG" * 30 + "TAA"}] * 5
+    _CODING_SEQS = [{"sequence": "ATG" + "CAG" * 30 + "TAA"}] * 5
     _NONCODING_SEQS = [{"sequence": "GGG" * 31}] * 5
 
     @pytest.fixture(scope="class")
     def setup(self):
         from src.traditional_methods import _score_codon_bias_numba
-        c  = build_codon_model(self._CODING_SEQS)
+
+        c = build_codon_model(self._CODING_SEQS)
         bg = build_codon_model(self._NONCODING_SEQS)
         tbl = build_codon_log_ratio_table(c, bg)
         return c, bg, tbl, _score_codon_bias_numba
 
     def test_empty_sequence_returns_zero(self, setup):
         import numpy as np
+
         _, _, tbl, fn = setup
         assert fn(np.array([], dtype=np.int32), tbl) == 0.0
 
@@ -828,6 +831,7 @@ class TestScoreCodonBiasNumba:
 
     def test_identical_on_100_random_sequences(self, setup):
         import random
+
         random.seed(7)
         c, bg, tbl, fn = setup
         for _ in range(100):
@@ -946,3 +950,172 @@ class TestAddCombinedScores:
         orf_high = _make_normalized_orf(c=1.0, i=1.0, r=1.0, l=1.0, s=1.0)
         add_combined_scores([orf_low, orf_high])
         assert orf_high["combined_score"] > orf_low["combined_score"]
+
+
+# ===========================================================================
+# Tests: select_training_glimmer() and select_training_flexible() — issue #59
+# ===========================================================================
+
+
+def _make_orf(genome_start, genome_end, length=None, strand="forward", start_codon="ATG"):
+    if length is None:
+        length = genome_end - genome_start + 1
+    return {
+        "start": genome_start,
+        "end": genome_end,
+        "genome_start": genome_start,
+        "genome_end": genome_end,
+        "length": length,
+        "strand": strand,
+        "start_codon": start_codon,
+    }
+
+
+class TestSelectTrainingGlimmer:
+    def test_returns_list(self):
+        orfs = [_make_orf(1, 500, 500)]
+        assert isinstance(select_training_glimmer(orfs, min_length=300), list)
+
+    def test_empty_input_returns_empty(self):
+        assert select_training_glimmer([], min_length=300) == []
+
+    def test_short_orfs_excluded(self):
+        orfs = [_make_orf(1, 100, 100)]
+        assert select_training_glimmer(orfs, min_length=300) == []
+
+    def test_single_long_orf_selected(self):
+        orf = _make_orf(1, 500, 500)
+        result = select_training_glimmer([orf], min_length=300)
+        assert len(result) == 1
+        assert result[0]["genome_start"] == 1
+
+    def test_non_overlapping_orfs_all_selected(self):
+        orfs = [
+            _make_orf(1, 400, 400),
+            _make_orf(500, 900, 400),
+            _make_orf(1000, 1400, 400),
+        ]
+        result = select_training_glimmer(orfs, min_length=300)
+        assert len(result) == 3
+
+    def test_overlapping_shorter_orf_excluded(self):
+        long_orf = _make_orf(1, 800, 800)
+        short_orf = _make_orf(400, 700, 300)  # overlaps long_orf
+        result = select_training_glimmer([long_orf, short_orf], min_length=300)
+        assert len(result) == 1
+        assert result[0]["genome_start"] == 1
+
+    def test_respects_max_training_size(self):
+        orfs = [_make_orf(i * 500, i * 500 + 400, 400) for i in range(10)]
+        result = select_training_glimmer(orfs, min_length=300, max_training_size=3)
+        assert len(result) == 3
+
+    def test_selects_longest_first(self):
+        """Longest ORF wins when two intervals overlap."""
+        short = _make_orf(1, 400, 400)
+        long_ = _make_orf(200, 900, 700)  # overlaps short, but longer
+        result = select_training_glimmer([short, long_], min_length=300)
+        assert len(result) == 1
+        assert result[0]["genome_start"] == 200  # the longer one
+
+    def test_no_two_selected_orfs_overlap(self):
+        """Invariant: every pair of selected intervals must be non-overlapping."""
+        import random
+
+        random.seed(0)
+        orfs, pos = [], 1
+        for _ in range(500):
+            length = random.randint(100, 2000)
+            start = pos + random.randint(0, 200)
+            orfs.append(_make_orf(start, start + length - 1, length))
+            pos = start + length
+
+        result = select_training_glimmer(orfs, min_length=300)
+        intervals = sorted(
+            (o.get("genome_start", o["start"]), o.get("genome_end", o["end"])) for o in result
+        )
+        for i in range(len(intervals) - 1):
+            s1, e1 = intervals[i]
+            s2, e2 = intervals[i + 1]
+            assert e1 < s2, f"Overlap detected: [{s1},{e1}] and [{s2},{e2}]"
+
+
+class TestSelectTrainingFlexible:
+    def test_returns_list(self):
+        orfs = [_make_orf(1, 500, 500)]
+        assert isinstance(select_training_flexible(orfs, min_length=300), list)
+
+    def test_empty_input_returns_empty(self):
+        assert select_training_flexible([], min_length=300) == []
+
+    def test_out_of_range_orfs_excluded(self):
+        short = _make_orf(1, 100, 100)  # below min_length
+        long_ = _make_orf(1, 30000, 30000)  # above max_length
+        result = select_training_flexible([short, long_], min_length=300, max_length=2400)
+        assert result == []
+
+    def test_non_overlapping_orfs_all_selected(self):
+        orfs = [
+            _make_orf(1, 400, 400),
+            _make_orf(500, 900, 400),
+            _make_orf(1000, 1400, 400),
+        ]
+        result = select_training_flexible(orfs, min_length=300, target_size=10)
+        assert len(result) == 3
+
+    def test_heavy_overlap_excluded(self):
+        base = _make_orf(1, 800, 800)
+        # Overlaps 799/800 = 99.9% → exceeds max_overlap_fraction=0.3
+        heavy = _make_orf(2, 801, 800)
+        result = select_training_flexible([base, heavy], min_length=300, max_overlap_fraction=0.3)
+        assert len(result) == 1
+
+    def test_light_overlap_included(self):
+        base = _make_orf(1, 800, 800)
+        # 20 bp overlap on a 400 bp orf = 5% → below 0.3
+        light = _make_orf(781, 1180, 400)
+        result = select_training_flexible(
+            [base, light], min_length=300, max_overlap_fraction=0.3, target_size=10
+        )
+        assert len(result) == 2
+
+    def test_respects_target_size(self):
+        orfs = [_make_orf(i * 500, i * 500 + 400, 400) for i in range(20)]
+        result = select_training_flexible(orfs, min_length=300, target_size=5)
+        assert len(result) == 5
+
+    def test_max_overlap_fraction_never_exceeded(self):
+        """Invariant: every pair of same-strand selected intervals respects max_overlap_fraction."""
+        import random
+
+        random.seed(42)
+        max_frac = 0.3
+        orfs, pos = [], 1
+        for _ in range(500):
+            length = random.randint(300, 2400)
+            start = pos + random.randint(0, 100)
+            orfs.append(_make_orf(start, start + length - 1, length))
+            pos = start + length
+
+        result = select_training_flexible(orfs, min_length=300, max_overlap_fraction=max_frac)
+        for i, a in enumerate(result):
+            sa = a.get("genome_start", a["start"])
+            ea = a.get("genome_end", a["end"])
+            if sa > ea:
+                sa, ea = ea, sa
+            for b in result[i + 1 :]:
+                if b.get("strand", "forward") != a.get("strand", "forward"):
+                    continue
+                sb = b.get("genome_start", b["start"])
+                eb = b.get("genome_end", b["end"])
+                if sb > eb:
+                    sb, eb = eb, sb
+                overlap = max(0, min(ea, eb) - max(sa, sb) + 1)
+                frac_a = overlap / a["length"]
+                frac_b = overlap / b["length"]
+                assert (
+                    frac_a <= max_frac + 1e-9
+                ), f"Overlap fraction {frac_a:.3f} exceeds {max_frac}"
+                assert (
+                    frac_b <= max_frac + 1e-9
+                ), f"Overlap fraction {frac_b:.3f} exceeds {max_frac}"
