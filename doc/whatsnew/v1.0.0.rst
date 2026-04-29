@@ -93,6 +93,13 @@ Other enhancements
 .. ---------------------------------------------------------------------------
 .. _whatsnew_100.bug_fixes:
 
+Performance improvements
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Training set selection
+^^^^^^^^^^^^^^^^^^^^^^
+- Replaced O(n²) linear interval scan in :func:`select_training_glimmer` and :func:`select_training_flexible` with O(n log n) bisect-based lookup (:issue:`59`). For a 4.6 Mbp genome with 176K ORFs: ``select_training_glimmer`` 0.77 s → 0.06 s (12.6×); ``select_training_flexible`` 0.23 s → 0.08 s (2.9×); combined 1.00 s → 0.14 s (7.1×). Training sets are byte-identical to the previous implementation.
+
 Bug fixes
 ~~~~~~~~~
 
