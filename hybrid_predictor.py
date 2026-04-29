@@ -16,6 +16,8 @@ import sys
 from pathlib import Path
 from typing import Dict, List
 
+import pandas as pd
+
 script_dir = Path(__file__).parent.resolve()
 src_dir = script_dir / "src"
 sys.path.insert(0, str(src_dir))
@@ -720,8 +722,6 @@ def predict_fasta_file(
 
 def write_gff(predictions, output_path: str, sequence_id: str = "sequence"):
     """Write predictions to GFF3 format. Accepts List[Dict] or DataFrame."""
-    import pandas as pd
-
     rows = predictions.to_dict("records") if isinstance(predictions, pd.DataFrame) else predictions
     with open(output_path, "w") as f:
         f.write("##gff-version 3\n")
