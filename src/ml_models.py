@@ -233,8 +233,8 @@ class OrfGroupClassifier:
         # Extract feature matrix in the order the model was trained on
         X = df[model_features].values
 
-        # Get probabilities (probability of class 1 = real gene)
-        probabilities = self.model.predict_proba(X)[:, 1]
+        # Get probabilities — n_jobs=1 avoids a 1.3s loky cpu_count() call
+        probabilities = self.model.predict_proba(X, num_threads=1)[:, 1]
 
         # Apply threshold
         predictions = (probabilities >= threshold).astype(int)

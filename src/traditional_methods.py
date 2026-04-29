@@ -376,27 +376,24 @@ def score_motif_similarity(sequence: str) -> Tuple[float, str]:
     """Score sequence similarity to known RBS motifs."""
     best_score = 0.0
     best_motif = None
+    seq_len = len(sequence)  # cache once — was called 22M times inside loop
 
     for motif in KNOWN_RBS_MOTIFS:
-        for offset in range(max(len(sequence), len(motif))):
+        motif_len = len(motif)
+        motif_weight = motif_len / 6.0
+        for offset in range(max(seq_len, motif_len)):
             matches = 0
             total_positions = 0
 
-            for i in range(len(sequence)):
+            for i in range(seq_len):
                 motif_pos = i + offset
-                if 0 <= motif_pos < len(motif):
+                if 0 <= motif_pos < motif_len:
                     total_positions += 1
                     if sequence[i] == motif[motif_pos]:
                         matches += 1
 
             if total_positions > 0:
-                similarity = matches / total_positions
-
-                overlap_length = total_positions
-                motif_weight = len(motif) / 6.0
-
-                score = similarity * overlap_length * motif_weight
-
+                score = (matches / total_positions) * total_positions * motif_weight
                 if score > best_score:
                     best_score = score
                     best_motif = motif
