@@ -321,6 +321,44 @@ class TestBuildInterpolatedMarkovModel:
                 for nuc in dist:
                     assert len(nuc) == 1
 
+    def test_numba_output_identical_to_python_reference(self):
+        """Regression: Numba k-mer counter must produce byte-identical model to
+        the pure-Python triple-nested loop for sequences without N."""
+        from collections import defaultdict
+
+        def _python_ref(seqs, max_order, min_obs=10):
+            pm = [defaultdict(lambda: defaultdict(int)) for _ in range(3)]
+            for s in seqs:
+                for i in range(len(s)):
+                    nuc, cp = s[i], i % 3
+                    for order in range(min(i + 1, max_order + 1)):
+                        ctx = "" if order == 0 else s[i - order : i]
+                        pm[cp][ctx][nuc] += 1
+            result = []
+            for pos in range(3):
+                probs = {}
+                for ctx, counts in pm[pos].items():
+                    total = sum(counts.values())
+                    if total >= min_obs:
+                        probs[ctx] = {n: c / total for n, c in counts.items()}
+                result.append(probs)
+            return result
+
+        seqs = ["ATG" + "CAG" * 30 + "TAA"] * 10 + ["GGG" * 31] * 10
+        max_order = 3
+        old = _python_ref(seqs, max_order)
+        new = build_interpolated_markov_model(seqs, max_order)
+
+        for pos in range(3):
+            assert set(old[pos]) == set(new[pos]), f"Context key mismatch at position {pos}"
+            for ctx in old[pos]:
+                for nuc, p_old in old[pos][ctx].items():
+                    p_new = new[pos][ctx].get(nuc)
+                    assert p_new is not None and abs(p_old - p_new) < 1e-12, (
+                        f"Prob mismatch at pos={pos} ctx={ctx!r} nuc={nuc}: "
+                        f"old={p_old} new={p_new}"
+                    )
+
 
 # ===========================================================================
 # Tests: score_imm_ratio()

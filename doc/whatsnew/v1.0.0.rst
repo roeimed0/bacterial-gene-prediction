@@ -96,6 +96,10 @@ Other enhancements
 Performance improvements
 ~~~~~~~~~~~~~~~~~~~~~~~
 
+IMM model building
+^^^^^^^^^^^^^^^^^^
+- Replaced the O(total_bp × max_order) pure-Python triple-nested loop in :func:`build_interpolated_markov_model` with a ``@numba.njit`` k-mer counter (:func:`_count_imm_kmers`) that fills a ``(3, 87K)`` integer array in one pass (:issue:`87`). For E. coli K-12 training set (1,220 sequences, 1.8 Mbp): 2.50 s → 0.21 s (**12.2×**); probabilities byte-identical to the Python reference. Graceful fallback to pure-Python loop when numba is absent.
+
 ORF detection
 ^^^^^^^^^^^^^
 - Replaced pure-Python codon scanning loop in :func:`find_orfs_candidates` with a ``@numba.njit`` scanner (:func:`_scan_orfs_numba`) that encodes the sequence as int32, finds all ORF positions in a single JIT-compiled pass, and returns a numpy array for Python post-processing (:issue:`86`). For a 4.6 Mbp genome: 26 s → 5.85 s (**4.4×**); ORF count identical. Remaining cost is 176K :func:`predict_rbs_simple` calls (Python). Graceful fallback to the original pure-Python path when numba is absent.
