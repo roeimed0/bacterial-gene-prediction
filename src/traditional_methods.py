@@ -1602,10 +1602,8 @@ def select_best_starts(nested_groups: Dict, weights: Dict = None) -> pd.DataFram
 
     print(f"\nSelecting best start for {len(nested_groups):,} groups")
 
-    selected_orfs = []
     single_option = 0
     multiple_options = 0
-
     selected_parts = []
     for (strand, end), group_df in nested_groups.items():
         if len(group_df) == 1:
