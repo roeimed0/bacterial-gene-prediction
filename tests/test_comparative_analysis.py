@@ -23,12 +23,14 @@ from src.comparative_analysis import (
 
 _GFF_HEADER = "##gff-version 3\n"
 
-_GFF_LINES = textwrap.dedent("""\
+_GFF_LINES = textwrap.dedent(
+    """\
     ##gff-version 3
     NC_TEST\t.\tCDS\t100\t300\t.\t+\t0\t.
     NC_TEST\t.\tCDS\t500\t700\t.\t+\t0\t.
     NC_TEST\t.\tCDS\t900\t1100\t.\t-\t0\t.
-""")
+"""
+)
 
 # Three reference genes: (100,300), (500,700), (900,1100)
 _REF_COORDS = [(100, 300), (500, 700), (900, 1100)]
@@ -87,8 +89,8 @@ class TestCompareOrfsToReference:
             result = compare_orfs_to_reference(orfs, "NC_TEST")
 
         assert result["true_positives"] == 2
-        assert result["false_positives"] == 1   # (9999, 10000) is spurious
-        assert result["false_negatives"] == 1   # (900, 1100) was missed
+        assert result["false_positives"] == 1  # (9999, 10000) is spurious
+        assert result["false_negatives"] == 1  # (900, 1100) was missed
 
     def test_sensitivity_formula(self, tmp_path):
         """Sensitivity = TP / reference_count * 100."""
@@ -139,6 +141,7 @@ class TestCompareOrfsToReference:
         # Current behaviour: pandas raises EmptyDataError on a header-only GFF.
         # Ideal behaviour would be to return sensitivity=0.0 (see issue #29).
         import pandas as pd
+
         empty_gff = tmp_path / "empty.gff"
         empty_gff.write_text(_GFF_HEADER)
         orfs = _orfs_from_coords([(100, 300)])
@@ -176,11 +179,83 @@ class TestCompareOrfsToReference:
             result = compare_orfs_to_reference(orfs, "NC_TEST")
 
         required = {
-            "predicted", "reference", "true_positives",
-            "false_negatives", "false_positives",
-            "sensitivity", "precision", "f1_score",
+            "predicted",
+            "reference",
+            "true_positives",
+            "false_negatives",
+            "false_positives",
+            "sensitivity",
+            "precision",
+            "f1_score",
         }
         assert required <= set(result.keys())
+
+
+# ---------------------------------------------------------------------------
+# compare_orfs_to_reference — fuzzy coordinate matching (issue #99)
+# ---------------------------------------------------------------------------
+
+
+class TestFuzzyCoordinateMatching:
+    """Regression tests for start_tolerance / stop_tolerance parameters."""
+
+    def test_exact_match_default_tolerance(self, tmp_path):
+        """Default (0, 0) tolerance reproduces the original exact-match behaviour."""
+        gff = _make_gff_file(tmp_path)
+        orfs = _orfs_from_coords(_REF_COORDS)
+        with patch("src.comparative_analysis.get_gff_path", return_value=gff):
+            r = compare_orfs_to_reference(orfs, "NC_TEST", start_tolerance=0, stop_tolerance=0)
+        assert r["true_positives"] == 3
+        assert r["match_mode"] == "exact"
+
+    def test_off_by_one_start_fails_exact_but_passes_fuzzy(self, tmp_path):
+        """A prediction with start shifted by 3 bp is a false positive under exact
+        matching but a true positive under start_tolerance=3."""
+        gff = _make_gff_file(tmp_path)
+        # Shift the first predicted start by 3 bp
+        shifted = list(_REF_COORDS)
+        shifted[0] = (shifted[0][0] + 3, shifted[0][1])
+        orfs = _orfs_from_coords(shifted)
+
+        with patch("src.comparative_analysis.get_gff_path", return_value=gff):
+            r_exact = compare_orfs_to_reference(orfs, "NC_TEST", start_tolerance=0)
+            r_fuzzy = compare_orfs_to_reference(orfs, "NC_TEST", start_tolerance=3)
+
+        # Exact: one prediction is off → 2 TP, 1 FP, 1 FN
+        assert r_exact["true_positives"] == 2
+        # Fuzzy: within tolerance → all 3 match
+        assert r_fuzzy["true_positives"] == 3
+
+    def test_stop_tolerance_matches_close_stop(self, tmp_path):
+        """A prediction with stop shifted by 5 bp matches under stop_tolerance=5."""
+        gff = _make_gff_file(tmp_path)
+        shifted = list(_REF_COORDS)
+        shifted[0] = (shifted[0][0], shifted[0][1] + 5)
+        orfs = _orfs_from_coords(shifted)
+
+        with patch("src.comparative_analysis.get_gff_path", return_value=gff):
+            r_exact = compare_orfs_to_reference(orfs, "NC_TEST", stop_tolerance=0)
+            r_fuzzy = compare_orfs_to_reference(orfs, "NC_TEST", stop_tolerance=5)
+
+        assert r_exact["true_positives"] == 2
+        assert r_fuzzy["true_positives"] == 3
+
+    def test_result_contains_tolerance_metadata(self, tmp_path):
+        """Result dict must carry match_mode, start_tolerance, stop_tolerance."""
+        gff = _make_gff_file(tmp_path)
+        orfs = _orfs_from_coords(_REF_COORDS)
+        with patch("src.comparative_analysis.get_gff_path", return_value=gff):
+            r = compare_orfs_to_reference(orfs, "NC_TEST", start_tolerance=100, stop_tolerance=5)
+        assert r["start_tolerance"] == 100
+        assert r["stop_tolerance"] == 5
+        assert "fuzzy" in r["match_mode"]
+
+    def test_zero_tolerance_still_returns_match_mode_exact(self, tmp_path):
+        gff = _make_gff_file(tmp_path)
+        orfs = _orfs_from_coords(_REF_COORDS)
+        with patch("src.comparative_analysis.get_gff_path", return_value=gff):
+            r = compare_orfs_to_reference(orfs, "NC_TEST")
+        assert r["match_mode"] == "exact"
 
 
 # ---------------------------------------------------------------------------
@@ -233,10 +308,7 @@ class TestCompareResultsFileToReference:
         results_dir.mkdir()
         pred_file = results_dir / "NC_TEST_predictions.gff"
         pred_file.write_text(
-            "##gff-version 3\n"
-            "# comment line\n"
-            "\n"
-            "NC_TEST\t.\tCDS\t100\t300\t.\t+\t0\t.\n"
+            "##gff-version 3\n" "# comment line\n" "\n" "NC_TEST\t.\tCDS\t100\t300\t.\t+\t0\t.\n"
         )
 
         monkeypatch.chdir(tmp_path)
