@@ -15,6 +15,16 @@ Bug fixes
 Enhancements
 ~~~~~~~~~~~~
 
+Evaluation
+^^^^^^^^^^
+- Added ``start_tolerance`` and ``stop_tolerance`` parameters to
+  :func:`compare_orfs_to_reference` (:issue:`99`).  Setting
+  ``start_tolerance=100`` enables biologically realistic evaluation: prokaryotic
+  start sites are uncertain by up to a few codons due to SD-signal ambiguity and
+  alternative start codons.  Default remains 0 (exact match) for backward
+  compatibility.  The result dict now also carries ``match_mode``,
+  ``start_tolerance``, and ``stop_tolerance`` for full reproducibility.
+
 .. ---------------------------------------------------------------------------
 .. _whatsnew_110.performance:
 
