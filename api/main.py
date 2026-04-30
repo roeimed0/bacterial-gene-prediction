@@ -32,7 +32,7 @@ from api.models import (  # noqa: E402
 app = FastAPI(
     title="Bacterial Gene Predictor API",
     description="Hybrid gene prediction combining traditional bioinformatics with ML",
-    version="1.0.0",
+    version="1.1.0",
 )
 
 # Enable CORS for React frontend
