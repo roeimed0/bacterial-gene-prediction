@@ -23,6 +23,18 @@ ML models
 Enhancements
 ~~~~~~~~~~~~
 
+IMM model
+^^^^^^^^^
+- Replaced the ad-hoc IMM order formula ``floor(log2(n/min_obs)/2)`` clamped
+  to ``[3, 8]`` with a data-driven held-out log-likelihood selector
+  (:func:`_select_imm_order`, :issue:`102`).  The function reserves 20 % of
+  training sequences for validation, builds the model once at the formula-based
+  upper bound, and evaluates per-nucleotide coding/noncoding discrimination on
+  held-out sequences at each candidate order k = 2…upper.  The order that
+  maximises held-out discrimination is returned.  For large genomes such as
+  E. coli K-12 the selected order is unchanged (6); for small or atypical genomes
+  it may differ from the old hard clamps.
+
 .. ---------------------------------------------------------------------------
 .. _whatsnew_110.performance:
 
