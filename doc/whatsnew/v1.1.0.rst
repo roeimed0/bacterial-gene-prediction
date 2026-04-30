@@ -25,6 +25,13 @@ Enhancements
 
 Evaluation
 ^^^^^^^^^^
+- Added :func:`validate_batch` to ``src/validation.py`` (:issue:`104`).  Runs
+  validation across a list of genome accessions, groups results by taxonomic
+  group (using ``GENOME_CATALOG``), and prints a per-group sensitivity /
+  precision / F1 table.  Groups that fall more than 5 percentage points below
+  the overall F1 are flagged automatically.  Accepts the same
+  ``start_tolerance`` / ``stop_tolerance`` parameters as
+  :func:`compare_orfs_to_reference`.
 - Added ``start_tolerance`` and ``stop_tolerance`` parameters to
   :func:`compare_orfs_to_reference` (:issue:`99`).  Setting
   ``start_tolerance=100`` enables biologically realistic evaluation: prokaryotic
