@@ -443,15 +443,63 @@ def plot_score_distributions(all_orfs: List[Dict], reference_genes: Set, genome_
 # =============================================================================
 
 
-def compare_orfs_to_reference(orfs: List[Dict], genome_id: str, cached_data: Dict = None) -> Dict:
-    """Compare predicted ORFs to reference CDS using GFF file."""
-    # Get GFF path
+def _count_fuzzy_matches(
+    pred_coords: pd.DataFrame,
+    ref: pd.DataFrame,
+    start_tolerance: int,
+    stop_tolerance: int,
+) -> int:
+    """Count predicted ORFs that match any reference CDS within tolerances.
+
+    A prediction (ps, pe) matches a reference (rs, re) when:
+        |ps - rs| <= start_tolerance  AND  |pe - re| <= stop_tolerance
+
+    Uses a vectorised cross-join approach; efficient for typical sizes
+    (≤10K predictions × ≤10K references).
+    """
+    if start_tolerance == 0 and stop_tolerance == 0:
+        return len(pd.merge(pred_coords, ref, on=["start", "end"]))
+
+    # Mark each prediction as matched or not
+    pred_starts = pred_coords["start"].values
+    pred_ends = pred_coords["end"].values
+    ref_starts = ref["start"].values
+    ref_ends = ref["end"].values
+
+    matched = 0
+    for ps, pe in zip(pred_starts, pred_ends):
+        if np.any(
+            (np.abs(ref_starts - ps) <= start_tolerance) & (np.abs(ref_ends - pe) <= stop_tolerance)
+        ):
+            matched += 1
+    return matched
+
+
+def compare_orfs_to_reference(
+    orfs: List[Dict],
+    genome_id: str,
+    cached_data: Dict = None,
+    start_tolerance: int = 0,
+    stop_tolerance: int = 0,
+) -> Dict:
+    """Compare predicted ORFs to reference CDS using GFF file.
+
+    Args:
+        orfs: List of ORF dicts or DataFrame with predicted genes.
+        genome_id: Genome accession used to locate the reference GFF.
+        cached_data: Unused legacy parameter.
+        start_tolerance: Max allowed difference in start coordinate for a
+            match to count as a true positive (default 0 = exact match).
+            Set to 100 for biologically realistic evaluation; prokaryotic
+            start sites are often uncertain by a few codons.
+        stop_tolerance: Max allowed difference in stop coordinate
+            (default 0 = exact match).  Stop codons are more reliable than
+            starts, so a tolerance of 0–5 bp is typical.
+    """
     gff_path = get_gff_path(genome_id)
 
-    # Convert ORFs to DataFrame
     pred = pd.DataFrame(orfs) if not isinstance(orfs, pd.DataFrame) else orfs.copy()
 
-    # Extract coordinates
     if "genome_start" in pred.columns and "genome_end" in pred.columns:
         pred_coords = pred[["genome_start", "genome_end"]].rename(
             columns={"genome_start": "start", "genome_end": "end"}
@@ -463,18 +511,15 @@ def compare_orfs_to_reference(orfs: List[Dict], genome_id: str, cached_data: Dic
             "ORF data must contain 'start'/'end' or 'genome_start'/'genome_end' columns."
         )
 
-    # Load reference CDS from GFF
     ref = pd.read_csv(gff_path, sep="\t", comment="#", header=None)
     ref = ref[ref[2] == "CDS"][[3, 4]].rename(columns={3: "start", 4: "end"})
     ref = ref.drop_duplicates()
 
-    # Find exact matches
-    matches = pd.merge(pred_coords, ref, on=["start", "end"])
-    true_pos = len(matches)
+    fuzzy = start_tolerance > 0 or stop_tolerance > 0
+    true_pos = _count_fuzzy_matches(pred_coords, ref, start_tolerance, stop_tolerance)
     false_neg = len(ref) - true_pos
     false_pos = len(pred_coords) - true_pos
 
-    # Calculate metrics
     sensitivity = (true_pos / len(ref) * 100) if len(ref) > 0 else 0
     precision = (true_pos / len(pred_coords) * 100) if len(pred_coords) > 0 else 0
     f1 = (
@@ -483,13 +528,15 @@ def compare_orfs_to_reference(orfs: List[Dict], genome_id: str, cached_data: Dic
         else 0
     )
 
-    # Print summary
+    match_mode = (
+        f"fuzzy (start±{start_tolerance} bp, stop±{stop_tolerance} bp)" if fuzzy else "exact"
+    )
     print("=" * 80)
-    print(f"VALIDATION SUMMARY: {genome_id}")
+    print(f"VALIDATION SUMMARY: {genome_id}  [{match_mode}]")
     print("=" * 80)
     print(f"Predicted ORFs:              {len(pred_coords):,}")
     print(f"Reference CDS (proteins):    {len(ref):,}")
-    print(f"True positives (exact):      {true_pos:,}")
+    print(f"True positives ({match_mode}):  {true_pos:,}")
     print(f"False negatives (missed):    {false_neg:,}")
     print(f"False positives (spurious):  {false_pos:,}")
     print()
@@ -507,6 +554,9 @@ def compare_orfs_to_reference(orfs: List[Dict], genome_id: str, cached_data: Dic
         "sensitivity": sensitivity,
         "precision": precision,
         "f1_score": f1,
+        "match_mode": match_mode,
+        "start_tolerance": start_tolerance,
+        "stop_tolerance": stop_tolerance,
     }
 
 
