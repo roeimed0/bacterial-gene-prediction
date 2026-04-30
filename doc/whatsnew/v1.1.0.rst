@@ -9,6 +9,14 @@ What's new in 1.1.0 (TBD)
 Bug fixes
 ~~~~~~~~~
 
+ML models
+^^^^^^^^^
+- Fixed :func:`extract_group_features` using ``"+"`` / ``"-"`` to count strands while
+  the pipeline stores them as ``"forward"`` / ``"reverse"`` (:issue:`97`).  The two
+  LightGBM features ``strand_plus_frac`` and ``strand_minus_frac`` were silently
+  always 0.0, wasting 2 of the 31 feature slots.  After the fix both features are
+  correct (always 0.0 or 1.0 since every ORF group shares one stop codon and
+  therefore one strand).
 .. ---------------------------------------------------------------------------
 .. _whatsnew_110.enhancements:
 

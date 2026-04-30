@@ -13,8 +13,9 @@ Coordinate conventions (match find_orfs_candidates() output)
 * strand — "forward" or "reverse" (as returned by the detector)
 """
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "sequences"
 
@@ -22,8 +23,8 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures" / "sequences"
 # synthetic_single_orf.fasta — 300 bp, one ORF on the forward strand
 # ATG at 0-indexed position 30 (frame 0); body = ATG + GGG*48 + TAA = 150 bp
 # ---------------------------------------------------------------------------
-SINGLE_ORF_START = 31       # 1-based
-SINGLE_ORF_END = 180        # exclusive end (i + 3)
+SINGLE_ORF_START = 31  # 1-based
+SINGLE_ORF_END = 180  # exclusive end (i + 3)
 SINGLE_ORF_LENGTH = 150
 SINGLE_ORF_STRAND = "forward"
 
@@ -31,10 +32,10 @@ SINGLE_ORF_STRAND = "forward"
 # synthetic_multi_orf.fasta — 2000 bp, five forward-strand ORFs (all frame 0)
 # ---------------------------------------------------------------------------
 MULTI_ORF_COORDS = [
-    {"start": 1,    "end": 150,  "length": 150, "strand": "forward"},
-    {"start": 301,  "end": 480,  "length": 180, "strand": "forward"},
-    {"start": 601,  "end": 750,  "length": 150, "strand": "forward"},
-    {"start": 901,  "end": 1098, "length": 198, "strand": "forward"},
+    {"start": 1, "end": 150, "length": 150, "strand": "forward"},
+    {"start": 301, "end": 480, "length": 180, "strand": "forward"},
+    {"start": 601, "end": 750, "length": 150, "strand": "forward"},
+    {"start": 901, "end": 1098, "length": 198, "strand": "forward"},
     {"start": 1201, "end": 1350, "length": 150, "strand": "forward"},
 ]
 
@@ -64,18 +65,18 @@ LARGE_ORF_COORDS = [
 # ---------------------------------------------------------------------------
 
 _BASE_ORF = {
-    "combined_score":    0.8,
-    "rbs_score":         2.0,
-    "codon_score":       0.5,
-    "start_score":       0.7,
-    "imm_score":         0.3,
-    "strand":            "+",
+    "combined_score": 0.8,
+    "rbs_score": 2.0,
+    "codon_score": 0.5,
+    "start_score": 0.7,
+    "imm_score": 0.3,
+    "strand": "forward",
     # normalized scores used by start-selection weighting
-    "codon_score_norm":  0.6,
-    "imm_score_norm":    0.4,
-    "rbs_score_norm":    0.7,
+    "codon_score_norm": 0.6,
+    "imm_score_norm": 0.4,
+    "rbs_score_norm": 0.7,
     "length_score_norm": 0.5,
-    "start_score_norm":  0.6,
+    "start_score_norm": 0.6,
 }
 
 # ---------------------------------------------------------------------------
@@ -84,17 +85,17 @@ _BASE_ORF = {
 # ---------------------------------------------------------------------------
 
 _BASE_CANDIDATE = {
-    "sequence":          "ATGAAACCCGGGTTTTTTGGGAAATAA",
-    "length":            27,
-    "start_codon":       "ATG",
-    "codon_score_norm":  0.6,
-    "imm_score_norm":    0.4,
-    "rbs_score_norm":    0.7,
+    "sequence": "ATGAAACCCGGGTTTTTTGGGAAATAA",
+    "length": 27,
+    "start_codon": "ATG",
+    "codon_score_norm": 0.6,
+    "imm_score_norm": 0.4,
+    "rbs_score_norm": 0.7,
     "length_score_norm": 0.5,
-    "start_score_norm":  0.6,
-    "combined_score":    0.8,
-    "rbs_score":         2.0,
-    "gene_id":           "gene_1",
+    "start_score_norm": 0.6,
+    "combined_score": 0.8,
+    "rbs_score": 2.0,
+    "gene_id": "gene_1",
 }
 
 
