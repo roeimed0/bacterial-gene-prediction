@@ -12,3 +12,8 @@ repos:
         language: system
         entry: isort
         types: [python]
+
+      # flake8 is enforced by CI (GitHub Actions) rather than pre-commit because
+      # conda's pyexpat DLL issue prevents pre-commit from creating isolated venvs
+      # on Windows.  Fix: run `conda install --force-reinstall python` to repair
+      # the conda env, then add the flake8 hook from https://github.com/PyCQA/flake8.
