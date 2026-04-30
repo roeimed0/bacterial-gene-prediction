@@ -23,6 +23,16 @@ ML models
 Enhancements
 ~~~~~~~~~~~~
 
+Evaluation
+^^^^^^^^^^
+- Added :func:`validate_batch` to ``src/validation.py`` (:issue:`104`).  Runs
+  validation across a list of genome accessions, groups results by taxonomic
+  group (using ``GENOME_CATALOG``), and prints a per-group sensitivity /
+  precision / F1 table.  Groups that fall more than 5 percentage points below
+  the overall F1 are flagged automatically.  Accepts the same
+  ``start_tolerance`` / ``stop_tolerance`` parameters as
+  :func:`compare_orfs_to_reference`.
+
 .. ---------------------------------------------------------------------------
 .. _whatsnew_110.performance:
 
