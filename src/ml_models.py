@@ -99,35 +99,46 @@ class OrfGroupClassifier:
             if len(orf_group) == 0:
                 continue
 
-            # Vectorised column extraction — no per-orf Python loop
-            combined = orf_group["combined_score"].to_numpy(float, na_value=0.0)
-            rbs = orf_group["rbs_score"].to_numpy(float, na_value=0.0)
-            codon = orf_group["codon_score"].to_numpy(float, na_value=0.0)
-            start = orf_group["start_score"].to_numpy(float, na_value=0.0)
-            imm = orf_group["imm_score"].to_numpy(float, na_value=0.0)
+            # .values is faster than .to_numpy(float, na_value=...) for small groups
+            combined = orf_group["combined_score"].values.astype(np.float64)
+            rbs = orf_group["rbs_score"].values.astype(np.float64)
+            codon = orf_group["codon_score"].values.astype(np.float64)
+            start = orf_group["start_score"].values.astype(np.float64)
+            imm = orf_group["imm_score"].values.astype(np.float64)
             strands = orf_group["strand"].tolist()
 
             if weights is not None:
+                cols = orf_group.columns
                 ss = (
-                    orf_group.get(
-                        "codon_score_norm", pd.Series(0.0, index=orf_group.index)
-                    ).to_numpy(float, na_value=0.0)
+                    (
+                        orf_group["codon_score_norm"].values
+                        if "codon_score_norm" in cols
+                        else np.zeros(len(orf_group))
+                    ).astype(np.float64)
                     * weights.get("codon", 0.0)
-                    + orf_group.get(
-                        "imm_score_norm", pd.Series(0.0, index=orf_group.index)
-                    ).to_numpy(float, na_value=0.0)
+                    + (
+                        orf_group["imm_score_norm"].values
+                        if "imm_score_norm" in cols
+                        else np.zeros(len(orf_group))
+                    ).astype(np.float64)
                     * weights.get("imm", 0.0)
-                    + orf_group.get(
-                        "rbs_score_norm", pd.Series(0.0, index=orf_group.index)
-                    ).to_numpy(float, na_value=0.0)
+                    + (
+                        orf_group["rbs_score_norm"].values
+                        if "rbs_score_norm" in cols
+                        else np.zeros(len(orf_group))
+                    ).astype(np.float64)
                     * weights.get("rbs", 0.0)
-                    + orf_group.get(
-                        "length_score_norm", pd.Series(0.0, index=orf_group.index)
-                    ).to_numpy(float, na_value=0.0)
+                    + (
+                        orf_group["length_score_norm"].values
+                        if "length_score_norm" in cols
+                        else np.zeros(len(orf_group))
+                    ).astype(np.float64)
                     * weights.get("length", 0.0)
-                    + orf_group.get(
-                        "start_score_norm", pd.Series(0.0, index=orf_group.index)
-                    ).to_numpy(float, na_value=0.0)
+                    + (
+                        orf_group["start_score_norm"].values
+                        if "start_score_norm" in cols
+                        else np.zeros(len(orf_group))
+                    ).astype(np.float64)
                     * weights.get("start", 0.0)
                 )
             else:

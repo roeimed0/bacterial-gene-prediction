@@ -1604,26 +1604,28 @@ def select_best_starts(nested_groups: Dict, weights: Dict = None) -> pd.DataFram
 
     single_option = 0
     multiple_options = 0
-    selected_parts = []
+    # Collect Series rows — one pd.DataFrame() call at the end is much faster
+    # than pd.concat on thousands of single-row DataFrames (~24× slower)
+    selected_rows = []
     for (strand, end), group_df in nested_groups.items():
         if len(group_df) == 1:
-            selected_parts.append(group_df)
+            selected_rows.append(group_df.iloc[0])
             single_option += 1
         else:
             score = (
-                group_df["codon_score_norm"] * weights["codon"]
-                + group_df["imm_score_norm"] * weights["imm"]
-                + group_df["rbs_score_norm"] * weights["rbs"]
-                + group_df["length_score_norm"] * weights["length"]
-                + group_df["start_score_norm"] * weights["start"]
+                group_df["codon_score_norm"].values * weights["codon"]
+                + group_df["imm_score_norm"].values * weights["imm"]
+                + group_df["rbs_score_norm"].values * weights["rbs"]
+                + group_df["length_score_norm"].values * weights["length"]
+                + group_df["start_score_norm"].values * weights["start"]
             )
-            selected_parts.append(group_df.loc[[score.idxmax()]])
+            selected_rows.append(group_df.iloc[score.argmax()])
             multiple_options += 1
 
     print(f"  Single option groups: {single_option:,}")
     print(f"  Multiple option groups: {multiple_options:,}")
 
-    return pd.concat(selected_parts, ignore_index=True) if selected_parts else _empty_orf_df()
+    return pd.DataFrame(selected_rows).reset_index(drop=True) if selected_rows else _empty_orf_df()
 
 
 # =============================================================================
