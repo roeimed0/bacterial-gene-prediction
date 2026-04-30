@@ -1584,13 +1584,11 @@ def filter_candidates(
 
 
 def organize_nested_orfs(all_orfs: pd.DataFrame) -> Dict:
-    """Group ORFs by (strand, end) key. Converts to List[Dict] per group so
-    downstream ml_models functions receive the expected type."""
-    groups: Dict = defaultdict(list)
-    for row in all_orfs.itertuples(index=False):
-        groups[(row.strand, row.end)].append(row._asdict())
-    for key in groups:
-        groups[key].sort(key=lambda x: x["start"])
+    """Group ORFs by (strand, end) key.  Each group is a DataFrame slice sorted
+    by start position.  Downstream ML functions receive DataFrames natively."""
+    groups: Dict = {}
+    for (strand, end), group_df in all_orfs.groupby(["strand", "end"], sort=False):
+        groups[(strand, end)] = group_df.sort_values("start").reset_index(drop=True)
     return groups
 
 
@@ -1608,26 +1606,26 @@ def select_best_starts(nested_groups: Dict, weights: Dict = None) -> pd.DataFram
     single_option = 0
     multiple_options = 0
 
-    for (strand, end), orfs in nested_groups.items():
-        if len(orfs) == 1:
-            selected_orfs.append(orfs[0])
+    selected_parts = []
+    for (strand, end), group_df in nested_groups.items():
+        if len(group_df) == 1:
+            selected_parts.append(group_df)
             single_option += 1
         else:
-            for orf in orfs:
-                orf["start_selection_score"] = (
-                    orf["codon_score_norm"] * weights["codon"]
-                    + orf["imm_score_norm"] * weights["imm"]
-                    + orf["rbs_score_norm"] * weights["rbs"]
-                    + orf["length_score_norm"] * weights["length"]
-                    + orf["start_score_norm"] * weights["start"]
-                )
-            selected_orfs.append(max(orfs, key=lambda x: x["start_selection_score"]))
+            score = (
+                group_df["codon_score_norm"] * weights["codon"]
+                + group_df["imm_score_norm"] * weights["imm"]
+                + group_df["rbs_score_norm"] * weights["rbs"]
+                + group_df["length_score_norm"] * weights["length"]
+                + group_df["start_score_norm"] * weights["start"]
+            )
+            selected_parts.append(group_df.loc[[score.idxmax()]])
             multiple_options += 1
 
     print(f"  Single option groups: {single_option:,}")
     print(f"  Multiple option groups: {multiple_options:,}")
 
-    return pd.DataFrame(selected_orfs) if selected_orfs else _empty_orf_df()
+    return pd.concat(selected_parts, ignore_index=True) if selected_parts else _empty_orf_df()
 
 
 # =============================================================================

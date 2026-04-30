@@ -90,104 +90,97 @@ class OrfGroupClassifier:
         from tqdm import tqdm
 
         rows = []
-        for group_id, orf_list in tqdm(
+        for group_id, orf_group in tqdm(
             groups.items(), total=len(groups), desc=f"Groups {genome_id}"
         ):
-            if len(orf_list) == 0:
+            # Accept both DataFrame (new) and List[Dict] (legacy)
+            if isinstance(orf_group, list):
+                orf_group = pd.DataFrame(orf_group)
+            if len(orf_group) == 0:
                 continue
 
-            combined_scores = []
-            rbs_scores = []
-            codon_scores = []
-            start_scores = []
-            imm_scores = []
-            start_select_scores = []
-            strands = []
+            # Vectorised column extraction — no per-orf Python loop
+            combined = orf_group["combined_score"].to_numpy(float, na_value=0.0)
+            rbs = orf_group["rbs_score"].to_numpy(float, na_value=0.0)
+            codon = orf_group["codon_score"].to_numpy(float, na_value=0.0)
+            start = orf_group["start_score"].to_numpy(float, na_value=0.0)
+            imm = orf_group["imm_score"].to_numpy(float, na_value=0.0)
+            strands = orf_group["strand"].tolist()
 
-            for orf in orf_list:
-                strands.append(orf.get("strand", "+"))
-                combined_scores.append(orf.get("combined_score", 0.0))
-                rbs_scores.append(orf.get("rbs_score", 0.0))
-                codon_scores.append(orf.get("codon_score", 0.0))
-                start_scores.append(orf.get("start_score", 0.0))
-                imm_scores.append(orf.get("imm_score", 0.0))
+            if weights is not None:
+                ss = (
+                    orf_group.get(
+                        "codon_score_norm", pd.Series(0.0, index=orf_group.index)
+                    ).to_numpy(float, na_value=0.0)
+                    * weights.get("codon", 0.0)
+                    + orf_group.get(
+                        "imm_score_norm", pd.Series(0.0, index=orf_group.index)
+                    ).to_numpy(float, na_value=0.0)
+                    * weights.get("imm", 0.0)
+                    + orf_group.get(
+                        "rbs_score_norm", pd.Series(0.0, index=orf_group.index)
+                    ).to_numpy(float, na_value=0.0)
+                    * weights.get("rbs", 0.0)
+                    + orf_group.get(
+                        "length_score_norm", pd.Series(0.0, index=orf_group.index)
+                    ).to_numpy(float, na_value=0.0)
+                    * weights.get("length", 0.0)
+                    + orf_group.get(
+                        "start_score_norm", pd.Series(0.0, index=orf_group.index)
+                    ).to_numpy(float, na_value=0.0)
+                    * weights.get("start", 0.0)
+                )
+            else:
+                ss = np.zeros(len(orf_group))
 
-                if weights is not None:
-                    orf_score = (
-                        orf.get("codon_score_norm", 0.0) * weights.get("codon", 0.0)
-                        + orf.get("imm_score_norm", 0.0) * weights.get("imm", 0.0)
-                        + orf.get("rbs_score_norm", 0.0) * weights.get("rbs", 0.0)
-                        + orf.get("length_score_norm", 0.0) * weights.get("length", 0.0)
-                        + orf.get("start_score_norm", 0.0) * weights.get("start", 0.0)
-                    )
-                else:
-                    orf_score = 0.0
-                start_select_scores.append(orf_score)
+            n = len(combined)
+            max_combined = combined.max()
+            max_rbs = rbs.max()
+            max_codon = codon.max()
+            max_start = start.max()
+            max_ss = ss.max()
 
-            # Aggregate features
             group_features = {
                 "group_id": group_id,
-                "num_orfs": len(orf_list),
-                "combined_max": max(combined_scores),
-                "combined_mean": np.mean(combined_scores),
-                "combined_std": np.std(combined_scores),
-                "combined_entropy": self._entropy_from_probs(np.maximum(combined_scores, 0)),
+                "num_orfs": n,
+                "combined_max": max_combined,
+                "combined_mean": combined.mean(),
+                "combined_std": combined.std() if n > 1 else 0.0,
+                "combined_entropy": self._entropy_from_probs(np.maximum(combined, 0)),
                 "combined_margin_top2": (
-                    np.sort(combined_scores)[-1] - np.sort(combined_scores)[-2]
-                    if len(combined_scores) > 1
-                    else combined_scores[0]
+                    np.sort(combined)[-1] - np.sort(combined)[-2] if n > 1 else combined[0]
                 ),
-                "frac_top_orfs": np.sum(np.array(combined_scores) >= 0.8 * max(combined_scores))
-                / len(combined_scores),
-                "rbs_max": max(rbs_scores),
-                "rbs_mean": np.mean(rbs_scores),
-                "codon_max": max(codon_scores),
-                "codon_mean": np.mean(codon_scores),
-                "start_max": max(start_scores),
-                "start_mean": np.mean(start_scores),
-                "imm_max": max(imm_scores),
-                "imm_mean": np.mean(imm_scores),
-                "start_select_max": max(start_select_scores),
-                "start_select_mean": np.mean(start_select_scores),
-                "strand_plus_frac": strands.count("+") / len(strands),
-                "strand_minus_frac": strands.count("-") / len(strands),
+                "frac_top_orfs": (combined >= 0.8 * max_combined).sum() / n,
+                "rbs_max": max_rbs,
+                "rbs_mean": rbs.mean(),
+                "codon_max": max_codon,
+                "codon_mean": codon.mean(),
+                "start_max": max_start,
+                "start_mean": start.mean(),
+                "imm_max": imm.max(),
+                "imm_mean": imm.mean(),
+                "start_select_max": max_ss,
+                "start_select_mean": ss.mean(),
+                "strand_plus_frac": strands.count("+") / n,
+                "strand_minus_frac": strands.count("-") / n,
+                # Relative features
+                "rel_combined_mean": (
+                    combined / max_combined if max_combined > 0 else np.zeros(n)
+                ).mean(),
+                "rel_combined_max": (
+                    combined / max_combined if max_combined > 0 else np.zeros(n)
+                ).max(),
+                "rel_rbs_mean": (rbs / max_rbs if max_rbs > 0 else np.zeros(n)).mean(),
+                "rel_rbs_max": (rbs / max_rbs if max_rbs > 0 else np.zeros(n)).max(),
+                "rel_codon_mean": (codon / max_codon if max_codon > 0 else np.zeros(n)).mean(),
+                "rel_codon_max": (codon / max_codon if max_codon > 0 else np.zeros(n)).max(),
+                "rel_start_mean": (start / max_start if max_start > 0 else np.zeros(n)).mean(),
+                "rel_start_max": (start / max_start if max_start > 0 else np.zeros(n)).max(),
+                "rel_start_select_mean": (ss / max_ss if max_ss > 0 else np.zeros(n)).mean(),
+                "rel_start_select_max": (ss / max_ss if max_ss > 0 else np.zeros(n)).max(),
+                "frac_top_combined": (combined >= 0.95 * max_combined).sum() / n,
+                "frac_top_start_select": (ss >= 0.95 * max_ss).sum() / n,
             }
-
-            # Relative features
-            max_combined = max(combined_scores)
-            max_rbs = max(rbs_scores)
-            max_codon = max(codon_scores)
-            max_start = max(start_scores)
-            max_start_select = max(start_select_scores)
-
-            rel_combined = [c / max_combined if max_combined > 0 else 0 for c in combined_scores]
-            rel_rbs = [c / max_rbs if max_rbs > 0 else 0 for c in rbs_scores]
-            rel_codon = [c / max_codon if max_codon > 0 else 0 for c in codon_scores]
-            rel_start = [c / max_start if max_start > 0 else 0 for c in start_scores]
-            rel_start_select = [
-                c / max_start_select if max_start_select > 0 else 0 for c in start_select_scores
-            ]
-
-            group_features.update(
-                {
-                    "rel_combined_mean": np.mean(rel_combined),
-                    "rel_combined_max": np.max(rel_combined),
-                    "rel_rbs_mean": np.mean(rel_rbs),
-                    "rel_rbs_max": np.max(rel_rbs),
-                    "rel_codon_mean": np.mean(rel_codon),
-                    "rel_codon_max": np.max(rel_codon),
-                    "rel_start_mean": np.mean(rel_start),
-                    "rel_start_max": np.max(rel_start),
-                    "rel_start_select_mean": np.mean(rel_start_select),
-                    "rel_start_select_max": np.max(rel_start_select),
-                    "frac_top_combined": np.sum(np.array(combined_scores) >= 0.95 * max_combined)
-                    / len(combined_scores),
-                    "frac_top_start_select": np.sum(
-                        np.array(start_select_scores) >= 0.95 * max_start_select
-                    )
-                    / len(start_select_scores),
-                }
-            )
 
             rows.append(group_features)
 
