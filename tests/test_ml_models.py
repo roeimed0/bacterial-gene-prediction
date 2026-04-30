@@ -86,6 +86,36 @@ class TestOrfGroupClassifierFeatureExtraction:
         total = df.loc[0, "strand_plus_frac"] + df.loc[0, "strand_minus_frac"]
         assert total == pytest.approx(1.0, abs=1e-6)
 
+    def test_strand_fractions_use_forward_reverse_labels_issue_97(self, two_orf_group):
+        """Regression #97: strand_plus_frac / strand_minus_frac must use
+        'forward' / 'reverse' labels (not '+' / '-').
+
+        Before the fix both features were always 0.0 because the pipeline
+        stores strand as 'forward'/'reverse' but the code counted '+'/'-'.
+        """
+        clf = OrfGroupClassifier()
+        df = clf.extract_group_features(two_orf_group, genome_id="test")
+        # All ORFs in two_orf_group are on the 'forward' strand (conftest.py)
+        assert df.loc[0, "strand_plus_frac"] == pytest.approx(
+            1.0, abs=1e-6
+        ), "strand_plus_frac should be 1.0 for a forward-strand group"
+        assert df.loc[0, "strand_minus_frac"] == pytest.approx(
+            0.0, abs=1e-6
+        ), "strand_minus_frac should be 0.0 for a forward-strand group"
+
+    def test_strand_fractions_reverse_group_issue_97(self):
+        """Regression #97: verify reverse-strand group gives correct fractions."""
+        from tests.conftest import _BASE_ORF
+
+        reverse_orf = dict(_BASE_ORF)
+        reverse_orf["strand"] = "reverse"
+        reverse_group = {"group_1": [reverse_orf, dict(reverse_orf)]}
+
+        clf = OrfGroupClassifier()
+        df = clf.extract_group_features(reverse_group, genome_id="test")
+        assert df.loc[0, "strand_plus_frac"] == pytest.approx(0.0, abs=1e-6)
+        assert df.loc[0, "strand_minus_frac"] == pytest.approx(1.0, abs=1e-6)
+
     def test_combined_mean_within_score_range(self, two_orf_group):
         clf = OrfGroupClassifier()
         df = clf.extract_group_features(two_orf_group, genome_id="test")
@@ -132,9 +162,7 @@ class TestOrfGroupClassifierPredictGroups:
         with pytest.raises((AttributeError, RuntimeError)):
             clf.predict_groups(two_orf_group, genome_id="test")
 
-    def test_value_error_message_contains_missing_feature_name_issue_47(
-        self, two_orf_group
-    ):
+    def test_value_error_message_contains_missing_feature_name_issue_47(self, two_orf_group):
         """The ValueError message must name the missing feature(s) explicitly."""
         clf = OrfGroupClassifier()
         clf.model = MagicMock()
@@ -235,9 +263,7 @@ class TestHybridGeneFilterPredict:
         assert len(probs) == 0
         assert len(gene_ids) == 0
 
-    def test_raises_value_error_on_missing_features_issue_47(
-        self, synthetic_candidate
-    ):
+    def test_raises_value_error_on_missing_features_issue_47(self, synthetic_candidate):
         """
         Regression for issue #47: predict() silently constructed a feature
         tensor with fewer columns than the DenseBranch(input_dim=25) expects
@@ -253,25 +279,19 @@ class TestHybridGeneFilterPredict:
 
         # Build a DataFrame that is missing the last expected feature
         missing_feature = hgf.feature_names[-1]
-        incomplete_df = pd.DataFrame(
-            [{f: 0.0 for f in hgf.feature_names[:-1]}]
-        )
+        incomplete_df = pd.DataFrame([{f: 0.0 for f in hgf.feature_names[:-1]}])
 
         with patch.object(hgf, "extract_features", return_value=incomplete_df):
             with pytest.raises(ValueError, match=missing_feature):
                 hgf.predict([synthetic_candidate], genome_id="test")
 
-    def test_value_error_message_contains_missing_feature_name_issue_47(
-        self, synthetic_candidate
-    ):
+    def test_value_error_message_contains_missing_feature_name_issue_47(self, synthetic_candidate):
         """The ValueError message must name the missing feature(s) explicitly."""
         hgf = HybridGeneFilter()
         hgf.model = MagicMock()
 
         sentinel = "polar_fraction"  # last feature in the 25-feature list
-        incomplete_df = pd.DataFrame(
-            [{f: 0.0 for f in hgf.feature_names if f != sentinel}]
-        )
+        incomplete_df = pd.DataFrame([{f: 0.0 for f in hgf.feature_names if f != sentinel}])
 
         with patch.object(hgf, "extract_features", return_value=incomplete_df):
             with pytest.raises(ValueError) as exc_info:

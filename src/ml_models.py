@@ -172,8 +172,8 @@ class OrfGroupClassifier:
                 "imm_mean": imm.mean(),
                 "start_select_max": max_ss,
                 "start_select_mean": ss.mean(),
-                "strand_plus_frac": strands.count("+") / n,
-                "strand_minus_frac": strands.count("-") / n,
+                "strand_plus_frac": strands.count("forward") / n,
+                "strand_minus_frac": strands.count("reverse") / n,
                 # Relative features
                 "rel_combined_mean": (
                     combined / max_combined if max_combined > 0 else np.zeros(n)
