@@ -34,6 +34,33 @@ IMM model
   maximises held-out discrimination is returned.  For large genomes such as
   E. coli K-12 the selected order is unchanged (6); for small or atypical genomes
   it may differ from the old hard clamps.
+Benchmarking
+^^^^^^^^^^^^
+- Expanded ``TEST_GENOMES`` from 15 to 43 genomes (:issue:`101`) to give ≥ 10
+  genomes per taxonomic group — the minimum required for statistically
+  meaningful per-group validation with :func:`validate_batch`.
+  Group counts after expansion: Proteobacteria 12, Firmicutes 10,
+  Actinobacteria 10, Archaea 11 (total 43, up from 15).
+  New genomes were selected for phylogenetic diversity within each group
+  (e.g. Actinobacteria now includes *Streptomyces*, *Frankia*,
+  *Actinoplanes* alongside the original *Mycobacterium tuberculosis*).
+  A new test asserts each group has n ≥ 10.
+Evaluation
+^^^^^^^^^^
+- Added :func:`validate_batch` to ``src/validation.py`` (:issue:`104`).  Runs
+  validation across a list of genome accessions, groups results by taxonomic
+  group (using ``GENOME_CATALOG``), and prints a per-group sensitivity /
+  precision / F1 table.  Groups that fall more than 5 percentage points below
+  the overall F1 are flagged automatically.  Accepts the same
+  ``start_tolerance`` / ``stop_tolerance`` parameters as
+  :func:`compare_orfs_to_reference`.
+- Added ``start_tolerance`` and ``stop_tolerance`` parameters to
+  :func:`compare_orfs_to_reference` (:issue:`99`).  Setting
+  ``start_tolerance=100`` enables biologically realistic evaluation: prokaryotic
+  start sites are uncertain by up to a few codons due to SD-signal ambiguity and
+  alternative start codons.  Default remains 0 (exact match) for backward
+  compatibility.  The result dict now also carries ``match_mode``,
+  ``start_tolerance``, and ``stop_tolerance`` for full reproducibility.
 
 .. ---------------------------------------------------------------------------
 .. _whatsnew_110.performance:

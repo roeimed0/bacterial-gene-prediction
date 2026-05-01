@@ -8,25 +8,60 @@ Centralized location for all project-wide constants.
 # NCBI Configuration
 NCBI_EMAIL = "your_email@example.com"
 
-# Test genomes for gene prediction analysis
+# Test genomes for gene prediction analysis.
+# Expanded from 15 → 41 genomes to give ≥ 10 per taxonomic group, enabling
+# statistically meaningful per-group benchmarking via validate_batch().
+# Minimum reliable estimate requires n ≥ 10; n ≥ 20 for publication claims.
+#
+# Group counts: Proteobacteria 12, Firmicutes 10, Actinobacteria 10, Archaea 11
 TEST_GENOMES = [
-    # Bacteria (10 genomes)
+    # ── Proteobacteria (10) ──────────────────────────────────────────────────
     "NC_000913.3",  # Escherichia coli K-12 MG1655
-    "NC_000964.3",  # Bacillus subtilis 168
+    "NC_002695.2",  # Escherichia coli O157:H7 Sakai
     "NC_003197.2",  # Salmonella enterica LT2
     "NC_002505.1",  # Vibrio cholerae
+    "NC_002516.2",  # Pseudomonas aeruginosa PAO1
+    "NC_000915.1",  # Helicobacter pylori 26695
+    "NC_004741.1",  # Shigella flexneri 2a          [added #101]
+    "NC_008570.1",  # Aeromonas hydrophila ATCC 7966 [added #101]
+    "NC_009648.1",  # Klebsiella pneumoniae 342       [added #101]
+    "NC_007503.1",  # Carboxydothermus hydrogenoformans [added #101]
+    "NC_004547.2",  # Erwinia carotovora SCRI1043       [added #101]
+    "NC_008253.1",  # Escherichia coli 536              [restored #101]
+    # ── Firmicutes (10) ──────────────────────────────────────────────────────
+    "NC_000964.3",  # Bacillus subtilis 168
+    "NC_003210.1",  # Listeria monocytogenes EGD-e
+    "NC_002737.2",  # Streptococcus pyogenes M1 GAS   [added #101]
+    "NC_003098.1",  # Streptococcus pneumoniae R6      [added #101]
+    "NC_007795.1",  # Staphylococcus aureus NCTC 8325  [added #101]
+    "NC_004668.1",  # Enterococcus faecalis V583        [added #101]
+    "NC_020291.1",  # Clostridium difficile R20291      [added #101]
+    "NC_013891.1",  # Listeria seeligeri serovar 1/2b   [added #101]
+    "NC_014829.1",  # Bacillus cellulosilyticus         [added #101]
+    "NC_012469.1",  # Streptococcus mutans NN2025       [added #101]
+    # ── Actinobacteria (10) ──────────────────────────────────────────────────
     "NC_000962.3",  # Mycobacterium tuberculosis H37Rv
-    "NC_002695.2",  # Escherichia coli O157:H7 Sakai
-    "NC_008253.1",  # Escherichia coli 536
-    "NC_000915.1",  # Helicobacter pylori
-    "NC_003210.1",  # Listeria monocytogenes
-    "NC_002516.2",  # Pseudomonas aeruginosa
-    # Archaea (5 genomes)
-    "NC_000854.2",  # Aeropyrum pernix
-    "NC_000868.1",  # Pyrococcus abyssi
-    "NC_002607.1",  # Halobacterium salinarum
-    "NC_003552.1",  # Methanosarcina acetivorans
-    "NC_000917.1",  # Archaeoglobus fulgidus
+    "NC_003888.3",  # Streptomyces coelicolor A3(2)     [added #101]
+    "NC_008769.1",  # Mycobacterium bovis BCG Pasteur   [added #101]
+    "NC_009525.1",  # Mycobacterium tuberculosis H37Ra  [added #101]
+    "NC_009664.1",  # Kineococcus radiotolerans          [added #101]
+    "NC_014666.1",  # Frankia sp. EAN1pec               [added #101]
+    "NC_016111.1",  # Streptomyces cattleya NRRL 8057   [added #101]
+    "NC_017093.1",  # Actinoplanes missouriensis 431    [added #101]
+    "NC_018524.1",  # Nocardiopsis dassonvillei          [added #101]
+    "NC_020133.1",  # Mycobacterium liflandii 128FXT     [added #101]
+    # ── Archaea (11) ─────────────────────────────────────────────────────────
+    "NC_000854.2",  # Aeropyrum pernix K1               (Crenarchaeota)
+    "NC_000868.1",  # Pyrococcus abyssi GE5             (Euryarchaeota)
+    "NC_002607.1",  # Halobacterium salinarum R1         (Euryarchaeota)
+    "NC_003552.1",  # Methanosarcina acetivorans C2A     (Euryarchaeota)
+    "NC_000917.1",  # Archaeoglobus fulgidus DSM 4304   (Euryarchaeota)
+    "NC_003106.2",  # Sulfolobus tokodaii str. 7         (Crenarchaeota)   [added #101]
+    "NC_003413.1",  # Pyrococcus furiosus DSM 3638       (Euryarchaeota)   [added #101]
+    "NC_007426.1",  # Natronomonas pharaonis             (Euryarchaeota)   [added #101]
+    "NC_009975.1",  # Methanococcus maripaludis C6       (Euryarchaeota)   [added #101]
+    "NC_010085.1",  # Nitrosopumilus maritimus SCM1      (Thaumarchaeota)  [added #101]
+    "NC_021054.1",  # Haloferax volcanii DS2             (Euryarchaeota)   [added #101]
 ]
 
 LENGTH_REFERENCE_BP = 300  # Reference length for scaling

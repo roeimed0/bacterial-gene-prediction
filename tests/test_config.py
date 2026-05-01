@@ -14,8 +14,8 @@ from src.config import (
     MIN_ORF_LENGTH,
     SCORE_WEIGHTS,
     SECOND_FILTER_THRESHOLD,
-    START_CODONS,
     START_CODON_WEIGHTS,
+    START_CODONS,
     START_SELECTION_WEIGHTS,
     STOP_CODONS,
     TEST_GENOMES,
@@ -68,8 +68,8 @@ class TestGenomeCatalogIntegrity:
 
 
 class TestTestGenomes:
-    def test_has_15_entries(self):
-        assert len(TEST_GENOMES) == 15
+    def test_has_43_entries(self):
+        assert len(TEST_GENOMES) == 43
 
     def test_no_duplicates(self):
         assert len(TEST_GENOMES) == len(set(TEST_GENOMES))
@@ -79,6 +79,20 @@ class TestTestGenomes:
         groups = {catalog_map[acc] for acc in TEST_GENOMES if acc in catalog_map}
         assert "Archaea" in groups
         assert groups & {"Proteobacteria", "Firmicutes", "Actinobacteria"}
+
+    def test_all_four_groups_represented(self):
+        catalog_map = {g["accession"]: g["group"] for g in GENOME_CATALOG}
+        groups = {catalog_map[acc] for acc in TEST_GENOMES if acc in catalog_map}
+        assert groups == {"Proteobacteria", "Firmicutes", "Actinobacteria", "Archaea"}
+
+    def test_each_group_has_at_least_10_genomes(self):
+        """Minimum n=10 per group needed for statistically reliable per-group means."""
+        catalog_map = {g["accession"]: g["group"] for g in GENOME_CATALOG}
+        from collections import Counter
+
+        counts = Counter(catalog_map[acc] for acc in TEST_GENOMES if acc in catalog_map)
+        for group, n in counts.items():
+            assert n >= 10, f"{group} has only {n} genomes in TEST_GENOMES (need ≥ 10)"
 
 
 # ---------------------------------------------------------------------------
