@@ -1540,7 +1540,6 @@ def _select_imm_order(
     train_coding = training_seqs[n_val:]
 
     m_val = max(1, int(len(intergenic_seqs) * val_fraction))
-    val_noncoding = intergenic_seqs[:m_val]
     train_noncoding = intergenic_seqs[m_val:]
 
     if not train_coding or not train_noncoding:
