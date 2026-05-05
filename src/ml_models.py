@@ -278,7 +278,8 @@ class OrfGroupClassifier:
 
         spw = n_neg / n_pos
         print(
-            f"  Training LightGBM: n_train={len(y_train)}, pos={n_pos}, neg={n_neg}, scale_pos_weight={spw:.1f}"
+            f"  Training LightGBM: n_train={len(y_train)}, pos={n_pos},"
+            f" neg={n_neg}, scale_pos_weight={spw:.1f}"
         )
 
         callbacks = []
