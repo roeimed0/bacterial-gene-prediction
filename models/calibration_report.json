@@ -1,0 +1,35 @@
+{
+  "date": "2026-05-05T20:16:15.143827",
+  "lgb_model": "C:\\Users\\User\\Desktop\\bacterial-gene-prediction\\models\\orf_classifier_lgb.pkl",
+  "lgb_threshold": 0.07,
+  "genomes_total": 100,
+  "genomes_train": 80,
+  "genomes_val": 20,
+  "train_groups": 247677,
+  "val_groups": 58183,
+  "n_starts": 8,
+  "bootstrap_n": 500,
+  "current_weights": {
+    "codon": 4.8562,
+    "imm": 1.0107,
+    "rbs": 0.6383,
+    "length": 7.4367,
+    "start": 0.2755
+  },
+  "optimised_weights": {
+    "codon": 7.4367,
+    "imm": 0.5139404647023904,
+    "rbs": 0.9681540336408835,
+    "length": 7.258528342238225,
+    "start": 0.4844714626699213
+  },
+  "train_accuracy_baseline": 0.8236856874073895,
+  "train_accuracy_new": 0.816167831490207,
+  "val_accuracy_baseline": 0.847171854321709,
+  "val_accuracy_new": 0.8347799185329048,
+  "bootstrap_ci_95": [
+    -0.014224515752023787,
+    -0.010515098912053352
+  ],
+  "verdict": "REGRESSION \u2014 do not adopt"
+}

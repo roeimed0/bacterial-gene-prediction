@@ -1,7 +1,7 @@
 import math
 from collections import Counter
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import joblib
 import numpy as np
@@ -30,10 +30,10 @@ class OrfGroupClassifier:
     def __init__(self):
         """
         Initialize empty classifier.
-        Call load() to load a trained model before using.
+        Call load() or train() before using.
         """
-        self.model = None
-        self.feature_names = None
+        self.model: Any = None
+        self.feature_names: Optional[List[str]] = None
 
     def load(self, model_path: str = "../models/orf_classifier_lgb.pkl"):
         """
@@ -53,7 +53,7 @@ class OrfGroupClassifier:
         feature_path = model_path.parent / "feature_names.pkl"
         if feature_path.exists():
             self.feature_names = joblib.load(str(feature_path))
-            print(f"Loaded {len(self.feature_names)} features")
+            print(f"Loaded {len(self.feature_names or [])} features")
         else:
             print(f"Warning: feature_names.pkl not found in {model_path.parent}")
             self.feature_names = None
@@ -202,7 +202,7 @@ class OrfGroupClassifier:
         groups: Dict[str, List[Dict]],
         genome_id: str = "unknown",
         weights: Dict = None,
-        threshold: float = 0.1,
+        threshold: float = 0.07,
     ) -> tuple:
         """
         Predict which groups contain real genes.
@@ -223,8 +223,18 @@ class OrfGroupClassifier:
         # Extract features
         df = self.extract_group_features(groups, genome_id, weights)
 
-        # Get feature names from model
+        # Resolve feature column order.
+        # Models trained on numpy arrays get generic names ("Column_0" …).
+        # In that case fall back to self.feature_names (loaded from feature_names.pkl).
         model_features = self.model.feature_name_
+        if model_features and model_features[0].startswith("Column_"):
+            if self.feature_names:
+                model_features = self.feature_names
+            else:
+                raise ValueError(
+                    "Model has generic column names and feature_names.pkl was not loaded. "
+                    "Call load() with a path whose directory contains feature_names.pkl."
+                )
 
         missing = [f for f in model_features if f not in df.columns]
         if missing:
@@ -238,19 +248,103 @@ class OrfGroupClassifier:
         X = df[model_features].values
 
         # Get probabilities — n_jobs=1 avoids a 1.3s loky cpu_count() call
-        probabilities = self.model.predict_proba(X, num_threads=1)[:, 1]
+        probabilities = np.asarray(self.model.predict_proba(X, num_threads=1))[:, 1]
 
         # Apply threshold
         predictions = (probabilities >= threshold).astype(int)
 
         return predictions, probabilities, df["group_id"].tolist()
 
+    def train(
+        self,
+        X_train: pd.DataFrame,
+        y_train: np.ndarray,
+        X_val: Optional[pd.DataFrame] = None,
+        y_val: Optional[np.ndarray] = None,
+    ) -> None:
+        """
+        Train LightGBM classifier with scale_pos_weight to handle class imbalance.
+
+        X_train / X_val must be the output of extract_group_features() with
+        group_id dropped. y is a binary array (1 = group contains a real gene).
+        Saves feature names from X_train columns.
+        """
+        import lightgbm as lgb
+
+        n_pos = int(y_train.sum())
+        n_neg = int(len(y_train) - n_pos)
+        if n_pos == 0:
+            raise ValueError("Training set has no positive examples.")
+
+        spw = n_neg / n_pos
+        print(
+            f"  Training LightGBM: n_train={len(y_train)}, pos={n_pos},"
+            f" neg={n_neg}, scale_pos_weight={spw:.1f}"
+        )
+
+        callbacks = []
+        eval_set = None
+        if X_val is not None and y_val is not None:
+            eval_set = [(X_val.values, y_val)]
+            callbacks.append(lgb.early_stopping(stopping_rounds=50, verbose=False))
+            callbacks.append(lgb.log_evaluation(period=-1))
+
+        self.model = lgb.LGBMClassifier(
+            n_estimators=400,
+            learning_rate=0.05,
+            num_leaves=63,
+            min_child_samples=20,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            scale_pos_weight=spw,
+            random_state=42,
+            n_jobs=-1,
+            verbose=-1,
+        )
+        self.model.fit(
+            X_train.values,
+            y_train,
+            eval_set=eval_set,
+            callbacks=callbacks if callbacks else None,
+        )
+        self.feature_names = list(X_train.columns)
+
+    def calibrate_threshold(self, X_val: pd.DataFrame, y_val: np.ndarray) -> float:
+        """
+        Sweep decision thresholds and return the one maximising F1 on the
+        validation set. Updates nothing — caller decides whether to adopt.
+        """
+        from sklearn.metrics import precision_recall_curve
+
+        probs = np.asarray(self.model.predict_proba(X_val.values, num_threads=1))[:, 1]
+        precision, recall, thresholds = precision_recall_curve(y_val, probs)
+        f1_scores = np.where(
+            (precision + recall) > 0,
+            2 * precision * recall / (precision + recall),
+            0.0,
+        )
+        best_idx = int(np.argmax(f1_scores[:-1]))
+        best_t = float(thresholds[best_idx])
+        best_f1 = float(f1_scores[best_idx])
+        print(f"  Best threshold: {best_t:.3f}  (val F1={best_f1:.4f})")
+        return best_t
+
+    def save(self, model_path: str) -> None:
+        """Save model and feature names to disk (joblib format)."""
+        p = Path(model_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(self.model, str(p))
+        feature_path = p.parent / "feature_names.pkl"
+        joblib.dump(self.feature_names, str(feature_path))
+        print(f"  Saved model -> {p}")
+        print(f"  Saved features -> {feature_path}")
+
     def filter_groups(
         self,
         groups: Dict[str, List[Dict]],
         genome_id: str = "unknown",
         weights: Dict = None,
-        threshold: float = 0.1,
+        threshold: float = 0.07,
     ) -> Dict[str, List[Dict]]:
         """
         Filter groups, keeping only those predicted to contain real genes.
@@ -355,7 +449,7 @@ class HybridGenePredictor(nn.Module):
 class HybridGeneFilter:
     def __init__(self, device: str = None):
         self.model = None
-        self.threshold = 0.25
+        self.threshold = 0.12
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.feature_names = [
             "codon_score_norm",
@@ -555,30 +649,20 @@ class HybridGeneFilter:
             rows.append(feature_dict)
         return pd.DataFrame(rows).fillna(0.0)
 
-    # ASCII lookup table: maps byte value → channel index (0=A,1=C,2=G,3=T).
-    # Unknown bases (N, etc.) map to 0 (treated as A) — kept out-of-distribution.
-    _ASCII_TO_CHANNEL: np.ndarray = np.zeros(256, dtype=np.int32)
-    _ASCII_TO_CHANNEL[ord("C")] = 1
-    _ASCII_TO_CHANNEL[ord("G")] = 2
-    _ASCII_TO_CHANNEL[ord("T")] = 3
-
     @staticmethod
     def _one_hot_encode_dna(candidates: List[Dict], max_len: int = None):
-        """Vectorised one-hot encoder — replaces the per-nucleotide Python loop."""
-        seqs = [c.get("sequence", "").upper() for c in candidates]
+        mapping = {"A": 0, "C": 1, "G": 2, "T": 3}
         if max_len is None:
-            max_len = max((len(s) for s in seqs), default=0)
-
-        lut = HybridGeneFilter._ASCII_TO_CHANNEL
-        n = len(seqs)
-        # Index array: (n, max_len) filled with 0 (→ channel A by default)
-        indices = np.zeros((n, max_len), dtype=np.int32)
-        for i, seq in enumerate(seqs):
-            raw = np.frombuffer(seq[:max_len].encode("ascii", errors="replace"), dtype=np.uint8)
-            indices[i, : len(raw)] = lut[raw]
-
-        # np.eye(4)[indices] broadcasts to (n, max_len, 4) — pure numpy, no loop
-        one_hot = np.eye(4, dtype=np.float32)[indices]
+            max_len = max((len(c.get("sequence", "")) for c in candidates), default=0)
+        num_candidates = len(candidates)
+        one_hot = np.zeros((num_candidates, max_len, 4), dtype=np.float32)
+        for idx, candidate in enumerate(candidates):
+            seq = candidate.get("sequence", "").upper()
+            for i, nt in enumerate(seq):
+                if i >= max_len:
+                    break
+                if nt in mapping:
+                    one_hot[idx, i, mapping[nt]] = 1.0
         return torch.from_numpy(one_hot)
 
     def predict(
@@ -660,196 +744,6 @@ class HybridGeneFilter:
         gene_ids = [c.get("gene_id", f"gene_{i}") for i, c in enumerate(candidates)]
 
         return preds, probs, gene_ids
-
-    def train(
-        self,
-        candidates: List[Dict],
-        labels: np.ndarray,
-        val_candidates: Optional[List[Dict]] = None,
-        val_labels: Optional[np.ndarray] = None,
-        epochs: int = 50,
-        batch_size: int = 64,
-        lr: float = 1e-3,
-        patience: int = 10,
-        focal_loss: bool = False,
-        focal_gamma: float = 2.0,
-    ) -> None:
-        """
-        Train HybridGenePredictor with pos_weight (or focal loss) to handle class imbalance.
-
-        candidates / val_candidates are lists of ORF dicts as produced by the pipeline
-        after LGB filter + select_best_starts.  labels is a binary array (1 = real gene).
-        """
-        n_pos = int(labels.sum())
-        n_neg = int(len(labels) - n_pos)
-        if n_pos == 0:
-            raise ValueError("Training set has no positive examples.")
-
-        alpha = n_neg / (n_pos + n_neg)  # fraction of negatives, used for focal loss
-        spw = n_neg / n_pos
-        print(
-            f"  HybridGeneFilter training: n={len(labels)} pos={n_pos} neg={n_neg} ratio={spw:.2f}"
-        )
-
-        # Build model
-        self.model = HybridGenePredictor(num_traditional_features=len(self.feature_names))
-        self.model.to(self.device)
-
-        # Loss
-        if focal_loss:
-
-            class _FocalLoss(nn.Module):
-                def __init__(self, a, g):
-                    super().__init__()
-                    self.a = a
-                    self.g = g
-
-                def forward(self, logits, targets):
-                    bce = F.binary_cross_entropy_with_logits(logits, targets, reduction="none")
-                    p_t = torch.sigmoid(logits) * targets + (1 - torch.sigmoid(logits)) * (
-                        1 - targets
-                    )
-                    a_t = self.a * targets + (1 - self.a) * (1 - targets)
-                    return (a_t * (1 - p_t) ** self.g * bce).mean()
-
-            criterion = _FocalLoss(alpha, focal_gamma)
-            print(f"  Loss: focal (gamma={focal_gamma}, alpha={alpha:.3f})")
-        else:
-            pw = torch.tensor([spw], dtype=torch.float32, device=self.device)
-            criterion = nn.BCEWithLogitsLoss(pos_weight=pw)
-            print(f"  Loss: BCEWithLogitsLoss (pos_weight={spw:.2f})")
-
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, mode="min", factor=0.5, patience=5
-        )
-
-        # Cap sequence length to avoid OOM — sequences longer than this are truncated.
-        # The CNN uses AdaptiveMaxPool so any length is valid; 1500 bp covers >99% of
-        # bacterial genes while keeping per-batch memory bounded.
-        max_seq_len = 1500
-
-        # Pre-extract tabular features once (small: n_candidates × 25 floats).
-        # Sequences are encoded per-batch to avoid a potentially multi-GB tensor.
-        feat_df = self.extract_features(candidates)
-        X_feat = torch.tensor(feat_df[self.feature_names].values, dtype=torch.float32)
-        y_tensor = torch.tensor(labels, dtype=torch.float32)
-
-        val_feat_tensor = val_label_tensor = None
-        if val_candidates is not None and val_labels is not None:
-            val_feat_df = self.extract_features(val_candidates)
-            val_feat_tensor = torch.tensor(
-                val_feat_df[self.feature_names].values, dtype=torch.float32
-            )
-            val_label_tensor = torch.tensor(val_labels, dtype=torch.float32)
-
-        best_val_loss = float("inf")
-        best_state = None
-        no_improve = 0
-
-        for epoch in range(1, epochs + 1):
-            self.model.train()
-            perm = torch.randperm(len(y_tensor))
-            epoch_loss = 0.0
-            n_batches = 0
-
-            for i in range(0, len(perm), batch_size):
-                idx_t = perm[i : i + batch_size]
-                idx = idx_t.tolist()
-                batch_cands = [candidates[j] for j in idx]
-                xs = self._one_hot_encode_dna(batch_cands, max_len=max_seq_len).to(self.device)
-                xf = X_feat[idx_t].to(self.device)
-                yt = y_tensor[idx_t].to(self.device)
-
-                optimizer.zero_grad()
-                logits = self.model(xs, xf)
-                loss = criterion(logits, yt)
-                loss.backward()
-                optimizer.step()
-                epoch_loss += loss.item()
-                n_batches += 1
-
-            train_loss = epoch_loss / max(n_batches, 1)
-
-            # Validation (batched to avoid OOM on val set)
-            if val_feat_tensor is not None and val_label_tensor is not None:
-                self.model.eval()
-                val_logits = []
-                with torch.no_grad():
-                    for vi in range(0, len(val_candidates), batch_size):
-                        vbatch = val_candidates[vi : vi + batch_size]
-                        vxs = self._one_hot_encode_dna(vbatch, max_len=max_seq_len).to(self.device)
-                        vxf = val_feat_tensor[vi : vi + batch_size].to(self.device)
-                        val_logits.append(self.model(vxs, vxf))
-                all_val_logits = torch.cat(val_logits)
-                val_loss = criterion(all_val_logits, val_label_tensor.to(self.device)).item()
-
-                scheduler.step(val_loss)
-
-                if val_loss < best_val_loss - 1e-5:
-                    best_val_loss = val_loss
-                    best_state = {k: v.cpu().clone() for k, v in self.model.state_dict().items()}
-                    no_improve = 0
-                else:
-                    no_improve += 1
-
-                if epoch % 5 == 0 or epoch == 1:
-                    print(
-                        f"  epoch {epoch:>3}/{epochs}  train={train_loss:.4f}"
-                        f"  val={val_loss:.4f}  best={best_val_loss:.4f}"
-                        f"  no_improve={no_improve}"
-                    )
-
-                if no_improve >= patience:
-                    print(f"  Early stopping at epoch {epoch}")
-                    break
-            else:
-                if epoch % 5 == 0 or epoch == 1:
-                    print(f"  epoch {epoch:>3}/{epochs}  train={train_loss:.4f}")
-
-        # Restore best weights
-        if best_state is not None:
-            self.model.load_state_dict(best_state)
-        self.model.eval()
-
-    def calibrate_threshold(
-        self, candidates: List[Dict], labels: np.ndarray, batch_size: int = 64
-    ) -> float:
-        """Return the F1-maximising threshold on the validation set."""
-        from sklearn.metrics import precision_recall_curve
-
-        if self.model is None:
-            raise RuntimeError("Model not trained. Call train() first.")
-
-        _, probs, _ = self.predict(candidates, batch_size=batch_size)
-        precision, recall, thresholds = precision_recall_curve(labels, probs)
-        f1_scores = np.where(
-            (precision + recall) > 0,
-            2 * precision * recall / (precision + recall),
-            0.0,
-        )
-        best_idx = int(np.argmax(f1_scores[:-1]))
-        best_t = float(thresholds[best_idx])
-        best_f1 = float(f1_scores[best_idx])
-        print(f"  Best threshold: {best_t:.3f}  (val F1={best_f1:.4f})")
-        return best_t
-
-    def save(self, model_path: str) -> None:
-        """Save model, threshold and feature count to disk (pickle format)."""
-        import pickle
-
-        if self.model is None:
-            raise RuntimeError("No model to save. Call train() first.")
-        p = Path(model_path)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        data = {
-            "model_state_dict": self.model.state_dict(),
-            "num_traditional_features": len(self.feature_names),
-            "threshold": self.threshold,
-        }
-        with open(str(p), "wb") as f:
-            pickle.dump(data, f)
-        print(f"  Saved hybrid model -> {p}")
 
     def filter_candidates(
         self,
