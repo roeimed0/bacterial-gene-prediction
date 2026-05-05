@@ -17,7 +17,7 @@ class PredictionRequest(BaseModel):
     use_group_ml: bool = Field(True, description="Use ML for group filtering")
     group_threshold: float = Field(0.1, description="ML group filtering threshold")
     use_final_ml: bool = Field(True, description="Use final hybrid ML filtration")
-    final_threshold: float = Field(0.12, description="Final ML filtration threshold")
+    final_threshold: float = Field(0.25, description="Final ML filtration threshold")
 
 
 class NcbiPredictionRequest(BaseModel):
@@ -28,7 +28,7 @@ class NcbiPredictionRequest(BaseModel):
     use_group_ml: bool = Field(True, description="Use ML for group filtering")
     group_threshold: float = Field(0.1, description="ML group filtering threshold")
     use_final_ml: bool = Field(True, description="Use final hybrid ML filtration")
-    final_threshold: float = Field(0.12, description="Final ML filtration threshold")
+    final_threshold: float = Field(0.25, description="Final ML filtration threshold")
 
 
 class GenePrediction(BaseModel):

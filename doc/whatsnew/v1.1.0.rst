@@ -51,6 +51,24 @@ Evaluation
   compatibility.  The result dict now also carries ``match_mode``,
   ``start_tolerance``, and ``stop_tolerance`` for full reproducibility.
 
+ML (continued)
+^^^^^^^^^^^^^^
+- Retrained :class:`HybridGeneFilter` (CNN+Dense) on output of the new LGB model
+  (:issue:`112`).  Training data now flows through the correct cascade (LGB filter
+  → ``select_best_starts`` → second filter), so the model learns the distribution
+  it actually sees at inference.  Validated on 20 held-out genomes not in
+  ``GENOME_CATALOG``: +4.24 pp mean F1, +3.65 pp sensitivity, +2.74 pp precision;
+  19/20 genomes improved, 0 regressions above 0.05 pp.  Largest gains in
+  Actinobacteria (+9.99 pp F1, +11.34 pp sensitivity).
+- Lowered ``HybridGeneFilter`` default threshold from 0.12 to **0.25**, selected
+  by end-to-end gene-prediction F1 sweep across 8 holdout genomes.
+- Added ``HybridGeneFilter.train()``, ``HybridGeneFilter.save()``, and
+  ``HybridGeneFilter.calibrate_threshold()`` (:issue:`112`).  Supports
+  ``BCEWithLogitsLoss(pos_weight=...)`` and optional focal loss.  Training uses
+  per-batch sequence encoding (no pre-allocation) with a 1500 bp sequence cap.
+- Added :meth:`HybridGeneFilter._one_hot_encode_dna` vectorised via numpy ASCII
+  lookup table — replaces the per-nucleotide Python loop (~100x faster).
+
 .. ---------------------------------------------------------------------------
 .. _whatsnew_110.performance:
 
