@@ -467,7 +467,7 @@ def predict_ncbi_genome(
     accession: str,
     email: str = None,
     use_ml: bool = True,
-    ml_threshold: float = 0.1,
+    ml_threshold: float = 0.07,
     use_final_filtration_ml: bool = True,
     final_ml_threshold: float = 0.12,
 ):
@@ -561,7 +561,7 @@ def predict_ncbi_genome(
 def predict_fasta_file(
     fasta_path: str,
     use_ml: bool = True,
-    ml_threshold: float = 0.1,
+    ml_threshold: float = 0.07,
     use_final_filtration_ml: bool = True,
     final_ml_threshold: float = 0.12,
 ):
@@ -768,8 +768,8 @@ Examples:
     parser.add_argument(
         "--group-threshold",
         type=float,
-        default=0.1,
-        help="ML group filtering threshold (default: 0.1)",
+        default=0.07,
+        help="ML group filtering threshold (default: 0.07)",
     )
     parser.add_argument(
         "--final-threshold",

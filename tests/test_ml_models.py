@@ -332,3 +332,270 @@ class TestHybridGeneFilterStaticHelpers:
         """Sequence shorter than window (default 30 bp) must return 0.0."""
         result = HybridGeneFilter._detect_hairpin_near_stop("ATGTAA", window=30)
         assert result == 0.0
+
+
+# ===========================================================================
+# OrfGroupClassifier — train / save / calibrate_threshold  (issue #111)
+# ===========================================================================
+
+
+def _make_feature_df(n: int, n_features: int = 5, seed: int = 0) -> pd.DataFrame:
+    """Return a small synthetic feature DataFrame with named columns."""
+    rng = np.random.default_rng(seed)
+    cols = [f"feat_{i}" for i in range(n_features)]
+    return pd.DataFrame(rng.random((n, n_features)), columns=cols)
+
+
+def _make_labels(n: int, pos_frac: float = 0.1, seed: int = 0) -> np.ndarray:
+    """Return a binary label array with ~pos_frac positive examples."""
+    rng = np.random.default_rng(seed)
+    return (rng.random(n) < pos_frac).astype(np.int32)
+
+
+class TestOrfGroupClassifierTrain:
+    """Unit tests for OrfGroupClassifier.train() — issue #111."""
+
+    def test_train_sets_model_attribute(self):
+        clf = OrfGroupClassifier()
+        X = _make_feature_df(200)
+        y = _make_labels(200, pos_frac=0.15)
+        clf.train(X, y)
+        assert clf.model is not None
+
+    def test_train_sets_feature_names(self):
+        clf = OrfGroupClassifier()
+        X = _make_feature_df(200)
+        y = _make_labels(200, pos_frac=0.15)
+        clf.train(X, y)
+        assert clf.feature_names == list(X.columns)
+
+    def test_train_model_can_predict_proba(self):
+        clf = OrfGroupClassifier()
+        X = _make_feature_df(200)
+        y = _make_labels(200, pos_frac=0.15)
+        clf.train(X, y)
+        probs = np.asarray(clf.model.predict_proba(X.values))[:, 1]
+        assert probs.shape == (200,)
+        assert np.all((probs >= 0) & (probs <= 1))
+
+    def test_train_raises_on_all_negative_labels(self):
+        clf = OrfGroupClassifier()
+        X = _make_feature_df(50)
+        y = np.zeros(50, dtype=np.int32)
+        with pytest.raises(ValueError, match="no positive examples"):
+            clf.train(X, y)
+
+    def test_train_with_val_set_uses_early_stopping(self):
+        """Passing X_val/y_val must not raise — early stopping path exercised."""
+        clf = OrfGroupClassifier()
+        X_tr = _make_feature_df(200, seed=0)
+        y_tr = _make_labels(200, pos_frac=0.15, seed=0)
+        X_val = _make_feature_df(50, seed=1)
+        y_val = _make_labels(50, pos_frac=0.15, seed=1)
+        clf.train(X_tr, y_tr, X_val, y_val)
+        assert clf.model is not None
+
+    def test_scale_pos_weight_applied(self):
+        """scale_pos_weight must be set to n_neg/n_pos in the trained model."""
+        clf = OrfGroupClassifier()
+        X = _make_feature_df(300)
+        y = _make_labels(300, pos_frac=0.1)
+        clf.train(X, y)
+        n_pos = int(y.sum())
+        n_neg = len(y) - n_pos
+        expected_spw = n_neg / n_pos
+        actual_spw = clf.model.get_params()["scale_pos_weight"]
+        assert actual_spw == pytest.approx(expected_spw, rel=1e-6)
+
+
+class TestOrfGroupClassifierCalibrateThreshold:
+    """Unit tests for OrfGroupClassifier.calibrate_threshold() — issue #111."""
+
+    def test_returns_float_in_unit_interval(self):
+        clf = OrfGroupClassifier()
+        X = _make_feature_df(300)
+        y = _make_labels(300, pos_frac=0.15)
+        clf.train(X, y)
+        t = clf.calibrate_threshold(X, y)
+        assert isinstance(t, float)
+        assert 0.0 < t < 1.0
+
+    def test_calibrated_threshold_better_than_default(self):
+        """F1 at the calibrated threshold must be ≥ F1 at 0.5 on training data."""
+        from sklearn.metrics import f1_score
+
+        clf = OrfGroupClassifier()
+        X = _make_feature_df(500)
+        y = _make_labels(500, pos_frac=0.1)
+        clf.train(X, y)
+        t = clf.calibrate_threshold(X, y)
+
+        probs = np.asarray(clf.model.predict_proba(X.values))[:, 1]
+        f1_calibrated = f1_score(y, probs >= t, zero_division=0)
+        f1_default = f1_score(y, probs >= 0.5, zero_division=0)
+        assert f1_calibrated >= f1_default - 1e-6
+
+
+class TestOrfGroupClassifierSave:
+    """Unit tests for OrfGroupClassifier.save() / load() round-trip — issue #111."""
+
+    def test_save_creates_model_file(self, tmp_path):
+        clf = OrfGroupClassifier()
+        X = _make_feature_df(200)
+        y = _make_labels(200, pos_frac=0.15)
+        clf.train(X, y)
+        out = tmp_path / "lgb_test.pkl"
+        clf.save(str(out))
+        assert out.exists()
+
+    def test_save_creates_feature_names_file(self, tmp_path):
+        clf = OrfGroupClassifier()
+        X = _make_feature_df(200)
+        y = _make_labels(200, pos_frac=0.15)
+        clf.train(X, y)
+        clf.save(str(tmp_path / "lgb_test.pkl"))
+        assert (tmp_path / "feature_names.pkl").exists()
+
+    def test_save_load_roundtrip_preserves_predictions(self, tmp_path):
+        """A model saved and re-loaded must produce identical probabilities."""
+        clf = OrfGroupClassifier()
+        X = _make_feature_df(200)
+        y = _make_labels(200, pos_frac=0.15)
+        clf.train(X, y)
+        probs_before = np.asarray(clf.model.predict_proba(X.values))[:, 1]
+
+        out = tmp_path / "lgb_test.pkl"
+        clf.save(str(out))
+
+        clf2 = OrfGroupClassifier()
+        clf2.load(str(out))
+        probs_after = np.asarray(clf2.model.predict_proba(X.values))[:, 1]
+
+        np.testing.assert_allclose(probs_before, probs_after, rtol=1e-5)
+
+    def test_save_load_roundtrip_preserves_feature_names(self, tmp_path):
+        clf = OrfGroupClassifier()
+        X = _make_feature_df(200)
+        y = _make_labels(200, pos_frac=0.15)
+        clf.train(X, y)
+        clf.save(str(tmp_path / "lgb_test.pkl"))
+
+        clf2 = OrfGroupClassifier()
+        clf2.load(str(tmp_path / "lgb_test.pkl"))
+        assert clf2.feature_names == clf.feature_names
+
+
+# ===========================================================================
+# scripts/train_lgb.py — label_groups / build_splits  (issue #111)
+# ===========================================================================
+
+
+class TestLabelGroups:
+    """Unit tests for scripts/train_lgb.label_groups()."""
+
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        from scripts.train_lgb import label_groups
+
+        self.label_groups = label_groups
+
+    def _make_group(self, genome_start: int, genome_end: int) -> pd.DataFrame:
+        return pd.DataFrame(
+            [{"genome_start": genome_start, "genome_end": genome_end, "start": 1, "end": 100}]
+        )
+
+    def test_positive_when_orf_in_ref_set(self):
+        groups = {"g1": self._make_group(100, 400)}
+        ref = {(100, 400)}
+        labels = self.label_groups(groups, ref)
+        assert labels[0] == 1
+
+    def test_negative_when_orf_not_in_ref_set(self):
+        groups = {"g1": self._make_group(100, 400)}
+        ref = {(200, 500)}
+        labels = self.label_groups(groups, ref)
+        assert labels[0] == 0
+
+    def test_group_positive_if_any_orf_matches(self):
+        df = pd.DataFrame(
+            [
+                {"genome_start": 100, "genome_end": 400},
+                {"genome_start": 200, "genome_end": 500},
+            ]
+        )
+        groups = {"g1": df}
+        ref = {(200, 500)}
+        labels = self.label_groups(groups, ref)
+        assert labels[0] == 1
+
+    def test_empty_ref_set_all_negative(self):
+        groups = {"g1": self._make_group(100, 400), "g2": self._make_group(500, 800)}
+        labels = self.label_groups(groups, set())
+        assert list(labels) == [0, 0]
+
+    def test_label_array_length_matches_group_count(self):
+        groups = {f"g{i}": self._make_group(i * 100, i * 100 + 300) for i in range(5)}
+        labels = self.label_groups(groups, set())
+        assert len(labels) == 5
+
+    def test_falls_back_to_start_end_when_genome_coords_absent(self):
+        df = pd.DataFrame([{"start": 100, "end": 400}])
+        groups = {"g1": df}
+        ref = {(100, 400)}
+        labels = self.label_groups(groups, ref)
+        assert labels[0] == 1
+
+
+class TestBuildSplits:
+    """Unit tests for scripts/train_lgb.build_splits()."""
+
+    @pytest.fixture(autouse=True)
+    def _import(self):
+        from scripts.train_lgb import build_splits
+
+        self.build_splits = build_splits
+
+    def _groups(self, n_per_group: int = 25):
+        return {
+            "Proteobacteria": [f"PA_{i}" for i in range(n_per_group)],
+            "Firmicutes": [f"FA_{i}" for i in range(n_per_group)],
+            "Actinobacteria": [f"AA_{i}" for i in range(n_per_group)],
+            "Archaea": [f"AR_{i}" for i in range(n_per_group)],
+        }
+
+    def test_train_plus_val_plus_test_covers_all_genomes(self):
+        groups = self._groups(25)
+        total = sum(len(v) for v in groups.values())
+        train, val, test = self.build_splits(groups, val_per_group=4, test_per_group=4, seed=42)
+        assert len(train) + len(val) + len(test) == total
+
+    def test_no_overlap_between_any_splits(self):
+        groups = self._groups(25)
+        train, val, test = self.build_splits(groups, val_per_group=4, test_per_group=4, seed=42)
+        assert set(train).isdisjoint(set(val))
+        assert set(train).isdisjoint(set(test))
+        assert set(val).isdisjoint(set(test))
+
+    def test_val_and_test_sizes_respect_per_group_cap(self):
+        groups = self._groups(25)
+        _, val, test = self.build_splits(groups, val_per_group=4, test_per_group=4, seed=42)
+        assert len(val) <= 4 * len(groups)
+        assert len(test) <= 4 * len(groups)
+
+    def test_train_is_majority_of_data(self):
+        groups = self._groups(25)
+        train, val, test = self.build_splits(groups, val_per_group=4, test_per_group=4, seed=42)
+        total = len(train) + len(val) + len(test)
+        assert len(train) > total * 0.6
+
+    def test_deterministic_with_same_seed(self):
+        groups = self._groups(25)
+        r1 = self.build_splits(groups, val_per_group=4, test_per_group=4, seed=7)
+        r2 = self.build_splits(groups, val_per_group=4, test_per_group=4, seed=7)
+        assert r1 == r2
+
+    def test_different_seeds_produce_different_splits(self):
+        groups = self._groups(25)
+        _, val1, test1 = self.build_splits(groups, val_per_group=4, test_per_group=4, seed=1)
+        _, val2, test2 = self.build_splits(groups, val_per_group=4, test_per_group=4, seed=2)
+        assert val1 != val2 or test1 != test2
