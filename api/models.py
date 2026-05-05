@@ -15,7 +15,7 @@ class PredictionRequest(BaseModel):
         None, description="Optional filename for output (without extension)"
     )
     use_group_ml: bool = Field(True, description="Use ML for group filtering")
-    group_threshold: float = Field(0.1, description="ML group filtering threshold")
+    group_threshold: float = Field(0.07, description="ML group filtering threshold")
     use_final_ml: bool = Field(True, description="Use final hybrid ML filtration")
     final_threshold: float = Field(0.12, description="Final ML filtration threshold")
 
@@ -26,7 +26,7 @@ class NcbiPredictionRequest(BaseModel):
     accession: str = Field(..., description="NCBI accession number (e.g., NC_000913.3)")
     email: str = Field(..., description="Email address (required by NCBI)")
     use_group_ml: bool = Field(True, description="Use ML for group filtering")
-    group_threshold: float = Field(0.1, description="ML group filtering threshold")
+    group_threshold: float = Field(0.07, description="ML group filtering threshold")
     use_final_ml: bool = Field(True, description="Use final hybrid ML filtration")
     final_threshold: float = Field(0.12, description="Final ML filtration threshold")
 

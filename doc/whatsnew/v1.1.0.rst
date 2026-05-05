@@ -51,6 +51,20 @@ Evaluation
   compatibility.  The result dict now also carries ``match_mode``,
   ``start_tolerance``, and ``stop_tolerance`` for full reproducibility.
 
+ML
+^^
+- Retrained :class:`OrfGroupClassifier` (LightGBM) on all 100 ``GENOME_CATALOG``
+  genomes with ``scale_pos_weight`` set from data (:issue:`111`).  Validated on
+  20 held-out genomes outside the training pool.  At the same operating recall
+  the new model achieves +2.3 pp F1 and +3.1 pp precision over the previous
+  model.
+- Lowered the default ``OrfGroupClassifier`` threshold from 0.10 to **0.07**
+  based on PR-curve calibration on a held-out validation set.  At t=0.07 the
+  new model matches the old model's recall while improving precision.
+- Added :meth:`OrfGroupClassifier.train`, :meth:`OrfGroupClassifier.save`, and
+  :meth:`OrfGroupClassifier.calibrate_threshold` methods (:issue:`111`) so the
+  classifier can be retrained and threshold-tuned without external tooling.
+
 .. ---------------------------------------------------------------------------
 .. _whatsnew_110.performance:
 

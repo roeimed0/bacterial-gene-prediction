@@ -1,7 +1,7 @@
 import math
 from collections import Counter
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import joblib
 import numpy as np
@@ -30,10 +30,10 @@ class OrfGroupClassifier:
     def __init__(self):
         """
         Initialize empty classifier.
-        Call load() to load a trained model before using.
+        Call load() or train() before using.
         """
-        self.model = None
-        self.feature_names = None
+        self.model: Any = None
+        self.feature_names: Optional[List[str]] = None
 
     def load(self, model_path: str = "../models/orf_classifier_lgb.pkl"):
         """
@@ -53,7 +53,7 @@ class OrfGroupClassifier:
         feature_path = model_path.parent / "feature_names.pkl"
         if feature_path.exists():
             self.feature_names = joblib.load(str(feature_path))
-            print(f"Loaded {len(self.feature_names)} features")
+            print(f"Loaded {len(self.feature_names or [])} features")
         else:
             print(f"Warning: feature_names.pkl not found in {model_path.parent}")
             self.feature_names = None
@@ -202,7 +202,7 @@ class OrfGroupClassifier:
         groups: Dict[str, List[Dict]],
         genome_id: str = "unknown",
         weights: Dict = None,
-        threshold: float = 0.1,
+        threshold: float = 0.07,
     ) -> tuple:
         """
         Predict which groups contain real genes.
@@ -223,8 +223,18 @@ class OrfGroupClassifier:
         # Extract features
         df = self.extract_group_features(groups, genome_id, weights)
 
-        # Get feature names from model
+        # Resolve feature column order.
+        # Models trained on numpy arrays get generic names ("Column_0" …).
+        # In that case fall back to self.feature_names (loaded from feature_names.pkl).
         model_features = self.model.feature_name_
+        if model_features and model_features[0].startswith("Column_"):
+            if self.feature_names:
+                model_features = self.feature_names
+            else:
+                raise ValueError(
+                    "Model has generic column names and feature_names.pkl was not loaded. "
+                    "Call load() with a path whose directory contains feature_names.pkl."
+                )
 
         missing = [f for f in model_features if f not in df.columns]
         if missing:
@@ -238,19 +248,102 @@ class OrfGroupClassifier:
         X = df[model_features].values
 
         # Get probabilities — n_jobs=1 avoids a 1.3s loky cpu_count() call
-        probabilities = self.model.predict_proba(X, num_threads=1)[:, 1]
+        probabilities = np.asarray(self.model.predict_proba(X, num_threads=1))[:, 1]
 
         # Apply threshold
         predictions = (probabilities >= threshold).astype(int)
 
         return predictions, probabilities, df["group_id"].tolist()
 
+    def train(
+        self,
+        X_train: pd.DataFrame,
+        y_train: np.ndarray,
+        X_val: Optional[pd.DataFrame] = None,
+        y_val: Optional[np.ndarray] = None,
+    ) -> None:
+        """
+        Train LightGBM classifier with scale_pos_weight to handle class imbalance.
+
+        X_train / X_val must be the output of extract_group_features() with
+        group_id dropped. y is a binary array (1 = group contains a real gene).
+        Saves feature names from X_train columns.
+        """
+        import lightgbm as lgb
+
+        n_pos = int(y_train.sum())
+        n_neg = int(len(y_train) - n_pos)
+        if n_pos == 0:
+            raise ValueError("Training set has no positive examples.")
+
+        spw = n_neg / n_pos
+        print(
+            f"  Training LightGBM: n_train={len(y_train)}, pos={n_pos}, neg={n_neg}, scale_pos_weight={spw:.1f}"
+        )
+
+        callbacks = []
+        eval_set = None
+        if X_val is not None and y_val is not None:
+            eval_set = [(X_val.values, y_val)]
+            callbacks.append(lgb.early_stopping(stopping_rounds=50, verbose=False))
+            callbacks.append(lgb.log_evaluation(period=-1))
+
+        self.model = lgb.LGBMClassifier(
+            n_estimators=400,
+            learning_rate=0.05,
+            num_leaves=63,
+            min_child_samples=20,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            scale_pos_weight=spw,
+            random_state=42,
+            n_jobs=-1,
+            verbose=-1,
+        )
+        self.model.fit(
+            X_train.values,
+            y_train,
+            eval_set=eval_set,
+            callbacks=callbacks if callbacks else None,
+        )
+        self.feature_names = list(X_train.columns)
+
+    def calibrate_threshold(self, X_val: pd.DataFrame, y_val: np.ndarray) -> float:
+        """
+        Sweep decision thresholds and return the one maximising F1 on the
+        validation set. Updates nothing — caller decides whether to adopt.
+        """
+        from sklearn.metrics import precision_recall_curve
+
+        probs = np.asarray(self.model.predict_proba(X_val.values, num_threads=1))[:, 1]
+        precision, recall, thresholds = precision_recall_curve(y_val, probs)
+        f1_scores = np.where(
+            (precision + recall) > 0,
+            2 * precision * recall / (precision + recall),
+            0.0,
+        )
+        best_idx = int(np.argmax(f1_scores[:-1]))
+        best_t = float(thresholds[best_idx])
+        best_f1 = float(f1_scores[best_idx])
+        print(f"  Best threshold: {best_t:.3f}  (val F1={best_f1:.4f})")
+        return best_t
+
+    def save(self, model_path: str) -> None:
+        """Save model and feature names to disk (joblib format)."""
+        p = Path(model_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(self.model, str(p))
+        feature_path = p.parent / "feature_names.pkl"
+        joblib.dump(self.feature_names, str(feature_path))
+        print(f"  Saved model -> {p}")
+        print(f"  Saved features -> {feature_path}")
+
     def filter_groups(
         self,
         groups: Dict[str, List[Dict]],
         genome_id: str = "unknown",
         weights: Dict = None,
-        threshold: float = 0.1,
+        threshold: float = 0.07,
     ) -> Dict[str, List[Dict]]:
         """
         Filter groups, keeping only those predicted to contain real genes.
