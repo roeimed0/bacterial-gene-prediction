@@ -1497,6 +1497,74 @@ def clear_imm_cache():
     _IMM_MODEL_REGISTRY.clear()
 
 
+def _select_imm_order(
+    training_seqs: List[str],
+    intergenic_seqs: List[str],
+    min_observations: int = 10,
+    max_order: int = 10,
+    val_fraction: float = 0.2,
+) -> int:
+    """Select the optimal IMM order using held-out log-likelihood.
+
+    Replaces the ad-hoc ``floor(log2(n/min_obs)/2)`` formula with a
+    data-driven estimate:
+
+    1. The data-size formula gives an upper bound on candidate orders
+       (contexts with fewer than *min_observations* occurrences are unreliable).
+    2. The model is built once at that upper bound.
+    3. Flat log tables are used to score 20 % held-out sequences at each
+       candidate order k = 2 … upper_bound.
+    4. The order that maximises the mean per-nucleotide coding/noncoding
+       discrimination on held-out data is returned.
+
+    Falls back to the formula-based estimate when the training set is too
+    small for a meaningful split (< 5 sequences per class).
+    """
+    n_train_bp = sum(len(s) for s in training_seqs)
+    n_inter_bp = sum(len(s) for s in intergenic_seqs)
+    effective_n = min(n_train_bp, n_inter_bp)
+
+    # Formula-based upper bound: highest k where contexts have ≥ min_obs hits
+    if effective_n < min_observations:
+        return 0
+    formula_order = math.floor(math.log(effective_n / min_observations) / math.log(4))
+    upper = max(2, min(formula_order, max_order))
+
+    # Need enough sequences for a meaningful validation split
+    if len(training_seqs) < 5 or len(intergenic_seqs) < 5:
+        return upper
+
+    # 80/20 split (shuffle by position, not sequence, to keep order independent)
+    n_val = max(1, int(len(training_seqs) * val_fraction))
+    val_coding = training_seqs[:n_val]
+    train_coding = training_seqs[n_val:]
+
+    m_val = max(1, int(len(intergenic_seqs) * val_fraction))
+    train_noncoding = intergenic_seqs[m_val:]
+
+    if not train_coding or not train_noncoding:
+        return upper
+
+    # Build model ONCE at the upper bound
+    coding_imm = build_interpolated_markov_model(train_coding, upper, min_observations)
+    noncoding_imm = build_interpolated_markov_model(train_noncoding, upper, min_observations)
+    coding_log = build_flat_log_table(coding_imm, upper)
+    noncoding_log = build_flat_log_table(noncoding_imm, upper)
+
+    # Evaluate held-out discrimination at each candidate order
+    best_order, best_score = 2, float("-inf")
+    for k in range(2, upper + 1):
+        # Mean per-nucleotide coding/noncoding LL ratio on held-out coding seqs
+        scores = [
+            _score_imm_fast(s, coding_log, noncoding_log, k) for s in val_coding if len(s) >= 3
+        ]
+        score = sum(scores) / len(scores) if scores else float("-inf")
+        if score > best_score:
+            best_score, best_order = score, k
+
+    return best_order
+
+
 def build_all_scoring_models(
     training_set: List[Dict], intergenic_set: List[Dict], min_observations: int = 10
 ) -> Dict:
@@ -1516,15 +1584,11 @@ def build_all_scoring_models(
 
     n_training = sum(len(seq) for seq in training_seqs)
     n_intergenic = sum(len(seq) for seq in intergenic_seqs)
-    effective_n = min(n_training, n_intergenic)
 
-    if effective_n < min_observations:
-        estimated_order = 0
-    else:
-        estimated_order = math.floor(math.log2(effective_n / min_observations) / 2)
-
-    estimated_order = min(estimated_order, 8)
-    estimated_order = max(estimated_order, 3)
+    print("  Selecting IMM order (held-out log-likelihood)...")
+    estimated_order = _select_imm_order(
+        training_seqs, intergenic_seqs, min_observations=min_observations
+    )
 
     coding_imm = build_interpolated_markov_model(training_seqs, estimated_order, min_observations)
     noncoding_imm = build_interpolated_markov_model(

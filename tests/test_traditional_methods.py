@@ -354,6 +354,85 @@ class TestBuildInterpolatedMarkovModel:
 
 
 # ===========================================================================
+# Tests: _select_imm_order()
+# ===========================================================================
+
+
+class TestSelectImmOrder:
+    """Tests for the held-out log-likelihood based IMM order selection (#102)."""
+
+    _CODING_SEQS = ["ATG" + "CAG" * 50 + "TAA"] * 20  # 174-bp coding seqs
+    _NONCODING_SEQS = ["GGG" * 51] * 20  # clearly non-coding
+
+    def test_returns_integer(self):
+        from src.traditional_methods import _select_imm_order
+
+        order = _select_imm_order(self._CODING_SEQS, self._NONCODING_SEQS)
+        assert isinstance(order, int)
+
+    def test_order_within_valid_range(self):
+        from src.traditional_methods import _select_imm_order
+
+        order = _select_imm_order(self._CODING_SEQS, self._NONCODING_SEQS, max_order=8)
+        assert 0 <= order <= 8
+
+    def test_insufficient_data_returns_zero(self):
+        """Effective_n below min_observations → order 0."""
+        from src.traditional_methods import _select_imm_order
+
+        order = _select_imm_order(["AT"], ["GG"], min_observations=100)
+        assert order == 0
+
+    def test_fewer_than_5_seqs_falls_back_to_formula(self):
+        """With < 5 sequences per class, no validation split — formula used."""
+        from src.traditional_methods import _select_imm_order
+
+        # 3 sequences per class, enough bp but not enough for split
+        small = ["ATG" + "CAG" * 50 + "TAA"] * 3
+        order = _select_imm_order(small, small, max_order=6)
+        assert isinstance(order, int)
+        assert order >= 0
+
+    def test_order_increases_with_more_data(self):
+        """Larger datasets should support (or equal) the order for smaller ones."""
+        from src.traditional_methods import _select_imm_order
+
+        small = self._CODING_SEQS[:8]
+        large = self._CODING_SEQS * 3
+
+        order_small = _select_imm_order(small, self._NONCODING_SEQS[:8], max_order=6)
+        order_large = _select_imm_order(large, self._NONCODING_SEQS * 3, max_order=6)
+        assert order_large >= order_small
+
+    def test_discriminative_sequences_pick_nonzero_order(self):
+        """Clearly different coding vs noncoding should select order > 0."""
+        from src.traditional_methods import _select_imm_order
+
+        order = _select_imm_order(self._CODING_SEQS, self._NONCODING_SEQS)
+        assert order > 0, "Discriminative sequences should select order > 0"
+
+    def test_build_all_scoring_models_uses_selection(self, capsys):
+        """build_all_scoring_models must print 'Selecting IMM order'."""
+        from src.traditional_methods import build_all_scoring_models
+
+        train = [{"sequence": s} for s in self._CODING_SEQS]
+        inter = [{"sequence": s} for s in self._NONCODING_SEQS]
+        build_all_scoring_models(train, inter)
+        out = capsys.readouterr().out
+        assert "Selecting IMM order" in out
+
+    def test_selected_order_logged_in_output(self, capsys):
+        """The chosen order must appear in the build output."""
+        from src.traditional_methods import build_all_scoring_models
+
+        train = [{"sequence": s} for s in self._CODING_SEQS]
+        inter = [{"sequence": s} for s in self._NONCODING_SEQS]
+        build_all_scoring_models(train, inter)
+        out = capsys.readouterr().out
+        assert "IMM order:" in out
+
+
+# ===========================================================================
 # Tests: score_imm_ratio()
 # ===========================================================================
 
