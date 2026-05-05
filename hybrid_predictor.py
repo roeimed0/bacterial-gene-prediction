@@ -469,7 +469,7 @@ def predict_ncbi_genome(
     use_ml: bool = True,
     ml_threshold: float = 0.07,
     use_final_filtration_ml: bool = True,
-    final_ml_threshold: float = 0.12,
+    final_ml_threshold: float = 0.25,
 ):
     """Download genome from NCBI and predict genes"""
     from Bio import Entrez
@@ -563,7 +563,7 @@ def predict_fasta_file(
     use_ml: bool = True,
     ml_threshold: float = 0.07,
     use_final_filtration_ml: bool = True,
-    final_ml_threshold: float = 0.12,
+    final_ml_threshold: float = 0.25,
 ):
     """Predict genes from FASTA file."""
     print(f"\n{'='*80}")
@@ -774,8 +774,8 @@ Examples:
     parser.add_argument(
         "--final-threshold",
         type=float,
-        default=0.12,
-        help="Final hybrid ML filtration threshold (default: 0.12)",
+        default=0.25,
+        help="Final hybrid ML filtration threshold (default: 0.25)",
     )
     parser.add_argument("--no-group-ml", action="store_true", help="Disable ML group filtering")
     parser.add_argument(
