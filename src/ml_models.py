@@ -1,7 +1,7 @@
 import math
 from collections import Counter
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import joblib
 import numpy as np
@@ -680,8 +680,6 @@ class HybridGeneFilter:
         candidates / val_candidates are lists of ORF dicts as produced by the pipeline
         after LGB filter + select_best_starts.  labels is a binary array (1 = real gene).
         """
-        import pickle
-
         n_pos = int(labels.sum())
         n_neg = int(len(labels) - n_pos)
         if n_pos == 0:
@@ -797,7 +795,9 @@ class HybridGeneFilter:
 
                 if epoch % 5 == 0 or epoch == 1:
                     print(
-                        f"  epoch {epoch:>3}/{epochs}  train={train_loss:.4f}  val={val_loss:.4f}  best={best_val_loss:.4f}  no_improve={no_improve}"
+                        f"  epoch {epoch:>3}/{epochs}  train={train_loss:.4f}"
+                        f"  val={val_loss:.4f}  best={best_val_loss:.4f}"
+                        f"  no_improve={no_improve}"
                     )
 
                 if no_improve >= patience:
