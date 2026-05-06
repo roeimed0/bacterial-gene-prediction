@@ -1,3 +1,4 @@
+import logging
 import math
 from collections import Counter
 from pathlib import Path
@@ -11,6 +12,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from Bio.Seq import Seq
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
+
+logger = logging.getLogger(__name__)
 
 """
 Machine learning classifier for ORF groups.
@@ -47,15 +50,15 @@ class OrfGroupClassifier:
             raise FileNotFoundError(f"Model not found: {model_path}")
 
         self.model = joblib.load(str(model_path))
-        print(f"Loaded model: {model_path}")
+        logger.info("Loaded model: %s", {model_path})
 
         # Load feature names (should be in same directory)
         feature_path = model_path.parent / "feature_names.pkl"
         if feature_path.exists():
             self.feature_names = joblib.load(str(feature_path))
-            print(f"Loaded {len(self.feature_names or [])} features")
+            logger.info("Loaded %d features", len(self.feature_names or []))
         else:
-            print(f"Warning: feature_names.pkl not found in {model_path.parent}")
+            logger.warning("feature_names.pkl not found in %s", model_path.parent)
             self.feature_names = None
 
     def _entropy_from_probs(self, arr, base=2):
@@ -159,7 +162,7 @@ class OrfGroupClassifier:
                 "combined_std": combined.std() if n > 1 else 0.0,
                 "combined_entropy": self._entropy_from_probs(np.maximum(combined, 0)),
                 "combined_margin_top2": (
-                    np.sort(combined)[-1] - np.sort(combined)[-2] if n > 1 else combined[0]
+                    (lambda s: s[-1] - s[-2])(np.sort(combined)) if n > 1 else combined[0]
                 ),
                 "frac_top_orfs": (combined >= 0.8 * max_combined).sum() / n,
                 "rbs_max": max_rbs,
@@ -277,9 +280,12 @@ class OrfGroupClassifier:
             raise ValueError("Training set has no positive examples.")
 
         spw = n_neg / n_pos
-        print(
-            f"  Training LightGBM: n_train={len(y_train)}, pos={n_pos},"
-            f" neg={n_neg}, scale_pos_weight={spw:.1f}"
+        logger.info(
+            "Training LightGBM: n_train=%d, pos=%d, neg=%d, scale_pos_weight=%.1f",
+            len(y_train),
+            n_pos,
+            n_neg,
+            spw,
         )
 
         callbacks = []
@@ -326,7 +332,7 @@ class OrfGroupClassifier:
         best_idx = int(np.argmax(f1_scores[:-1]))
         best_t = float(thresholds[best_idx])
         best_f1 = float(f1_scores[best_idx])
-        print(f"  Best threshold: {best_t:.3f}  (val F1={best_f1:.4f})")
+        logger.info("Best threshold: %.3f  (val F1=%.4f)", best_t, best_f1)
         return best_t
 
     def save(self, model_path: str) -> None:
@@ -336,8 +342,8 @@ class OrfGroupClassifier:
         joblib.dump(self.model, str(p))
         feature_path = p.parent / "feature_names.pkl"
         joblib.dump(self.feature_names, str(feature_path))
-        print(f"  Saved model -> {p}")
-        print(f"  Saved features -> {feature_path}")
+        logger.info("Saved model -> %s", p)
+        logger.info("Saved features -> %s", feature_path)
 
     def filter_groups(
         self,
@@ -449,7 +455,7 @@ class HybridGenePredictor(nn.Module):
 class HybridGeneFilter:
     def __init__(self, device: str = None):
         self.model = None
-        self.threshold = 0.12
+        self.threshold = 0.25
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.feature_names = [
             "codon_score_norm",
@@ -492,7 +498,7 @@ class HybridGeneFilter:
         self.model = model
         self.threshold = data["threshold"]
 
-        print(f"Loaded hybrid model from {model_path}")
+        logger.info("Loaded hybrid model from %s", {model_path})
 
     @staticmethod
     def _calculate_enc(sequence: str) -> float:
@@ -706,8 +712,11 @@ class HybridGeneFilter:
         self.model.to(self.device)
         self.model.eval()
 
-        print(
-            f"Processing {len(candidates)} candidates in {num_batches} batches of {batch_size}..."
+        logger.debug(
+            "Processing %d candidates in %d batches of %d...",
+            len(candidates),
+            num_batches,
+            batch_size,
         )
 
         with torch.no_grad():
