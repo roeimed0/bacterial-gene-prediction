@@ -11,6 +11,7 @@ Supports modes:
 """
 
 import argparse
+import logging
 import re
 import sys
 from pathlib import Path
@@ -791,8 +792,20 @@ Examples:
         help="Filter list by taxonomic group",
     )
     parser.add_argument("-i", "--interactive", action="store_true", help="Force interactive mode")
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Show pipeline progress (IMM building, scoring, etc.)",
+    )
 
     args = parser.parse_args()
+
+    # Configure logging — WARNING by default (silent pipeline), INFO with --verbose
+    logging.basicConfig(
+        level=logging.INFO if args.verbose else logging.WARNING,
+        format="%(message)s",
+    )
 
     # Handle --list (command-line mode - SKIPS MENU)
     if args.list:
