@@ -806,6 +806,8 @@ class HybridGeneFilter:
 
             for i in range(0, len(perm), batch_size):
                 idx_t = perm[i : i + batch_size]
+                if len(idx_t) < 2:
+                    continue  # BatchNorm requires >1 sample
                 idx = idx_t.tolist()
                 batch_cands = [candidates[j] for j in idx]
                 xs = self._one_hot_encode_dna(batch_cands, max_len=max_seq_len).to(self.device)
