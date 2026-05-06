@@ -19,7 +19,7 @@ import math
 import time
 from collections import Counter, defaultdict
 from functools import lru_cache
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -983,10 +983,10 @@ def merge_intervals(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
 
 
 def create_training_set(
-    sequence: str = None,
-    all_orfs: List[Dict] = None,
-    genome_id: str = None,
-    cached_data: Dict = None,
+    sequence: Optional[str] = None,
+    all_orfs: Optional[List[Dict]] = None,
+    genome_id: Optional[str] = None,
+    cached_data: Optional[Dict] = None,
     glimmer_max_size: int = 2000,
     flexible_target_size: int = 2000,
 ) -> List[Dict]:
@@ -1064,10 +1064,10 @@ def create_training_set(
 
 
 def create_intergenic_set(
-    sequence: str = None,
-    all_orfs: List[Dict] = None,
-    genome_id: str = None,
-    cached_data: Dict = None,
+    sequence: Optional[str] = None,
+    all_orfs: Optional[List[Dict]] = None,
+    genome_id: Optional[str] = None,
+    cached_data: Optional[Dict] = None,
     buffer: int = 50,
     min_length: int = 150,
     min_rbs_threshold: float = 3.0,
@@ -1459,7 +1459,7 @@ def score_codon_bias_ratio(
 # =============================================================================
 # MODEL BUILDING
 # =============================================================================
-def clear_imm_cache():
+def clear_imm_cache() -> None:
     """Clear the LRU cache and model registry for IMM scoring."""
     get_interpolated_probability.cache_clear()
     _IMM_MODEL_REGISTRY.clear()
@@ -1611,7 +1611,7 @@ def build_all_scoring_models(
 # =============================================================================
 
 
-def normalize_scores_zscore(scores) -> np.ndarray:
+def normalize_scores_zscore(scores: Any) -> np.ndarray:
     """Normalize scores using z-score (mean=0, std=1)."""
     scores = np.array(scores)
     mean = np.mean(scores)
@@ -1623,7 +1623,7 @@ def normalize_scores_zscore(scores) -> np.ndarray:
     return (scores - mean) / std
 
 
-def normalize_all_orf_scores(scored_orfs) -> pd.DataFrame:
+def normalize_all_orf_scores(scored_orfs: Any) -> pd.DataFrame:
     """Z-score normalize all five score columns; adds *_score_norm columns."""
     if isinstance(scored_orfs, list):
         scored_orfs = pd.DataFrame(scored_orfs)
@@ -1636,7 +1636,7 @@ def normalize_all_orf_scores(scored_orfs) -> pd.DataFrame:
     return scored_orfs
 
 
-def add_combined_scores(scored_orfs, weights: Dict = None) -> pd.DataFrame:
+def add_combined_scores(scored_orfs: Any, weights: Optional[Dict] = None) -> pd.DataFrame:
     """Vectorised weighted sum of normalized score columns."""
     if isinstance(scored_orfs, list):
         scored_orfs = pd.DataFrame(scored_orfs)
@@ -1660,7 +1660,7 @@ def score_all_orfs(
     models: Dict,
     normalize: bool = True,
     add_combined: bool = True,
-    weights: Dict = None,
+    weights: Optional[Dict] = None,
 ) -> pd.DataFrame:
     """Score all ORFs using pre-built models.  Operates on a DataFrame in-place
     (copy made internally) and returns an enriched DataFrame."""
@@ -1755,7 +1755,7 @@ def organize_nested_orfs(all_orfs: pd.DataFrame) -> Dict:
     return groups
 
 
-def select_best_starts(nested_groups: Dict, weights: Dict = None) -> pd.DataFrame:
+def select_best_starts(nested_groups: Dict, weights: Optional[Dict] = None) -> pd.DataFrame:
     """Select best start position for each stop codon using multi-factor scoring.
     Returns a DataFrame."""
     if weights is None:
