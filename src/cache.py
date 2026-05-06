@@ -5,6 +5,15 @@ Handles caching of expensive ORF detection operations to speed up analysis.
 Uses data_management for I/O and traditional_methods for ORF detection.
 """
 
+__all__ = [
+    "load_cache",
+    "save_cache",
+    "add_genome_to_cache",
+    "get_cached_genome",
+    "clear_cache",
+    "cache_stats",
+]
+
 import os
 import pickle
 from typing import Dict, List

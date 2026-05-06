@@ -7,6 +7,14 @@ This module provides tools for comparing predicted ORFs against reference annota
 - Validation metrics (sensitivity, precision, F1)
 """
 
+__all__ = [
+    "compare_orfs_to_reference",
+    "compare_results_file_to_reference",
+    "analyze_and_plot_scores",
+    "compare_codon_usage",
+    "analyze_non_cds_genes",
+]
+
 from typing import Dict, List, Set
 
 import matplotlib.pyplot as plt
