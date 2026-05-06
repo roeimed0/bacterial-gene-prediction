@@ -628,8 +628,10 @@ class HybridGeneFilter:
             )
 
     def extract_features(self, candidates: List[Dict], genome_id: str = "unknown") -> pd.DataFrame:
+        from tqdm import tqdm
+
         rows = []
-        for candidate in candidates:
+        for candidate in tqdm(candidates, desc=f"Features {genome_id}", leave=False):
             sequence = candidate.get("sequence", "").upper()
             feature_dict = {
                 "codon_score_norm": float(candidate.get("codon_score_norm", 0.0)),
