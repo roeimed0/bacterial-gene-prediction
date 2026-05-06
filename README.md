@@ -15,7 +15,7 @@ The tool performs de novo gene prediction without requiring pre-downloaded train
 
 **Key Features:**
 - Self-training on target genome (no external training data required)
-- Optional ML nested ORF filtering trained on 27 diverse prokaryotes (4 taxonomic families)
+- Optional ML nested ORF filtering trained on 100 diverse prokaryotes (4 taxonomic groups)
 - Optional deep learning model for precision enhancement
 - Works on any bacterial or archaeal genome
 - Web interface and command-line modes
@@ -24,26 +24,30 @@ The tool performs de novo gene prediction without requiring pre-downloaded train
 
 ## Performance
 
-Evaluated on 15 diverse bacterial and archaeal genomes:
+Evaluated on 20 held-out genomes **not used during training** (5 per taxonomic group):
 
-**Without Deep Learning:**
+**With full ML pipeline (LightGBM + CNN+Dense):**
 
-| Metric | Average Score |
-|--------|---------------|
-| Sensitivity (Recall)| ~75% |
-| Precision | ~65% |
-| F1 Score | ~69% |
+| Group | Sensitivity | Precision | F1 |
+|---|---|---|---|
+| Proteobacteria | ~75% | ~90% | ~82% |
+| Firmicutes | ~76% | ~89% | ~82% |
+| Actinobacteria | ~53% | ~82% | ~65% |
+| Archaea | ~65% | ~79% | ~72% |
+| **Overall** | **~67%** | **~88%** | **~76%** |
 
-**With Deep Learning:**
+**Example — E. coli K-12 (NC_000913.3):**
 
-| Metric | Average Score |
-|--------|---------------|
-| Sensitivity (Recall)| ~73% |
-| Precision | ~80% |
-| F1 Score | ~76% |
+| Metric | Score |
+|--------|-------|
+| Sensitivity (Recall) | 79.8% |
+| Precision | 96.9% |
+| F1 Score | 87.5% |
 
-**ML Models Training:**
-The optional LightGBM classifier and CNN+Dense models were trained on 27 prokaryotic genomes spanning 4 major taxonomic groups (Proteobacteria, Firmicutes, Actinobacteria, Archaea) to ensure generalization across different bacterial families with varying GC content, genome sizes, and codon usage patterns.
+**ML Models:**
+- **LightGBM group classifier** — trained on 100 GENOME_CATALOG genomes (4 taxonomic groups), filters ORF groups using 31 extracted features
+- **CNN+Dense hybrid filter** — trained on the LightGBM-filtered output from the same 100 genomes, applies final per-candidate filtering using sequence and tabular features
+- Both models validated on independent held-out genomes not present in the training set
 
 ## Quick Start
 
@@ -238,20 +242,20 @@ python hybrid_predictor.py
 **Example validation output:**
 ```
 ================================================================================
-VALIDATION RESULTS
+VALIDATION REPORT
 ================================================================================
 
-Genome ID: NC_000913.3
+Genome ID:   NC_000913.3
 Reference genes:       4,340
-Predicted genes:       4,933
+Predicted genes:       3,575
 
-True Positives (TP):   3,486
-False Positives (FP):  1,447
-False Negatives (FN):  854
+True Positives (TP):   3,464
+False Positives (FP):  111
+False Negatives (FN):  876
 
-Sensitivity (Recall):  80.32%
-Precision:             70.67%
-F1 Score:              0.7519
+Sensitivity (Recall):  79.82%
+Precision:             96.90%
+F1 Score:              0.8753
 ================================================================================
 ```
 
@@ -279,11 +283,11 @@ python hybrid_predictor.py NC_000913.3 --email your@email.com
 # Predict from FASTA file
 python hybrid_predictor.py genome.fasta
 
-# Adjust group ML threshold (default: 0.1, range: 0.0-1.0)
-python hybrid_predictor.py genome.fasta --ml-threshold 0.2
+# Adjust group ML threshold (default: 0.07, range: 0.0-1.0)
+python hybrid_predictor.py genome.fasta --ml-threshold 0.1
 
-# Adjust hybrid ML threshold (default: 0.12, range: 0.0-1.0)
-python hybrid_predictor.py genome.fasta --final-ml-threshold 0.2
+# Adjust hybrid ML threshold (default: 0.25, range: 0.0-1.0)
+python hybrid_predictor.py genome.fasta --final-ml-threshold 0.3
 
 # Disable group ML filtering
 python hybrid_predictor.py genome.fasta --no-group-ml
@@ -366,7 +370,7 @@ Each ORF is scored using five features:
   - Genome sizes (1.5-10 Mbp)
   - Codon usage patterns
 - Requires: `models/orf_classifier_lgb.pkl` (optional - prediction works without it)
-- Default threshold: 0.1 (adjustable via `--ml-threshold`)
+- Default threshold: 0.07 (adjustable via `--ml-threshold`)
 
 ### Step 8: Start Site Selection
 - Selects optimal start codon for each gene
@@ -387,7 +391,7 @@ Each ORF is scored using five features:
 - Combines sequence-based embeddings (via CNN) with traditional features such as codon bias, IMM score, RBS score, and ORF length
 - Reduces residual false positives that remain after the main LightGBM group filter
 - Model file: `models/hybrid_best_model.pkl`
-- Default threshold: 0.12 (adjustable via `--final-ml-threshold`)
+- Default threshold: 0.25 (adjustable via `--final-ml-threshold`)
 - Can be disabled with `--no-final-ml`
 
 ## Project Structure
@@ -503,8 +507,8 @@ START_SELECTION_WEIGHTS = {
 }
 
 # ML thresholds (adjustable)
-ML_THRESHOLD = 0.1        # Group filter
-FINAL_ML_THRESHOLD = 0.12 # Hybrid filter
+ML_THRESHOLD = 0.07        # Group filter
+FINAL_ML_THRESHOLD = 0.072 # Hybrid filter
 ```
 
 ## Examples
