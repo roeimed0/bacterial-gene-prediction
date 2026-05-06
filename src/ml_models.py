@@ -495,6 +495,9 @@ class HybridGeneFilter:
             "aromatic_fraction",
             "small_fraction",
             "polar_fraction",
+            # New features (#124, #126)
+            "gc3_content",
+            "gc_deviation",
         ]
 
     def load(self, model_path):
@@ -535,6 +538,15 @@ class HybridGeneFilter:
         max_entropy = math.log2(61)
         cbi = 1.0 - (entropy / max_entropy) if max_entropy > 0 else 0.0
         return float(cbi)
+
+    @staticmethod
+    def _calculate_gc3(sequence: str) -> float:
+        """GC content at third codon positions — strong coding signal in high-GC organisms."""
+        codons = [sequence[i : i + 3] for i in range(0, len(sequence) - 2, 3)]
+        valid = [c for c in codons if len(c) == 3 and "N" not in c]
+        if not valid:
+            return 0.0
+        return float(sum(1 for c in valid if c[2] in "GC") / len(valid))
 
     @staticmethod
     def _detect_hairpin_near_stop(sequence: str, window: int = 30) -> float:
@@ -664,6 +676,12 @@ class HybridGeneFilter:
                     "polar_fraction": aa_props["polar_frac"],
                 }
             )
+            # GC3: GC content at third codon positions (#126)
+            gc3 = self._calculate_gc3(sequence)
+            feature_dict["gc3_content"] = gc3
+            # GC deviation from genome mean (#124) — uses genome_gc_mean if provided
+            genome_gc = candidate.get("genome_gc_mean", feature_dict["gc_content"])
+            feature_dict["gc_deviation"] = feature_dict["gc_content"] - genome_gc
             rows.append(feature_dict)
         return pd.DataFrame(rows).fillna(0.0)
 

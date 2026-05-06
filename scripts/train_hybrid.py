@@ -123,6 +123,11 @@ def run_pipeline(accession: str):
 
     if hasattr(candidates, "to_dict"):
         candidates = candidates.to_dict("records")
+
+    # Inject genome-level GC mean so HybridGeneFilter can compute gc_deviation
+    gc_mean = (seq.count("G") + seq.count("C")) / max(len(seq), 1)
+    for c in candidates:
+        c["genome_gc_mean"] = gc_mean
     return candidates
 
 

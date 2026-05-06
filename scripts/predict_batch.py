@@ -201,8 +201,16 @@ for i, fasta_path in enumerate(input_files, 1):
             predictions = filter_candidates(top, **SECOND_FILTER_THRESHOLD)
 
             if hf is not None:
+                # Inject genome GC mean for gc_deviation feature
+                gc_mean = (seq.count("G") + seq.count("C")) / max(len(seq), 1)
+                if hasattr(predictions, "to_dict"):
+                    preds_list = predictions.to_dict("records")
+                else:
+                    preds_list = list(predictions)
+                for p in preds_list:
+                    p["genome_gc_mean"] = gc_mean
                 predictions = hf.filter_candidates(
-                    candidates=predictions,
+                    candidates=preds_list,
                     genome_id=genome_id,
                     threshold=final_t,
                     batch_size=32,
