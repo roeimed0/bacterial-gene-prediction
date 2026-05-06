@@ -701,6 +701,175 @@ class HybridGeneFilter:
                     one_hot[idx, i, mapping[nt]] = 1.0
         return torch.from_numpy(one_hot)
 
+    def train(
+        self,
+        candidates: List[Dict],
+        labels: np.ndarray,
+        val_candidates: Optional[List[Dict]] = None,
+        val_labels: Optional[np.ndarray] = None,
+        epochs: int = 50,
+        batch_size: int = 64,
+        lr: float = 1e-3,
+        patience: int = 10,
+        focal_loss: bool = False,
+        focal_gamma: float = 2.0,
+    ) -> None:
+        """Train HybridGenePredictor with pos_weight to handle class imbalance."""
+        n_pos = int(labels.sum())
+        n_neg = int(len(labels) - n_pos)
+        if n_pos == 0:
+            raise ValueError("Training set has no positive examples.")
+
+        spw = n_neg / n_pos
+        alpha = n_neg / (n_pos + n_neg)
+        logger.info(
+            "HybridGeneFilter training: n=%d pos=%d neg=%d ratio=%.2f",
+            len(labels),
+            n_pos,
+            n_neg,
+            spw,
+        )
+
+        self.model = HybridGenePredictor(num_traditional_features=len(self.feature_names))
+        self.model.to(self.device)
+
+        if focal_loss:
+
+            class _FocalLoss(nn.Module):
+                def __init__(self, a, g):
+                    super().__init__()
+                    self.a = a
+                    self.g = g
+
+                def forward(self, logits, targets):
+                    bce = F.binary_cross_entropy_with_logits(logits, targets, reduction="none")
+                    p_t = torch.sigmoid(logits) * targets + (1 - torch.sigmoid(logits)) * (
+                        1 - targets
+                    )
+                    a_t = self.a * targets + (1 - self.a) * (1 - targets)
+                    return (a_t * (1 - p_t) ** self.g * bce).mean()
+
+            criterion = _FocalLoss(alpha, focal_gamma)
+        else:
+            pw = torch.tensor([spw], dtype=torch.float32, device=self.device)
+            criterion = nn.BCEWithLogitsLoss(pos_weight=pw)
+
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer, mode="min", factor=0.5, patience=5
+        )
+
+        max_seq_len = min(max((len(c.get("sequence", "")) for c in candidates), default=1500), 1500)
+
+        feat_df = self.extract_features(candidates)
+        X_feat = torch.tensor(feat_df[self.feature_names].values, dtype=torch.float32)
+        y_tensor = torch.tensor(labels, dtype=torch.float32)
+
+        val_feat_tensor = val_label_tensor = None
+        if val_candidates is not None and val_labels is not None:
+            vdf = self.extract_features(val_candidates)
+            val_feat_tensor = torch.tensor(vdf[self.feature_names].values, dtype=torch.float32)
+            val_label_tensor = torch.tensor(val_labels, dtype=torch.float32)
+
+        best_val_loss = float("inf")
+        best_state = None
+        no_improve = 0
+
+        for epoch in range(1, epochs + 1):
+            self.model.train()
+            perm = torch.randperm(len(y_tensor))
+            epoch_loss = 0.0
+            n_batches = 0
+
+            for i in range(0, len(perm), batch_size):
+                idx_t = perm[i : i + batch_size]
+                idx = idx_t.tolist()
+                batch_cands = [candidates[j] for j in idx]
+                xs = self._one_hot_encode_dna(batch_cands, max_len=max_seq_len).to(self.device)
+                xf = X_feat[idx_t].to(self.device)
+                yt = y_tensor[idx_t].to(self.device)
+                optimizer.zero_grad()
+                loss = criterion(self.model(xs, xf), yt)
+                loss.backward()
+                optimizer.step()
+                epoch_loss += loss.item()
+                n_batches += 1
+
+            train_loss = epoch_loss / max(n_batches, 1)
+
+            if val_feat_tensor is not None and val_label_tensor is not None:
+                self.model.eval()
+                val_logits = []
+                with torch.no_grad():
+                    for vi in range(0, len(val_candidates), batch_size):
+                        vb = val_candidates[vi : vi + batch_size]
+                        vxs = self._one_hot_encode_dna(vb, max_len=max_seq_len).to(self.device)
+                        vxf = val_feat_tensor[vi : vi + batch_size].to(self.device)
+                        val_logits.append(self.model(vxs, vxf))
+                all_val = torch.cat(val_logits)
+                val_loss = criterion(all_val, val_label_tensor.to(self.device)).item()
+                scheduler.step(val_loss)
+                if val_loss < best_val_loss - 1e-5:
+                    best_val_loss = val_loss
+                    best_state = {k: v.cpu().clone() for k, v in self.model.state_dict().items()}
+                    no_improve = 0
+                else:
+                    no_improve += 1
+                if epoch % 5 == 0 or epoch == 1:
+                    print(
+                        f"  epoch {epoch:>3}/{epochs}  train={train_loss:.4f}"
+                        f"  val={val_loss:.4f}  best={best_val_loss:.4f}"
+                        f"  no_improve={no_improve}"
+                    )
+                if no_improve >= patience:
+                    print(f"  Early stopping at epoch {epoch}")
+                    break
+            else:
+                if epoch % 5 == 0 or epoch == 1:
+                    print(f"  epoch {epoch:>3}/{epochs}  train={train_loss:.4f}")
+
+        if best_state is not None:
+            self.model.load_state_dict(best_state)
+        self.model.eval()
+
+    def calibrate_threshold(
+        self, candidates: List[Dict], labels: np.ndarray, batch_size: int = 64
+    ) -> float:
+        """Return the F1-maximising threshold on the validation set."""
+        from sklearn.metrics import precision_recall_curve
+
+        if self.model is None:
+            raise RuntimeError("Model not trained. Call train() first.")
+        _, probs, _ = self.predict(candidates, batch_size=batch_size)
+        precision, recall, thresholds = precision_recall_curve(labels, probs)
+        f1_scores = np.where(
+            (precision + recall) > 0,
+            2 * precision * recall / (precision + recall),
+            0.0,
+        )
+        best_idx = int(np.argmax(f1_scores[:-1]))
+        best_t = float(thresholds[best_idx])
+        best_f1 = float(f1_scores[best_idx])
+        logger.info("Best threshold: %.3f  (val F1=%.4f)", best_t, best_f1)
+        return best_t
+
+    def save(self, model_path: str) -> None:
+        """Save model, threshold and feature count to disk (pickle format)."""
+        import pickle
+
+        if self.model is None:
+            raise RuntimeError("No model to save. Call train() first.")
+        p = Path(model_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        data = {
+            "model_state_dict": self.model.state_dict(),
+            "num_traditional_features": len(self.feature_names),
+            "threshold": self.threshold,
+        }
+        with open(str(p), "wb") as f:
+            pickle.dump(data, f)
+        logger.info("Saved hybrid model -> %s", p)
+
     def predict(
         self,
         candidates: List[Dict],
