@@ -781,8 +781,12 @@ class HybridGeneFilter:
             if precomputed_features is not None
             else self.extract_features(candidates)
         )
-        X_feat = torch.tensor(feat_df[self.feature_names].values, dtype=torch.float32)
-        y_tensor = torch.tensor(labels, dtype=torch.float32)
+        # Move full tensors to device once — eliminates per-batch CPU→GPU transfer overhead
+        print(f"  Training on device: {self.device}", flush=True)
+        X_feat = torch.tensor(feat_df[self.feature_names].values, dtype=torch.float32).to(
+            self.device
+        )
+        y_tensor = torch.tensor(labels, dtype=torch.float32).to(self.device)
 
         val_feat_tensor = val_label_tensor = None
         if val_candidates is not None and val_labels is not None:
@@ -791,8 +795,10 @@ class HybridGeneFilter:
                 if precomputed_val_features is not None
                 else self.extract_features(val_candidates)
             )
-            val_feat_tensor = torch.tensor(vdf[self.feature_names].values, dtype=torch.float32)
-            val_label_tensor = torch.tensor(val_labels, dtype=torch.float32)
+            val_feat_tensor = torch.tensor(vdf[self.feature_names].values, dtype=torch.float32).to(
+                self.device
+            )
+            val_label_tensor = torch.tensor(val_labels, dtype=torch.float32).to(self.device)
 
         best_val_loss = float("inf")
         best_state = None
@@ -811,8 +817,8 @@ class HybridGeneFilter:
                 idx = idx_t.tolist()
                 batch_cands = [candidates[j] for j in idx]
                 xs = self._one_hot_encode_dna(batch_cands, max_len=max_seq_len).to(self.device)
-                xf = X_feat[idx_t].to(self.device)
-                yt = y_tensor[idx_t].to(self.device)
+                xf = X_feat[idx_t]  # already on device
+                yt = y_tensor[idx_t]  # already on device
                 optimizer.zero_grad()
                 loss = criterion(self.model(xs, xf), yt)
                 loss.backward()
