@@ -58,7 +58,7 @@ from src.traditional_methods import (
 MODELS_DIR = Path(__file__).parent.parent / "models"
 DATA_DIR = get_data_dir("full_dataset")
 PROD_MODEL = MODELS_DIR / "hybrid_best_model.pkl"
-NEW_MODEL = MODELS_DIR / "hybrid_best_model_v2.pkl"
+NEW_MODEL = MODELS_DIR / "hybrid_best_model_v2.pkl"  # overridden by --output-model below
 BACKUP_MODEL = MODELS_DIR / "hybrid_best_model_v1_backup.pkl"
 
 VAL_PER_GROUP = 4
@@ -72,13 +72,35 @@ parser.add_argument("--epochs", type=int, default=50)
 parser.add_argument("--focal-loss", action="store_true")
 parser.add_argument("--seed", type=int, default=None)
 parser.add_argument("--limit", type=int, default=0)
+parser.add_argument(
+    "--lgb-model",
+    default=None,
+    help="Path to LGB model (default: models/orf_classifier_lgb.pkl)",
+)
+parser.add_argument(
+    "--lgb-threshold",
+    type=float,
+    default=0.07,
+    help="LGB group-filter threshold (default: 0.07)",
+)
+parser.add_argument(
+    "--output-model",
+    default=None,
+    help="Output path for trained model (default: models/hybrid_best_model_v2.pkl)",
+)
 args = parser.parse_args()
 rng = np.random.default_rng(args.seed)
 
+NEW_MODEL = (
+    Path(args.output_model) if args.output_model else MODELS_DIR / "hybrid_best_model_v2.pkl"
+)
+LGB_THRESHOLD = args.lgb_threshold
+
 # ── Load LGB model ────────────────────────────────────────────────────────────
 
+lgb_path = Path(args.lgb_model) if args.lgb_model else MODELS_DIR / "orf_classifier_lgb.pkl"
 lgb_clf = OrfGroupClassifier()
-lgb_clf.load(str(MODELS_DIR / "orf_classifier_lgb.pkl"))
+lgb_clf.load(str(lgb_path))
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -116,7 +138,7 @@ def run_pipeline(accession: str):
             groups=groups,
             genome_id=accession,
             weights=START_SELECTION_WEIGHTS,
-            threshold=0.07,
+            threshold=LGB_THRESHOLD,
         )
         top = select_best_starts(groups, START_SELECTION_WEIGHTS)
         candidates = filter_candidates(top, **SECOND_FILTER_THRESHOLD)
