@@ -411,25 +411,29 @@ class TestSelectImmOrder:
         order = _select_imm_order(self._CODING_SEQS, self._NONCODING_SEQS)
         assert order > 0, "Discriminative sequences should select order > 0"
 
-    def test_build_all_scoring_models_uses_selection(self, capsys):
-        """build_all_scoring_models must print 'Selecting IMM order'."""
+    def test_build_all_scoring_models_uses_selection(self, caplog):
+        """build_all_scoring_models must log 'Selecting IMM order'."""
+        import logging
+
         from src.traditional_methods import build_all_scoring_models
 
         train = [{"sequence": s} for s in self._CODING_SEQS]
         inter = [{"sequence": s} for s in self._NONCODING_SEQS]
-        build_all_scoring_models(train, inter)
-        out = capsys.readouterr().out
-        assert "Selecting IMM order" in out
+        with caplog.at_level(logging.INFO, logger="src.traditional_methods"):
+            build_all_scoring_models(train, inter)
+        assert any("Selecting IMM order" in r.message for r in caplog.records)
 
-    def test_selected_order_logged_in_output(self, capsys):
-        """The chosen order must appear in the build output."""
+    def test_selected_order_logged_in_output(self, caplog):
+        """The chosen order must appear in the build log output."""
+        import logging
+
         from src.traditional_methods import build_all_scoring_models
 
         train = [{"sequence": s} for s in self._CODING_SEQS]
         inter = [{"sequence": s} for s in self._NONCODING_SEQS]
-        build_all_scoring_models(train, inter)
-        out = capsys.readouterr().out
-        assert "IMM order:" in out
+        with caplog.at_level(logging.INFO, logger="src.traditional_methods"):
+            build_all_scoring_models(train, inter)
+        assert any("IMM order" in r.message for r in caplog.records)
 
 
 # ===========================================================================

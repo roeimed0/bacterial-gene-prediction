@@ -14,6 +14,7 @@ These methods form the foundation of programs like Glimmer, GeneMark, and Prodig
 
 import bisect
 import itertools
+import logging
 import math
 import time
 from collections import Counter, defaultdict
@@ -22,6 +23,8 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 try:
     import numba as _numba
@@ -278,9 +281,9 @@ except ImportError:
     _score_imm_numba = None
     _score_codon_bias_numba = None
 
-from Bio.Seq import Seq
+from Bio.Seq import Seq  # noqa: E402
 
-from .config import (
+from .config import (  # noqa: E402
     FIRST_FILTER_THRESHOLD,
     KNOWN_RBS_MOTIFS,
     LENGTH_REFERENCE_BP,
@@ -725,7 +728,7 @@ def find_orfs_candidates(sequence: str, min_length: int = 100) -> pd.DataFrame:
     seq_len = len(sequence)
     reverse_seq = str(Seq(sequence).reverse_complement())
 
-    print("Detecting ORFs and calculating RBS...")
+    logger.info("Detecting ORFs and calculating RBS...")
 
     if _NUMBA_AVAILABLE:
         fwd_raw = _scan_orfs_numba(_seq_to_int_fast(sequence), min_length)
@@ -773,7 +776,7 @@ def find_orfs_candidates(sequence: str, min_length: int = 100) -> pd.DataFrame:
                         active_starts = []
         orfs_df = pd.DataFrame(cols)
 
-    print(f"Complete: {len(orfs_df):,} ORFs detected with RBS scores")
+    logger.info(f"Complete: {len(orfs_df):,} ORFs detected with RBS scores")
     return orfs_df
 
 
@@ -891,39 +894,49 @@ def select_training_flexible(
 # =============================================================================
 
 
-def extract_intergenic_regions(
-    sequence: str, training_orfs: List[Dict], buffer: int = 50, min_length: int = 150
+def _extract_complement_regions(
+    sequence: str,
+    occupied: List[Tuple[int, int]],
+    min_length: int = 150,
 ) -> Tuple[str, List[Tuple[int, int]]]:
-    """Extract intergenic regions using high-confidence genes."""
-    gene_regions = []
-    for orf in training_orfs:
-        start = orf.get("genome_start", orf["start"])
-        end = orf.get("genome_end", orf["end"])
-        if start > end:
-            start, end = end, start
-        gene_regions.append((max(1, start - buffer), min(len(sequence), end + buffer)))
-
-    merged = []
-    for s, e in sorted(gene_regions):
+    """
+    Shared core: given a list of occupied (start, end) intervals, return the
+    complement regions (gaps) of the sequence that are at least min_length bp.
+    Returns (concatenated_sequence, list_of_(start, end)_coords).
+    """
+    merged: List[Tuple[int, int]] = []
+    for s, e in sorted(occupied):
         if merged and s <= merged[-1][1]:
             merged[-1] = (merged[-1][0], max(merged[-1][1], e))
         else:
             merged.append((s, e))
 
-    intergenic_seqs = []
-    intergenic_coords = []
+    seqs: List[str] = []
+    coords: List[Tuple[int, int]] = []
     last_end = 1
     for s, e in merged:
         if s - last_end >= min_length:
-            intergenic_coords.append((last_end, s - 1))
-            intergenic_seqs.append(sequence[last_end - 1 : s - 1])
+            coords.append((last_end, s - 1))
+            seqs.append(sequence[last_end - 1 : s - 1])
         last_end = e + 1
     if len(sequence) - last_end + 1 >= min_length:
-        intergenic_coords.append((last_end, len(sequence)))
-        intergenic_seqs.append(sequence[last_end - 1 :])
+        coords.append((last_end, len(sequence)))
+        seqs.append(sequence[last_end - 1 :])
 
-    concatenated = "".join(intergenic_seqs)
-    return concatenated, intergenic_coords
+    return "".join(seqs), coords
+
+
+def extract_intergenic_regions(
+    sequence: str, training_orfs: List[Dict], buffer: int = 50, min_length: int = 150
+) -> Tuple[str, List[Tuple[int, int]]]:
+    """Extract intergenic regions using high-confidence genes (with buffer)."""
+    occupied = []
+    for orf in training_orfs:
+        s = orf.get("genome_start", orf["start"])
+        e = orf.get("genome_end", orf["end"])
+        lo, hi = (s, e) if s <= e else (e, s)
+        occupied.append((max(1, lo - buffer), min(len(sequence), hi + buffer)))
+    return _extract_complement_regions(sequence, occupied, min_length)
 
 
 def extract_non_orf_regions_conservative(
@@ -932,72 +945,27 @@ def extract_non_orf_regions_conservative(
     min_rbs_threshold: float = 3.0,
     min_length: int = 150,
 ) -> Tuple[str, List[Tuple[int, int]]]:
-    """Extract non-ORF regions using RBS-filtering."""
+    """Extract non-ORF regions, keeping only high-RBS ORFs as occupied."""
     filtered = [orf for orf in all_orfs if orf.get("rbs_score", 0) >= min_rbs_threshold]
-    occupied = []
-    for orf in filtered:
-        start = orf.get("genome_start", orf["start"])
-        end = orf.get("genome_end", orf["end"])
-        if start > end:
-            start, end = end, start
-        occupied.append((start, end))
-
-    merged = []
-    for s, e in sorted(occupied):
-        if merged and s <= merged[-1][1]:
-            merged[-1] = (merged[-1][0], max(merged[-1][1], e))
-        else:
-            merged.append((s, e))
-
-    non_orf_seqs = []
-    non_orf_coords = []
-    last_end = 1
-    for s, e in merged:
-        if s - last_end >= min_length:
-            non_orf_coords.append((last_end, s - 1))
-            non_orf_seqs.append(sequence[last_end - 1 : s - 1])
-        last_end = e + 1
-    if len(sequence) - last_end + 1 >= min_length:
-        non_orf_coords.append((last_end, len(sequence)))
-        non_orf_seqs.append(sequence[last_end - 1 :])
-
-    concatenated = "".join(non_orf_seqs)
-    return concatenated, non_orf_coords
+    occupied = _orf_intervals(filtered)
+    return _extract_complement_regions(sequence, occupied, min_length)
 
 
 def extract_all_non_orf_regions(
     sequence: str, all_orfs: List[Dict], min_length: int = 150
 ) -> Tuple[str, List[Tuple[int, int]]]:
-    """Extract all non-ORF regions (no filtering)."""
-    occupied = []
-    for orf in all_orfs:
-        start = orf.get("genome_start", orf["start"])
-        end = orf.get("genome_end", orf["end"])
-        if start > end:
-            start, end = end, start
-        occupied.append((start, end))
+    """Extract all non-ORF regions (no RBS filtering)."""
+    return _extract_complement_regions(sequence, _orf_intervals(all_orfs), min_length)
 
-    merged = []
-    for s, e in sorted(occupied):
-        if merged and s <= merged[-1][1]:
-            merged[-1] = (merged[-1][0], max(merged[-1][1], e))
-        else:
-            merged.append((s, e))
 
-    non_orf_seqs = []
-    non_orf_coords = []
-    last_end = 1
-    for s, e in merged:
-        if s - last_end >= min_length:
-            non_orf_coords.append((last_end, s - 1))
-            non_orf_seqs.append(sequence[last_end - 1 : s - 1])
-        last_end = e + 1
-    if len(sequence) - last_end + 1 >= min_length:
-        non_orf_coords.append((last_end, len(sequence)))
-        non_orf_seqs.append(sequence[last_end - 1 :])
-
-    concatenated = "".join(non_orf_seqs)
-    return concatenated, non_orf_coords
+def _orf_intervals(orfs: List[Dict]) -> List[Tuple[int, int]]:
+    """Return (start, end) intervals for a list of ORF dicts, always start <= end."""
+    intervals = []
+    for orf in orfs:
+        s = orf.get("genome_start", orf["start"])
+        e = orf.get("genome_end", orf["end"])
+        intervals.append((min(s, e), max(s, e)))
+    return intervals
 
 
 def merge_intervals(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
@@ -1569,23 +1537,23 @@ def build_all_scoring_models(
     training_set: List[Dict], intergenic_set: List[Dict], min_observations: int = 10
 ) -> Dict:
     """Build all traditional scoring models from training data."""
-    print("Building traditional scoring models...")
+    logger.info("Building traditional scoring models...")
     start_time = time.time()
 
     clear_imm_cache()
 
-    print("  Building codon usage models...")
+    logger.info("  Building codon usage models...")
     codon_model = build_codon_model(training_set)
     background_codon_model = build_codon_model(intergenic_set)
 
-    print("  Building IMM models...")
+    logger.info("  Building IMM models...")
     training_seqs = [orf["sequence"] for orf in training_set]
     intergenic_seqs = [orf["sequence"] for orf in intergenic_set]
 
     n_training = sum(len(seq) for seq in training_seqs)
     n_intergenic = sum(len(seq) for seq in intergenic_seqs)
 
-    print("  Selecting IMM order (held-out log-likelihood)...")
+    logger.info("  Selecting IMM order (held-out log-likelihood)...")
     estimated_order = _select_imm_order(
         training_seqs, intergenic_seqs, min_observations=min_observations
     )
@@ -1595,14 +1563,14 @@ def build_all_scoring_models(
         intergenic_seqs, estimated_order, min_observations
     )
 
-    print("  Building IMM log tables...")
+    logger.info("  Building IMM log tables...")
     coding_log_table = build_flat_log_table(coding_imm, estimated_order)
     noncoding_log_table = build_flat_log_table(noncoding_imm, estimated_order)
 
     numba_coding_table = numba_noncoding_table = None
     codon_log_ratio_table = None
     if _NUMBA_AVAILABLE:
-        print("  Building Numba integer tables...")
+        logger.info("  Building Numba integer tables...")
         numba_coding_table = build_numba_log_table(coding_log_table, estimated_order)
         numba_noncoding_table = build_numba_log_table(noncoding_log_table, estimated_order)
         codon_log_ratio_table = build_codon_log_ratio_table(codon_model, background_codon_model)
@@ -1618,11 +1586,11 @@ def build_all_scoring_models(
         _score_codon_bias_numba(_warmup, codon_log_ratio_table)
         _score_rbs_batch(np.zeros((1, 20), dtype=np.int32))
 
-    print(f"✓ All models built in {time.time() - start_time:.1f}s")
-    print(f"  IMM order: {estimated_order}")
-    print(f"  IMM backend: {'numba' if _NUMBA_AVAILABLE else 'python'}")
-    print(f"  Training sequences: {len(training_seqs)} ({n_training:,} bp)")
-    print(f"  Intergenic sequences: {len(intergenic_seqs)} ({n_intergenic:,} bp)")
+    logger.info(f"✓ All models built in {time.time() - start_time:.1f}s")
+    logger.info(f"  IMM order: {estimated_order}")
+    logger.info(f"  IMM backend: {'numba' if _NUMBA_AVAILABLE else 'python'}")
+    logger.info(f"  Training sequences: {len(training_seqs)} ({n_training:,} bp)")
+    logger.info(f"  Intergenic sequences: {len(intergenic_seqs)} ({n_intergenic:,} bp)")
 
     return {
         "codon_model": codon_model,
@@ -1659,12 +1627,12 @@ def normalize_all_orf_scores(scored_orfs) -> pd.DataFrame:
     """Z-score normalize all five score columns; adds *_score_norm columns."""
     if isinstance(scored_orfs, list):
         scored_orfs = pd.DataFrame(scored_orfs)
-    print(f"\nNormalizing {len(scored_orfs):,} ORF scores...")
+    logger.info(f"\nNormalizing {len(scored_orfs):,} ORF scores...")
     scored_orfs = scored_orfs.copy()
     for col in ("codon_score", "imm_score", "rbs_score", "length_score", "start_score"):
         vals = scored_orfs[col].values.astype(np.float64)
         scored_orfs[f"{col}_norm"] = normalize_scores_zscore(vals)
-    print("✓ Normalization complete")
+    logger.info("✓ Normalization complete")
     return scored_orfs
 
 
@@ -1674,7 +1642,7 @@ def add_combined_scores(scored_orfs, weights: Dict = None) -> pd.DataFrame:
         scored_orfs = pd.DataFrame(scored_orfs)
     if weights is None:
         weights = SCORE_WEIGHTS
-    print("\nCalculating combined scores...")
+    logger.info("\nCalculating combined scores...")
     scored_orfs = scored_orfs.copy()
     scored_orfs["combined_score"] = (
         scored_orfs["codon_score_norm"] * weights["codon"]
@@ -1683,7 +1651,7 @@ def add_combined_scores(scored_orfs, weights: Dict = None) -> pd.DataFrame:
         + scored_orfs["length_score_norm"] * weights["length"]
         + scored_orfs["start_score_norm"] * weights["start"]
     )
-    print("Combined scores added")
+    logger.info("Combined scores added")
     return scored_orfs
 
 
@@ -1696,7 +1664,7 @@ def score_all_orfs(
 ) -> pd.DataFrame:
     """Score all ORFs using pre-built models.  Operates on a DataFrame in-place
     (copy made internally) and returns an enriched DataFrame."""
-    print(f"Scoring {len(all_orfs):,} ORFs with traditional methods...")
+    logger.info(f"Scoring {len(all_orfs):,} ORFs with traditional methods...")
     start_time = time.time()
 
     max_order = models["max_order"]
@@ -1720,7 +1688,7 @@ def score_all_orfs(
 
     for i, seq in enumerate(sequences):
         if i % 25000 == 0 and i > 0:
-            print(f"  {i:,}...")
+            logger.info("  %s...", f"{i:,}")
         if use_numba:
             arr = _seq_to_int_fast(seq)
             codon_scores[i] = float(_score_codon_bias_numba(arr, codon_ratio_tbl))
@@ -1740,7 +1708,7 @@ def score_all_orfs(
     if "rbs_score" not in all_orfs.columns:
         all_orfs["rbs_score"] = 0.0
 
-    print(f"✓ Scoring complete in {(time.time() - start_time)/60:.1f} minutes")
+    logger.info(f"✓ Scoring complete in {(time.time() - start_time)/60:.1f} minutes")
 
     if normalize:
         all_orfs = normalize_all_orf_scores(all_orfs)
@@ -1769,7 +1737,7 @@ def filter_candidates(
     combined_below = all_orfs["combined_score"] < combined_threshold
     keep = ~(all_three_below | combined_below)
     result = all_orfs[keep].reset_index(drop=True)
-    print(f"Filtered: {len(result):,} kept, {(~keep).sum():,} removed")
+    logger.info(f"Filtered: {len(result):,} kept, {(~keep).sum():,} removed")
     return result
 
 
@@ -1795,7 +1763,7 @@ def select_best_starts(nested_groups: Dict, weights: Dict = None) -> pd.DataFram
 
         weights = START_SELECTION_WEIGHTS
 
-    print(f"\nSelecting best start for {len(nested_groups):,} groups")
+    logger.info(f"\nSelecting best start for {len(nested_groups):,} groups")
 
     single_option = 0
     multiple_options = 0
@@ -1817,8 +1785,8 @@ def select_best_starts(nested_groups: Dict, weights: Dict = None) -> pd.DataFram
             selected_rows.append(group_df.iloc[score.argmax()])
             multiple_options += 1
 
-    print(f"  Single option groups: {single_option:,}")
-    print(f"  Multiple option groups: {multiple_options:,}")
+    logger.info(f"  Single option groups: {single_option:,}")
+    logger.info(f"  Multiple option groups: {multiple_options:,}")
 
     return pd.DataFrame(selected_rows).reset_index(drop=True) if selected_rows else _empty_orf_df()
 
@@ -1830,58 +1798,58 @@ def select_best_starts(nested_groups: Dict, weights: Dict = None) -> pd.DataFram
 
 def process_genome(genome_id: str, cached_data: Dict) -> List[Dict]:
     """Process a single genome through the complete ORF prediction pipeline."""
-    print(f"\n{'='*80}")
-    print(f"PROCESSING GENOME: {genome_id}")
-    print(f"{'='*80}")
+    logger.info(f"\n{'='*80}")
+    logger.info(f"PROCESSING GENOME: {genome_id}")
+    logger.info(f"{'='*80}")
 
     # Load ORFs
     genome_data = cached_data[genome_id]
     all_orfs = genome_data["orfs"]
-    print(f"Total ORFs detected: {len(all_orfs):,}")
+    logger.info(f"Total ORFs detected: {len(all_orfs):,}")
 
     # Create training sets
-    print(f"\n{'='*80}")
-    print("STEP 1: CREATE TRAINING SETS")
-    print(f"{'='*80}")
+    logger.info(f"\n{'='*80}")
+    logger.info("STEP 1: CREATE TRAINING SETS")
+    logger.info(f"{'='*80}")
     training_set = create_training_set_cached(genome_id, cached_data)
     intergenic_set = create_intergenic_set_cached(genome_id, cached_data)
-    print(f"Training set: {len(training_set):,} ORFs")
-    print(f"Intergenic set: {len(intergenic_set):,} regions")
+    logger.info(f"Training set: {len(training_set):,} ORFs")
+    logger.info(f"Intergenic set: {len(intergenic_set):,} regions")
 
     # Build models
-    print(f"\n{'='*80}")
-    print("STEP 2: BUILD SCORING MODELS")
-    print(f"{'='*80}")
+    logger.info(f"\n{'='*80}")
+    logger.info("STEP 2: BUILD SCORING MODELS")
+    logger.info(f"{'='*80}")
     models = build_all_scoring_models(training_set, intergenic_set)
 
     # Score ORFs
-    print(f"\n{'='*80}")
-    print("STEP 3: SCORE ALL ORFs")
-    print(f"{'='*80}")
+    logger.info(f"\n{'='*80}")
+    logger.info("STEP 3: SCORE ALL ORFs")
+    logger.info(f"{'='*80}")
     scored_orfs = score_all_orfs(all_orfs, models)
 
     # Filter candidates - USE OPTIMIZED FIRST FILTER
-    print(f"\n{'='*80}")
-    print("STEP 4: FILTER CANDIDATES (INITIAL)")
-    print(f"{'='*80}")
+    logger.info(f"\n{'='*80}")
+    logger.info("STEP 4: FILTER CANDIDATES (INITIAL)")
+    logger.info(f"{'='*80}")
     candidates = filter_candidates(scored_orfs, **FIRST_FILTER_THRESHOLD)
 
-    print(f"Candidates after initial filter: {len(candidates):,}")
+    logger.info(f"Candidates after initial filter: {len(candidates):,}")
 
     # Group and select best starts - USE OPTIMIZED WEIGHTS
-    print(f"\n{'='*80}")
-    print("STEP 5: SELECT BEST START CODONS")
-    print(f"{'='*80}")
+    logger.info(f"\n{'='*80}")
+    logger.info("STEP 5: SELECT BEST START CODONS")
+    logger.info(f"{'='*80}")
     grouped_orfs = organize_nested_orfs(candidates)
     top_candidates = select_best_starts(grouped_orfs, START_SELECTION_WEIGHTS)
-    print(f"Top candidates after start selection: {len(top_candidates):,}")
+    logger.info(f"Top candidates after start selection: {len(top_candidates):,}")
 
     # Final filtering - USE OPTIMIZED SECOND FILTER
-    print(f"\n{'='*80}")
-    print("STEP 6: FINAL FILTERING")
-    print(f"{'='*80}")
+    logger.info(f"\n{'='*80}")
+    logger.info("STEP 6: FINAL FILTERING")
+    logger.info(f"{'='*80}")
     final_predictions = filter_candidates(top_candidates, **SECOND_FILTER_THRESHOLD)
 
-    print(f"Final predictions: {len(final_predictions):,}")
+    logger.info(f"Final predictions: {len(final_predictions):,}")
 
     return final_predictions
