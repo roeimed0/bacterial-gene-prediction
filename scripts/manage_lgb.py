@@ -57,6 +57,7 @@ DATA_DIR = get_data_dir("full_dataset")
 PROD_MODEL = MODELS_DIR / "orf_classifier_lgb.pkl"
 NEW_MODEL = MODELS_DIR / "orf_classifier_lgb_v2.pkl"
 BACKUP_MODEL = MODELS_DIR / "orf_classifier_lgb_v1_backup.pkl"
+CACHE_DIR = Path(DATA_DIR) / "pipeline_cache"
 
 VAL_PER_GROUP = 4
 TEST_PER_GROUP = 4
@@ -146,9 +147,23 @@ def label_groups(groups: dict, ref_set: set) -> np.ndarray:
 
 
 def run_pipeline(accession: str):
+    """Run pipeline up to organize_nested_orfs(), using disk cache when available.
+
+    The groups output is LGB-feature-independent — adding new features to
+    extract_group_features() does NOT invalidate this cache.  Only genome
+    file changes (mtime) invalidate the cache.
+    """
+    import pickle
+
     fasta = os.path.join(DATA_DIR, f"{accession}.fasta")
     if not os.path.exists(fasta):
         return None
+
+    cache_path = CACHE_DIR / f"{accession}_groups.pkl"
+    if cache_path.exists() and os.path.getmtime(cache_path) >= os.path.getmtime(fasta):
+        with open(cache_path, "rb") as f:
+            return pickle.load(f)
+
     genome = load_genome_sequence(fasta)
     if not genome:
         return None
@@ -161,6 +176,10 @@ def run_pipeline(accession: str):
         scored = score_all_orfs(orfs, models)
         filtered = filter_candidates(scored, **FIRST_FILTER_THRESHOLD)
         groups = organize_nested_orfs(filtered)
+
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    with open(cache_path, "wb") as f:
+        pickle.dump(groups, f)
     return groups
 
 
