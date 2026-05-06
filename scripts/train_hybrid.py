@@ -323,7 +323,16 @@ if test_cands is not None and test_labels is not None and PROD_MODEL.exists():
     with contextlib.redirect_stdout(io.StringIO()):
         old_hf.load(str(PROD_MODEL))
 
-    evaluate(old_hf, test_cands, test_labels, "current model (t=0.12)", threshold=0.12)
+    # Skip old-model comparison if feature count changed (would cause shape mismatch)
+    import pickle as _pkl
+
+    with open(str(PROD_MODEL), "rb") as _f:
+        _old_n = _pkl.load(_f).get("num_traditional_features", 25)
+    _new_n = len(hf.feature_names)
+    if _old_n != _new_n:
+        print(f"  Skipping old-model eval: feature count changed ({_old_n} -> {_new_n})")
+    else:
+        evaluate(old_hf, test_cands, test_labels, "current model (t=0.12)", threshold=0.12)
     evaluate(hf, test_cands, test_labels, "new model (calibrated threshold)", threshold=best_t)
     evaluate(hf, test_cands, test_labels, "new model (t=0.12 for fair compare)", threshold=0.12)
 
