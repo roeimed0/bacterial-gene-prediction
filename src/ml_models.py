@@ -628,10 +628,11 @@ class HybridGeneFilter:
             )
 
     def extract_features(self, candidates: List[Dict], genome_id: str = "unknown") -> pd.DataFrame:
-        from tqdm import tqdm
-
+        n = len(candidates)
+        print(f"  Extracting features for {n:,} candidates...", flush=True)
         rows = []
-        for candidate in tqdm(candidates, desc=f"Features {genome_id}", leave=False):
+        report_every = max(1, n // 10)
+        for i, candidate in enumerate(candidates):
             sequence = candidate.get("sequence", "").upper()
             feature_dict = {
                 "codon_score_norm": float(candidate.get("codon_score_norm", 0.0)),
@@ -685,6 +686,8 @@ class HybridGeneFilter:
             genome_gc = candidate.get("genome_gc_mean", feature_dict["gc_content"])
             feature_dict["gc_deviation"] = feature_dict["gc_content"] - genome_gc
             rows.append(feature_dict)
+            if (i + 1) % report_every == 0 or i + 1 == n:
+                print(f"    {i+1:,}/{n:,} ({(i+1)/n*100:.0f}%)", flush=True)
         return pd.DataFrame(rows).fillna(0.0)
 
     # ASCII lookup: maps byte value -> channel (0=A,1=C,2=G,3=T, unknown->0)
