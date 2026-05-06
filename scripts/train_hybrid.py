@@ -57,6 +57,7 @@ from src.traditional_methods import (
 
 MODELS_DIR = Path(__file__).parent.parent / "models"
 DATA_DIR = get_data_dir("full_dataset")
+CACHE_DIR = Path(DATA_DIR) / "pipeline_cache"
 PROD_MODEL = MODELS_DIR / "hybrid_best_model.pkl"
 NEW_MODEL = MODELS_DIR / "hybrid_best_model_v2.pkl"  # overridden by --output-model below
 BACKUP_MODEL = MODELS_DIR / "hybrid_best_model_v1_backup.pkl"
@@ -119,21 +120,35 @@ def _load_ref_set(accession: str) -> set:
 def run_pipeline(accession: str):
     """
     Run pipeline through LGB -> select_best_starts -> second filter.
-    Returns list of candidate dicts (the exact input HybridGeneFilter sees).
+    Caches organize_nested_orfs() output (LGB-independent) to speed up retrains.
     """
-    genome = load_genome_sequence(os.path.join(DATA_DIR, f"{accession}.fasta"))
+    import pickle
+
+    fasta = os.path.join(DATA_DIR, f"{accession}.fasta")
+    genome = load_genome_sequence(fasta)
     if not genome:
         return None
     seq = genome["sequence"]
 
+    # Load or build the LGB-independent groups cache
+    groups_cache = CACHE_DIR / f"{accession}_groups.pkl"
+    if groups_cache.exists() and os.path.getmtime(groups_cache) >= os.path.getmtime(fasta):
+        with open(groups_cache, "rb") as f:
+            groups = pickle.load(f)
+    else:
+        with contextlib.redirect_stdout(io.StringIO()):
+            orfs = find_orfs_candidates(seq, min_length=100)
+            training = create_training_set(sequence=seq, all_orfs=orfs)
+            intergenic = create_intergenic_set(sequence=seq, all_orfs=orfs)
+            models = build_all_scoring_models(training, intergenic)
+            scored = score_all_orfs(orfs, models)
+            filtered = filter_candidates(scored, **FIRST_FILTER_THRESHOLD)
+            groups = organize_nested_orfs(filtered)
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        with open(groups_cache, "wb") as f:
+            pickle.dump(groups, f)
+
     with contextlib.redirect_stdout(io.StringIO()):
-        orfs = find_orfs_candidates(seq, min_length=100)
-        training = create_training_set(sequence=seq, all_orfs=orfs)
-        intergenic = create_intergenic_set(sequence=seq, all_orfs=orfs)
-        models = build_all_scoring_models(training, intergenic)
-        scored = score_all_orfs(orfs, models)
-        filtered = filter_candidates(scored, **FIRST_FILTER_THRESHOLD)
-        groups = organize_nested_orfs(filtered)
         groups = lgb_clf.filter_groups(
             groups=groups,
             genome_id=accession,
@@ -146,7 +161,6 @@ def run_pipeline(accession: str):
     if hasattr(candidates, "to_dict"):
         candidates = candidates.to_dict("records")
 
-    # Inject genome-level GC mean so HybridGeneFilter can compute gc_deviation
     gc_mean = (seq.count("G") + seq.count("C")) / max(len(seq), 1)
     for c in candidates:
         c["genome_gc_mean"] = gc_mean
