@@ -24,7 +24,7 @@ from src.ml_models import HybridGeneFilter, OrfGroupClassifier
 # HybridGeneFilter.feature_names — see role_ml_engineer.md for the full list)
 # ---------------------------------------------------------------------------
 
-EXPECTED_LGB_FEATURE_COUNT = 31
+EXPECTED_LGB_FEATURE_COUNT = 33
 EXPECTED_HYBRID_FEATURE_COUNT = 25
 
 

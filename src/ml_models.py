@@ -111,6 +111,11 @@ class OrfGroupClassifier:
             start = orf_group["start_score"].values.astype(np.float64)
             imm = orf_group["imm_score"].values.astype(np.float64)
             strands = orf_group["strand"].tolist()
+            lengths = (
+                orf_group["length"].values.astype(np.float64)
+                if "length" in orf_group.columns
+                else np.ones(len(orf_group))
+            )
 
             if weights is not None:
                 cols = orf_group.columns
@@ -196,6 +201,9 @@ class OrfGroupClassifier:
                 "rel_start_select_max": (ss / max_ss if max_ss > 0 else np.zeros(n)).max(),
                 "frac_top_combined": (combined >= 0.95 * max_combined).sum() / n,
                 "frac_top_start_select": (ss >= 0.95 * max_ss).sum() / n,
+                # Length-based features (#123)
+                "top_orf_is_longest": int(combined.argmax() == lengths.argmax()),
+                "length_ratio_max_min": float(lengths.max() / max(lengths.min(), 1.0)),
             }
 
             rows.append(group_features)
