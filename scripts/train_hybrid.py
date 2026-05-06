@@ -130,36 +130,48 @@ def run_pipeline(accession: str):
         return None
     seq = genome["sequence"]
 
-    # Load or build the LGB-independent groups cache
-    groups_cache = CACHE_DIR / f"{accession}_groups.pkl"
-    if groups_cache.exists() and os.path.getmtime(groups_cache) >= os.path.getmtime(fasta):
-        with open(groups_cache, "rb") as f:
-            groups = pickle.load(f)
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Two-level cache:
+    # Level 1 (LGB-independent): groups after organize_nested_orfs()
+    # Level 2 (LGB-specific):    candidates after LGB filter + select_best_starts
+    lgb_key = f"{lgb_path.stem}_t{LGB_THRESHOLD:.3f}"
+    cand_cache = CACHE_DIR / f"{accession}_{lgb_key}_candidates.pkl"
+
+    if cand_cache.exists() and os.path.getmtime(cand_cache) >= os.path.getmtime(fasta):
+        with open(cand_cache, "rb") as f:
+            candidates = pickle.load(f)
     else:
+        groups_cache = CACHE_DIR / f"{accession}_groups.pkl"
+        if groups_cache.exists() and os.path.getmtime(groups_cache) >= os.path.getmtime(fasta):
+            with open(groups_cache, "rb") as f:
+                groups = pickle.load(f)
+        else:
+            with contextlib.redirect_stdout(io.StringIO()):
+                orfs = find_orfs_candidates(seq, min_length=100)
+                training = create_training_set(sequence=seq, all_orfs=orfs)
+                intergenic = create_intergenic_set(sequence=seq, all_orfs=orfs)
+                models = build_all_scoring_models(training, intergenic)
+                scored = score_all_orfs(orfs, models)
+                filtered = filter_candidates(scored, **FIRST_FILTER_THRESHOLD)
+                groups = organize_nested_orfs(filtered)
+            with open(groups_cache, "wb") as f:
+                pickle.dump(groups, f)
+
         with contextlib.redirect_stdout(io.StringIO()):
-            orfs = find_orfs_candidates(seq, min_length=100)
-            training = create_training_set(sequence=seq, all_orfs=orfs)
-            intergenic = create_intergenic_set(sequence=seq, all_orfs=orfs)
-            models = build_all_scoring_models(training, intergenic)
-            scored = score_all_orfs(orfs, models)
-            filtered = filter_candidates(scored, **FIRST_FILTER_THRESHOLD)
-            groups = organize_nested_orfs(filtered)
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        with open(groups_cache, "wb") as f:
-            pickle.dump(groups, f)
+            groups = lgb_clf.filter_groups(
+                groups=groups,
+                genome_id=accession,
+                weights=START_SELECTION_WEIGHTS,
+                threshold=LGB_THRESHOLD,
+            )
+            top = select_best_starts(groups, START_SELECTION_WEIGHTS)
+            candidates = filter_candidates(top, **SECOND_FILTER_THRESHOLD)
 
-    with contextlib.redirect_stdout(io.StringIO()):
-        groups = lgb_clf.filter_groups(
-            groups=groups,
-            genome_id=accession,
-            weights=START_SELECTION_WEIGHTS,
-            threshold=LGB_THRESHOLD,
-        )
-        top = select_best_starts(groups, START_SELECTION_WEIGHTS)
-        candidates = filter_candidates(top, **SECOND_FILTER_THRESHOLD)
-
-    if hasattr(candidates, "to_dict"):
-        candidates = candidates.to_dict("records")
+        if hasattr(candidates, "to_dict"):
+            candidates = candidates.to_dict("records")
+        with open(cand_cache, "wb") as f:
+            pickle.dump(candidates, f)
 
     gc_mean = (seq.count("G") + seq.count("C")) / max(len(seq), 1)
     for c in candidates:
