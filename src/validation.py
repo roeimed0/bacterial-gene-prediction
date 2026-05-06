@@ -11,6 +11,12 @@ Key Functions:
 - validate_batch(): Run validation across multiple genomes with per-group breakdown
 """
 
+__all__ = [
+    "validate_predictions",
+    "validate_from_results_directory",
+    "validate_batch",
+]
+
 from pathlib import Path
 from typing import Dict, List, Optional
 

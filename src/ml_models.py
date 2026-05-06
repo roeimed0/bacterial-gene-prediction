@@ -15,6 +15,8 @@ from Bio.SeqUtils.ProtParam import ProteinAnalysis
 
 logger = logging.getLogger(__name__)
 
+__all__ = ["OrfGroupClassifier", "HybridGeneFilter"]
+
 """
 Machine learning classifier for ORF groups.
 

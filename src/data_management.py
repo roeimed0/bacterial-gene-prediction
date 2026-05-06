@@ -22,6 +22,19 @@ Key Functions:
 All downloads are cached - re-running will skip existing files.
 """
 
+__all__ = [
+    "get_project_root",
+    "get_data_dir",
+    "get_gff_path",
+    "get_fasta_path",
+    "download_genome_and_reference",
+    "download_all_test_genomes",
+    "load_genome_sequence",
+    "load_reference_genes_from_gff",
+    "get_reference_orfs_from_gff",
+    "cleanup_generated_files",
+]
+
 import os
 from pathlib import Path
 from typing import Dict, List, Set, Tuple

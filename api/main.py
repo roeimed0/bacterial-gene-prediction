@@ -162,9 +162,9 @@ async def predict_genes(request: PredictionRequest):
 async def predict_genes_from_file(
     file: UploadFile = File(...),
     use_group_ml: bool = True,
-    group_threshold: float = 0.1,
+    group_threshold: float = 0.07,
     use_final_ml: bool = True,
-    final_threshold: float = 0.12,
+    final_threshold: float = 0.25,
 ):
     """
     Predict genes from an uploaded FASTA file
