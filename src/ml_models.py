@@ -54,13 +54,15 @@ class OrfGroupClassifier:
         self.model = joblib.load(str(model_path))
         logger.info("Loaded model: %s", {model_path})
 
-        # Load feature names (should be in same directory)
-        feature_path = model_path.parent / "feature_names.pkl"
+        # Load feature names — prefer model-specific file, fall back to shared
+        specific = model_path.parent / f"{model_path.stem}_feature_names.pkl"
+        shared = model_path.parent / "feature_names.pkl"
+        feature_path = specific if specific.exists() else shared
         if feature_path.exists():
             self.feature_names = joblib.load(str(feature_path))
             logger.info("Loaded %d features", len(self.feature_names or []))
         else:
-            logger.warning("feature_names.pkl not found in %s", model_path.parent)
+            logger.warning("feature_names not found for %s", model_path.name)
             self.feature_names = None
 
     def _entropy_from_probs(self, arr, base=2):
@@ -346,11 +348,11 @@ class OrfGroupClassifier:
         return best_t
 
     def save(self, model_path: str) -> None:
-        """Save model and feature names to disk (joblib format)."""
+        """Save model and model-specific feature names (avoids overwriting shared file)."""
         p = Path(model_path)
         p.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(self.model, str(p))
-        feature_path = p.parent / "feature_names.pkl"
+        feature_path = p.parent / f"{p.stem}_feature_names.pkl"
         joblib.dump(self.feature_names, str(feature_path))
         logger.info("Saved model -> %s", p)
         logger.info("Saved features -> %s", feature_path)

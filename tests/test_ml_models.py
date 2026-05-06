@@ -454,7 +454,7 @@ class TestOrfGroupClassifierSave:
         y = _make_labels(200, pos_frac=0.15)
         clf.train(X, y)
         clf.save(str(tmp_path / "lgb_test.pkl"))
-        assert (tmp_path / "feature_names.pkl").exists()
+        assert (tmp_path / "lgb_test_feature_names.pkl").exists()
 
     def test_save_load_roundtrip_preserves_predictions(self, tmp_path):
         """A model saved and re-loaded must produce identical probabilities."""
