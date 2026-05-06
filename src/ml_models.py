@@ -717,8 +717,14 @@ class HybridGeneFilter:
         patience: int = 10,
         focal_loss: bool = False,
         focal_gamma: float = 2.0,
+        precomputed_features: Optional["pd.DataFrame"] = None,
+        precomputed_val_features: Optional["pd.DataFrame"] = None,
     ) -> None:
-        """Train HybridGenePredictor with pos_weight to handle class imbalance."""
+        """Train HybridGenePredictor with pos_weight to handle class imbalance.
+
+        Pass precomputed_features to skip the expensive extract_features() call
+        (useful when training on large datasets where feature extraction is a bottleneck).
+        """
         n_pos = int(labels.sum())
         n_neg = int(len(labels) - n_pos)
         if n_pos == 0:
@@ -765,13 +771,21 @@ class HybridGeneFilter:
 
         max_seq_len = min(max((len(c.get("sequence", "")) for c in candidates), default=1500), 1500)
 
-        feat_df = self.extract_features(candidates)
+        feat_df = (
+            precomputed_features
+            if precomputed_features is not None
+            else self.extract_features(candidates)
+        )
         X_feat = torch.tensor(feat_df[self.feature_names].values, dtype=torch.float32)
         y_tensor = torch.tensor(labels, dtype=torch.float32)
 
         val_feat_tensor = val_label_tensor = None
         if val_candidates is not None and val_labels is not None:
-            vdf = self.extract_features(val_candidates)
+            vdf = (
+                precomputed_val_features
+                if precomputed_val_features is not None
+                else self.extract_features(val_candidates)
+            )
             val_feat_tensor = torch.tensor(vdf[self.feature_names].values, dtype=torch.float32)
             val_label_tensor = torch.tensor(val_labels, dtype=torch.float32)
 

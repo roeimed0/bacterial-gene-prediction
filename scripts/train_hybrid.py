@@ -204,7 +204,14 @@ def build_splits(available_by_group: dict, val_per_group: int, test_per_group: i
 
 
 def collect_candidates(accessions: list, split: str):
-    all_cands, all_labels = [], []
+    """Collect candidates + pre-extract tabular features (cached per genome)."""
+    import pickle
+
+    import pandas as pd
+
+    _hf_tmp = HybridGeneFilter()  # for extract_features only
+    all_cands, all_labels, all_feat_dfs = [], [], []
+
     for i, acc in enumerate(accessions, 1):
         print(f"  [{split}] [{i:>3}/{len(accessions)}] {acc}...", end=" ", flush=True)
         if not (
@@ -217,15 +224,30 @@ def collect_candidates(accessions: list, split: str):
         if candidates is None:
             print("SKIP (pipeline failed)")
             continue
+
+        # Cache features to avoid recomputing slow Bio operations on each retrain
+        lgb_key = f"{lgb_path.stem}_t{LGB_THRESHOLD:.3f}"
+        feat_cache = CACHE_DIR / f"{acc}_{lgb_key}_features.pkl"
+        fasta = os.path.join(DATA_DIR, f"{acc}.fasta")
+        if feat_cache.exists() and os.path.getmtime(feat_cache) >= os.path.getmtime(fasta):
+            with open(feat_cache, "rb") as f:
+                feat_df = pickle.load(f)
+        else:
+            feat_df = _hf_tmp.extract_features(candidates)
+            with open(feat_cache, "wb") as f:
+                pickle.dump(feat_df, f)
+
         ref_set = _load_ref_set(acc)
         labels = label_candidates(candidates, ref_set)
         n_pos = int(labels.sum())
         print(f"n={len(labels):,}  pos={n_pos}  neg={len(labels)-n_pos}")
         all_cands.extend(candidates)
         all_labels.append(labels)
+        all_feat_dfs.append(feat_df)
+
     if not all_cands:
-        return None, None
-    return all_cands, np.concatenate(all_labels)
+        return None, None, None
+    return all_cands, np.concatenate(all_labels), pd.concat(all_feat_dfs, ignore_index=True)
 
 
 def evaluate(
@@ -267,7 +289,7 @@ print(f"\nSplit: {len(train_accs)} train / {len(val_accs)} val / {len(test_accs)
 # ── Collect candidates ────────────────────────────────────────────────────────
 
 print(f"\n{SEP}\nCOLLECTING TRAIN CANDIDATES ({len(train_accs)} genomes)\n{SEP}")
-train_cands, train_labels = collect_candidates(train_accs, "train")
+train_cands, train_labels, train_feats = collect_candidates(train_accs, "train")
 if train_cands is None:
     print("ERROR: no training data.")
     sys.exit(1)
@@ -278,12 +300,13 @@ print(
 )
 
 print(f"\n{SEP}\nCOLLECTING VAL CANDIDATES ({len(val_accs)} genomes)\n{SEP}")
-val_cands, val_labels = collect_candidates(val_accs, "val")
+val_cands, val_labels, val_feats = collect_candidates(val_accs, "val")
 if val_cands is None:
     print("WARNING: no val data — training without early stopping.")
+    val_feats = None
 
 print(f"\n{SEP}\nCOLLECTING TEST CANDIDATES ({len(test_accs)} genomes)\n{SEP}")
-test_cands, test_labels = collect_candidates(test_accs, "test")
+test_cands, test_labels, test_feats = collect_candidates(test_accs, "test")
 if test_cands is None:
     print("WARNING: no test data — comparison will be skipped.")
 
@@ -302,6 +325,8 @@ hf.train(
     epochs=args.epochs,
     batch_size=64,
     focal_loss=args.focal_loss,
+    precomputed_features=train_feats,
+    precomputed_val_features=val_feats,
 )
 
 # ── Calibrate threshold ───────────────────────────────────────────────────────
