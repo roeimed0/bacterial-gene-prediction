@@ -305,6 +305,12 @@ if val_cands is None:
     print("WARNING: no val data — training without early stopping.")
     val_feats = None
 
+# Free train candidates from memory before loading test (OOM prevention)
+del train_cands
+import gc
+
+gc.collect()
+
 print(f"\n{SEP}\nCOLLECTING TEST CANDIDATES ({len(test_accs)} genomes)\n{SEP}")
 test_cands, test_labels, test_feats = collect_candidates(test_accs, "test")
 if test_cands is None:
