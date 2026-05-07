@@ -589,116 +589,35 @@ def predict_fasta_file(
         print(f"  Final ML threshold: {final_ml_threshold}")
 
     try:
-        from src.data_management import load_genome_sequence
         from src.ml_models import HybridGeneFilter, OrfGroupClassifier
-        from src.traditional_methods import (
-            FIRST_FILTER_THRESHOLD,
-            SECOND_FILTER_THRESHOLD,
-            START_SELECTION_WEIGHTS,
-            build_all_scoring_models,
-            create_intergenic_set,
-            create_training_set,
-            filter_candidates,
-            find_orfs_candidates,
-            organize_nested_orfs,
-            score_all_orfs,
-            select_best_starts,
-        )
+        from src.pipeline import predict_genome_from_file
 
-        print(f"\n{'='*80}\nSTEP 1: LOAD FASTA FILE\n{'='*80}")
-        genome_info = load_genome_sequence(fasta_path)
-        sequence = genome_info["sequence"]
-        print(f"Sequence loaded: {len(sequence):,} bp")
-
-        print(f"\n{'='*80}\nSTEP 2: FIND ALL ORFs\n{'='*80}")
-        all_orfs = find_orfs_candidates(sequence, min_length=100)
-        print(f"ORFs found: {len(all_orfs):,}")
-
-        print(f"\n{'='*80}\nSTEP 3: CREATE TRAINING SET\n{'='*80}")
-        training_set = create_training_set(sequence=sequence, all_orfs=all_orfs)
-        print(f"Training set: {len(training_set):,} ORFs")
-
-        print(f"\n{'='*80}\nSTEP 4: CREATE INTERGENIC REGIONS\n{'='*80}")
-        intergenic_set = create_intergenic_set(sequence=sequence, all_orfs=all_orfs)
-        print(f"Intergenic regions: {len(intergenic_set):,}")
-
-        print(f"\n{'='*80}\nSTEP 5: BUILD SCORING MODELS\n{'='*80}")
-        models = build_all_scoring_models(training_set, intergenic_set)
-        print(f"Models built: {len(models)} models")
-
-        print(f"\n{'='*80}\nSTEP 6: SCORE ALL ORFs\n{'='*80}")
-        scored_orfs = score_all_orfs(all_orfs, models)
-        print(f"ORFs scored: {len(scored_orfs):,}")
-
-        print(f"\n{'='*80}\nSTEP 7: INITIAL FILTERING\n{'='*80}")
-        candidates = filter_candidates(scored_orfs, **FIRST_FILTER_THRESHOLD)
-        print(f"Candidates: {len(candidates):,}")
-
-        print(f"\n{'='*80}\nSTEP 8: GROUP NESTED ORFs\n{'='*80}")
-        grouped_orfs = organize_nested_orfs(candidates)
-        print(f"Groups: {len(grouped_orfs):,}")
-
+        lgb = hf = None
         if use_ml:
-            print(f"\n{'='*80}\nSTEP 9: ML GROUP FILTERING\n{'='*80}")
-            try:
-                classifier = OrfGroupClassifier()
-                model_path = Path(__file__).parent / "models" / "orf_classifier_lgb.pkl"
-                if model_path.exists():
-                    classifier.load(str(model_path))
-                    pre_filter_count = len(grouped_orfs)
-                    grouped_orfs = classifier.filter_groups(
-                        groups=grouped_orfs,
-                        genome_id="user_genome",
-                        weights=START_SELECTION_WEIGHTS,
-                        threshold=ml_threshold,
-                    )
-                    post_filter_count = len(grouped_orfs)
-                    print(f"Groups before ML: {pre_filter_count:,}")
-                    print(f"Groups after ML:  {post_filter_count:,}")
-                    print(f"Groups removed:   {pre_filter_count - post_filter_count:,}")
-                else:
-                    print("[!] Model not found, skipping ML...")
-            except Exception as e:
-                print(f"[!] ML error: {e}, skipping...")
+            lgb_path = Path(__file__).parent / "models" / "orf_classifier_lgb.pkl"
+            if lgb_path.exists():
+                lgb = OrfGroupClassifier()
+                lgb.load(str(lgb_path))
+            else:
+                print("[!] LGB model not found, skipping group ML...")
 
-        print(f"\n{'='*80}\nSTEP 10: SELECT BEST START CODONS\n{'='*80}")
-        top_candidates = select_best_starts(grouped_orfs, START_SELECTION_WEIGHTS)
-        print(f"Top candidates: {len(top_candidates):,}")
-
-        print(f"\n{'='*80}\nSTEP 11: FINAL FILTERING\n{'='*80}")
-        final_predictions = filter_candidates(top_candidates, **SECOND_FILTER_THRESHOLD)
-        print(f"Final predictions: {len(final_predictions):,}")
-
-        # NEW: FINAL ML FILTRATION (STEP 11.5 - AFTER traditional filter)
         if use_final_filtration_ml:
-            print(f"\n{'='*80}\nSTEP 11.5: HYBRID ML FILTRATION\n{'='*80}")
-            try:
-                hybrid_filter = HybridGeneFilter()
-                model_path = Path(__file__).parent / "models" / "hybrid_best_model.pkl"
-                if model_path.exists():
-                    hybrid_filter.load(str(model_path))
-                    pre_filter_count = len(final_predictions)
+            hf_path = Path(__file__).parent / "models" / "hybrid_best_model.pkl"
+            if hf_path.exists():
+                hf = HybridGeneFilter()
+                hf.load(str(hf_path))
+            else:
+                print("[!] Hybrid model not found, skipping final ML...")
 
-                    final_predictions = hybrid_filter.filter_candidates(
-                        candidates=final_predictions,
-                        genome_id="user_genome",
-                        threshold=final_ml_threshold,
-                        batch_size=32,  # Process 32 candidates at a time
-                    )
-                    post_filter_count = len(final_predictions)
-                    print(f"Candidates before hybrid ML: {pre_filter_count:,}")
-                    print(f"Candidates after hybrid ML:  {post_filter_count:,}")
-                    print(f"Candidates removed:          {pre_filter_count - post_filter_count:,}")
-                else:
-                    print(
-                        f"[!] Hybrid model not found at {model_path},"
-                        " skipping final ML filtration..."
-                    )
-            except Exception as e:
-                print(f"[!] Hybrid ML error: {e}, skipping final filtration...")
-                import traceback
-
-                traceback.print_exc()
+        print(f"\n{'='*80}\nRUNNING PREDICTION PIPELINE\n{'='*80}")
+        final_predictions = predict_genome_from_file(
+            fasta_path=fasta_path,
+            lgb=lgb,
+            lgb_threshold=ml_threshold,
+            hf=hf,
+            hf_threshold=final_ml_threshold,
+        )
+        print(f"Genes predicted: {len(final_predictions):,}")
 
         print(f"\n{'='*80}\nSTEP 12: WRITE OUTPUT\n{'='*80}")
         write_gff(final_predictions, output_path, sequence_id=Path(fasta_path).stem)
@@ -706,7 +625,7 @@ def predict_fasta_file(
         print(f"\n{'='*80}\nPREDICTION COMPLETE!\n{'='*80}")
         print(f"Input:  {fasta_path}")
         print(f"Output: {output_path}")
-        print(f"Size:   {len(sequence):,} bp")
+        print(f"Size:   {Path(fasta_path).stat().st_size // 1000:,} KB")
         print(f"Genes:  {len(final_predictions):,}")
         print(f"{'='*80}\n")
 

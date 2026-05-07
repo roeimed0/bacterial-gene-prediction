@@ -38,19 +38,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.config import FIRST_FILTER_THRESHOLD, SECOND_FILTER_THRESHOLD, START_SELECTION_WEIGHTS
 from src.data_management import load_genome_sequence
 from src.ml_models import HybridGeneFilter, OrfGroupClassifier
-from src.traditional_methods import (
-    build_all_scoring_models,
-    create_intergenic_set,
-    create_training_set,
-    filter_candidates,
-    find_orfs_candidates,
-    organize_nested_orfs,
-    score_all_orfs,
-    select_best_starts,
-)
+from src.pipeline import predict_genome
 
 MODELS_DIR = Path(__file__).parent.parent / "models"
 SEP = "=" * 70
@@ -181,32 +171,15 @@ for i, fasta_path in enumerate(input_files, 1):
         genome_id = genome.get("id", stem)
 
         with contextlib.redirect_stdout(io.StringIO()):
-            orfs = find_orfs_candidates(seq, min_length=args.min_length)
-            training = create_training_set(sequence=seq, all_orfs=orfs)
-            intergenic = create_intergenic_set(sequence=seq, all_orfs=orfs)
-            models = build_all_scoring_models(training, intergenic)
-            scored = score_all_orfs(orfs, models)
-            filtered = filter_candidates(scored, **FIRST_FILTER_THRESHOLD)
-            groups = organize_nested_orfs(filtered)
-
-            if lgb is not None:
-                groups = lgb.filter_groups(
-                    groups=groups,
-                    genome_id=genome_id,
-                    weights=START_SELECTION_WEIGHTS,
-                    threshold=args.group_threshold,
-                )
-
-            top = select_best_starts(groups, START_SELECTION_WEIGHTS)
-            predictions = filter_candidates(top, **SECOND_FILTER_THRESHOLD)
-
-            if hf is not None:
-                predictions = hf.filter_candidates(
-                    candidates=predictions,
-                    genome_id=genome_id,
-                    threshold=final_t,
-                    batch_size=32,
-                )
+            predictions = predict_genome(
+                sequence=seq,
+                genome_id=genome_id,
+                lgb=lgb,
+                lgb_threshold=args.group_threshold,
+                hf=hf,
+                hf_threshold=final_t,
+                min_orf_length=args.min_length,
+            )
 
         n_genes = len(predictions) if hasattr(predictions, "__len__") else "?"
         _write_gff(predictions, genome_id, out_path)
