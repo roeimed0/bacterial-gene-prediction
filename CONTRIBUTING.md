@@ -39,11 +39,12 @@ open issue → branch → code → tests → PR → review → merge
 
 | Type | Pattern | Example |
 |------|---------|---------|
-| Feature / enhancement | `feature/issue-N-short-description` | `feature/issue-12-benchmark-prodigal` |
+| Feature / enhancement | `enh/issue-N-short-description` | `enh/issue-12-benchmark-prodigal` |
 | Bug fix | `fix/issue-N-short-description` | `fix/issue-7-rbs-scoring-crash` |
 | Documentation | `doc/issue-N-short-description` | `doc/issue-3-readme-pipeline-diagram` |
 | Performance | `perf/issue-N-short-description` | `perf/issue-9-lightgbm-inference-speed` |
 | Refactor | `refactor/issue-N-short-description` | `refactor/issue-5-modularize-pipeline` |
+| ML | `ml/issue-N-short-description` | `ml/issue-123-lgb-feature-reduction` |
 
 ---
 
