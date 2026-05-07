@@ -469,19 +469,22 @@ def predict_ncbi_genome(
     ml_threshold: float = 0.07,
     use_final_filtration_ml: bool = True,
     final_ml_threshold: float = 0.25,
+    quiet: bool = False,
 ):
     """Download genome from NCBI and predict genes"""
     from Bio import Entrez
 
-    print(f"\n{'='*80}")
-    print("MODE: NCBI DOWNLOAD")
-    print(f"{'='*80}")
-    print(f"Accession: {accession}")
+    if not quiet:
+        print(f"\n{'='*80}")
+        print("MODE: NCBI DOWNLOAD")
+        print(f"{'='*80}")
+        print(f"Accession: {accession}")
 
     if email is None:
         raise ValueError("Email required for NCBI downloads")
 
-    print(f"Email: {email}")
+    if not quiet:
+        print(f"Email: {email}")
 
     # Set up Entrez
     Entrez.email = email
@@ -493,12 +496,13 @@ def predict_ncbi_genome(
     # Download the genome
     fasta_path = downloads_dir / f"{accession}.fasta"
 
-    print("\nDownloading from NCBI...")
-    print(f"  Target: {fasta_path}")
+    if not quiet:
+        print("\nDownloading from NCBI...")
+        print(f"  Target: {fasta_path}")
 
     try:
-        # Search for the nucleotide record
-        print("  Fetching sequence...")
+        if not quiet:
+            print("  Fetching sequence...")
         handle = Entrez.efetch(db="nucleotide", id=accession, rettype="fasta", retmode="text")
 
         # Save to file
@@ -509,21 +513,23 @@ def predict_ncbi_genome(
 
         # Verify download
         file_size = fasta_path.stat().st_size
-        print(f"  Downloaded: {file_size:,} bytes")
+        if not quiet:
+            print(f"  Downloaded: {file_size:,} bytes")
 
         if file_size < 100:
             raise ValueError("Downloaded file is too small, download may have failed")
 
-        print("  ✓ Genome downloaded successfully\n")
+        if not quiet:
+            print("  ✓ Genome downloaded successfully\n")
 
     except Exception as e:
         print(f"\n[!] Download failed: {e}", file=sys.stderr)
         raise
 
-    # Now predict genes using the downloaded file
-    print(f"{'='*80}")
-    print("RUNNING GENE PREDICTION")
-    print(f"{'='*80}\n")
+    if not quiet:
+        print(f"{'='*80}")
+        print("RUNNING GENE PREDICTION")
+        print(f"{'='*80}\n")
 
     # Set output path using genome_id for results
     results_dir = Path("results")
@@ -531,7 +537,6 @@ def predict_ncbi_genome(
     base_output_path = results_dir / f"{accession}_predictions.gff"
     output_path = get_versioned_filename(base_output_path)
 
-    # Call predict_fasta_file with the downloaded genome
     try:
         predictions = predict_fasta_file(
             fasta_path=str(fasta_path),
@@ -539,16 +544,22 @@ def predict_ncbi_genome(
             ml_threshold=ml_threshold,
             use_final_filtration_ml=use_final_filtration_ml,
             final_ml_threshold=final_ml_threshold,
+            quiet=quiet,
         )
 
-        print(f"\n{'='*80}")
-        print("NCBI PREDICTION COMPLETE!")
-        print(f"{'='*80}")
-        print(f"Genome:      {accession}")
-        print(f"Downloaded:  {fasta_path}")
-        print(f"Predictions: {output_path}")
-        print(f"Total genes: {len(predictions):,}")
-        print(f"{'='*80}\n")
+        if quiet:
+            print(f"Processing: {accession}")
+            print(f"Predicted:  {len(predictions):,} genes")
+            print(f"Output:     {output_path}")
+        else:
+            print(f"\n{'='*80}")
+            print("NCBI PREDICTION COMPLETE!")
+            print(f"{'='*80}")
+            print(f"Genome:      {accession}")
+            print(f"Downloaded:  {fasta_path}")
+            print(f"Predictions: {output_path}")
+            print(f"Total genes: {len(predictions):,}")
+            print(f"{'='*80}\n")
 
         return predictions
 
@@ -563,13 +574,9 @@ def predict_fasta_file(
     ml_threshold: float = 0.07,
     use_final_filtration_ml: bool = True,
     final_ml_threshold: float = 0.25,
+    quiet: bool = False,
 ):
     """Predict genes from FASTA file."""
-    print(f"\n{'='*80}")
-    print("MODE: RAW FASTA FILE")
-    print(f"{'='*80}")
-    print(f"Input: {fasta_path}")
-
     # Always results folder
     results_dir = Path(__file__).resolve().parent / "results"
     results_dir.mkdir(exist_ok=True)
@@ -578,13 +585,18 @@ def predict_fasta_file(
     base_output_path = results_dir / filename
     output_path = str(get_versioned_filename(base_output_path))
 
-    print(f"Output: {output_path}")
-    print(f"ML group filtering: {'Enabled' if use_ml else 'Disabled'}")
-    if use_ml:
-        print(f"  Group ML threshold: {ml_threshold}")
-    print(f"Final ML filtration: {'Enabled' if use_final_filtration_ml else 'Disabled'}")
-    if use_final_filtration_ml:
-        print(f"  Final ML threshold: {final_ml_threshold}")
+    if not quiet:
+        print(f"\n{'='*80}")
+        print("MODE: RAW FASTA FILE")
+        print(f"{'='*80}")
+        print(f"Input: {fasta_path}")
+        print(f"Output: {output_path}")
+        print(f"ML group filtering: {'Enabled' if use_ml else 'Disabled'}")
+        if use_ml:
+            print(f"  Group ML threshold: {ml_threshold}")
+        print(f"Final ML filtration: {'Enabled' if use_final_filtration_ml else 'Disabled'}")
+        if use_final_filtration_ml:
+            print(f"  Final ML threshold: {final_ml_threshold}")
 
     try:
         from src.ml_models import HybridGeneFilter, OrfGroupClassifier
@@ -607,7 +619,9 @@ def predict_fasta_file(
             else:
                 print("[!] Hybrid model not found, skipping final ML...")
 
-        print(f"\n{'='*80}\nRUNNING PREDICTION PIPELINE\n{'='*80}")
+        if not quiet:
+            print(f"\n{'='*80}\nRUNNING PREDICTION PIPELINE\n{'='*80}")
+
         final_predictions = predict_genome_from_file(
             fasta_path=fasta_path,
             lgb=lgb,
@@ -615,17 +629,20 @@ def predict_fasta_file(
             hf=hf,
             hf_threshold=final_ml_threshold,
         )
-        print(f"Genes predicted: {len(final_predictions):,}")
 
-        print(f"\n{'='*80}\nSTEP 12: WRITE OUTPUT\n{'='*80}")
         write_gff(final_predictions, output_path, sequence_id=Path(fasta_path).stem)
 
-        print(f"\n{'='*80}\nPREDICTION COMPLETE!\n{'='*80}")
-        print(f"Input:  {fasta_path}")
-        print(f"Output: {output_path}")
-        print(f"Size:   {Path(fasta_path).stat().st_size // 1000:,} KB")
-        print(f"Genes:  {len(final_predictions):,}")
-        print(f"{'='*80}\n")
+        if quiet:
+            print(f"Processing: {Path(fasta_path).name}")
+            print(f"Predicted:  {len(final_predictions):,} genes")
+            print(f"Output:     {output_path}")
+        else:
+            print(f"\n{'='*80}\nPREDICTION COMPLETE!\n{'='*80}")
+            print(f"Input:  {fasta_path}")
+            print(f"Output: {output_path}")
+            print(f"Size:   {Path(fasta_path).stat().st_size // 1000:,} KB")
+            print(f"Genes:  {len(final_predictions):,}")
+            print(f"{'='*80}\n")
 
         return final_predictions
 
@@ -703,6 +720,12 @@ Examples:
         action="store_true",
         help="Show pipeline progress (IMM building, scoring, etc.)",
     )
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Minimal output: one line per stage, no banners",
+    )
 
     args = parser.parse_args()
 
@@ -743,7 +766,8 @@ Examples:
     if args.input and not args.interactive:
         try:
             mode, resolved_input = detect_input_mode(args.input)
-            print(f"\n[+] Detected mode: {mode.upper()}")
+            if not args.quiet:
+                print(f"\n[+] Detected mode: {mode.upper()}")
         except ValueError as e:
             print(f"\n[!] Error: {e}", file=sys.stderr)
             sys.exit(1)
@@ -757,6 +781,7 @@ Examples:
                     ml_threshold=args.group_threshold,
                     use_final_filtration_ml=not args.no_final_ml,
                     final_ml_threshold=args.final_threshold,
+                    quiet=args.quiet,
                 )
             elif mode == "fasta":
                 predict_fasta_file(
@@ -765,9 +790,11 @@ Examples:
                     ml_threshold=args.group_threshold,
                     use_final_filtration_ml=not args.no_final_ml,
                     final_ml_threshold=args.final_threshold,
+                    quiet=args.quiet,
                 )
 
-            print("\n[+] Success!")
+            if not args.quiet:
+                print("\n[+] Success!")
 
         except NotImplementedError as e:
             print(f"\n[!] {e}", file=sys.stderr)
