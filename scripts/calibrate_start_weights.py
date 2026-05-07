@@ -344,9 +344,7 @@ print(f"\n  Verdict: {verdict}")
 print(f"\n{SEP}")
 print("COORDINATE SENSITIVITY (val accuracy — how much does each weight matter?)")
 print(SEP)
-print(
-    f"\n  Factors tested: 0.25x  0.5x  0.75x  0.9x  [1.0x current]  1.1x  1.25x  1.5x  2.0x  4.0x"
-)
+print("\n  Factors tested: 0.25x  0.5x  0.75x  0.9x  [1.0x current]  1.1x  1.25x  1.5x  2.0x  4.0x")
 
 PERTURB_FACTORS = [0.25, 0.5, 0.75, 0.9, 1.0, 1.1, 1.25, 1.5, 2.0, 4.0]
 coord_best = dict(zip(FEAT_ORDER, current_w))

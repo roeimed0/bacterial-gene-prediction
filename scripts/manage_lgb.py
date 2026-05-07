@@ -303,7 +303,7 @@ def cmd_train(args):
     print(f"\n{SEP}\nSAVING -> {NEW_MODEL}\n{SEP}")
     clf.save(str(NEW_MODEL))
     print(f"\n  Calibrated threshold: {best_t:.3f}")
-    print(f"  Run 'compare' to validate on held-out genomes, then 'promote' to go live.")
+    print("  Run 'compare' to validate on held-out genomes, then 'promote' to go live.")
     print(SEP)
 
 

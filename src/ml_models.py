@@ -704,8 +704,8 @@ class HybridGeneFilter:
 
         X_features = torch.tensor(df[self.feature_names].values, dtype=torch.float32)
 
-        # Determine max sequence length
-        max_seq_len = max((len(c.get("sequence", "")) for c in candidates), default=1000)
+        # Cap at 1500 bp — the training distribution; longer sequences were never seen
+        max_seq_len = min(max((len(c.get("sequence", "")) for c in candidates), default=1000), 1500)
 
         # Process in batches to avoid OOM
         all_probs = []

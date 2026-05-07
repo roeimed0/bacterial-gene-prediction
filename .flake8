@@ -1,3 +1,7 @@
 [flake8]
 max-line-length = 100
 extend-ignore = E203, W503
+per-file-ignores =
+    # Scripts add project root to sys.path before imports — E402 is intentional.
+    # E501 violations are in print/format strings that can't be cleanly wrapped.
+    scripts/*.py: E402, E501

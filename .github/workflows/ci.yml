@@ -18,11 +18,11 @@ jobs:
       - name: Install linting tools
         run: pip install flake8 black==25.11.0 isort==6.1.0
       - name: Check formatting (black)
-        run: black --check src/ api/ hybrid_predictor.py
+        run: black --check src/ api/ hybrid_predictor.py scripts/
       - name: Check imports (isort)
-        run: isort --check-only src/ api/ hybrid_predictor.py
+        run: isort --check-only src/ api/ hybrid_predictor.py scripts/
       - name: Lint (flake8)
-        run: flake8 src/ api/ hybrid_predictor.py --max-line-length=100
+        run: flake8 src/ api/ hybrid_predictor.py scripts/
 
   test:
     name: Tests (Python ${{ matrix.python-version }})

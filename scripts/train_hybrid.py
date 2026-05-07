@@ -172,6 +172,14 @@ def collect_candidates(accessions: list, split: str):
         all_labels.append(labels)
     if not all_cands:
         return None, None
+    lengths = [len(c.get("sequence", "")) for c in all_cands]
+    print(
+        f"\n  [{split}] lengths: min={min(lengths)}  max={max(lengths)}"
+        f"  mean={int(sum(lengths)/len(lengths))}"
+    )
+    n_long = sum(seq_len > 1500 for seq_len in lengths)
+    if n_long:
+        print(f"  [{split}] WARNING: {n_long} sequences exceed 1500 bp inference cap")
     return all_cands, np.concatenate(all_labels)
 
 
@@ -275,7 +283,6 @@ if test_cands is not None and test_labels is not None and PROD_MODEL.exists():
     evaluate(hf, test_cands, test_labels, "new model (t=0.12 for fair compare)", threshold=0.12)
 
     # Threshold sweep
-    import numpy as _np
     from sklearn.metrics import recall_score as _rs
 
     old_hf_thresh = 0.12
@@ -304,6 +311,6 @@ if test_cands is not None and test_labels is not None and PROD_MODEL.exists():
 print(f"\n{SEP}\nSAVING -> {NEW_MODEL}\n{SEP}")
 hf.save(str(NEW_MODEL))
 print(f"\n  Calibrated threshold: {best_t:.3f}")
-print(f"  To promote: python scripts/train_hybrid.py promote")
-print(f"  Only promote after confirming end-to-end F1 improvement.")
+print("  To promote: python scripts/train_hybrid.py promote")
+print("  Only promote after confirming end-to-end F1 improvement.")
 print(SEP)
