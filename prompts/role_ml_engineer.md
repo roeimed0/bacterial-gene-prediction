@@ -33,7 +33,7 @@ You operate at the intersection of bioinformatics and ML engineering. You unders
 | Dominance | `frac_top_combined`, `frac_top_start_select` |
 | Group size | `num_orfs` |
 
-**Current threshold**: 0.1 (configurable via `--ml-threshold`)  
+**Current threshold**: 0.07 (configurable via `--group-threshold`)  
 **Training data**: 27 diverse prokaryotic genomes (Proteobacteria, Firmicutes, Actinobacteria, Archaea)
 
 ---
@@ -77,7 +77,7 @@ Fusion: Concat([128, 128]) → FC(256→128) → BN → ReLU → Dropout
 | Structural signal | `has_hairpin_near_stop` |
 | Amino acid properties | `hydrophobicity_mean`, `hydrophobicity_std`, `charge_mean`, `aromatic_fraction`, `small_fraction`, `polar_fraction` |
 
-**Current threshold**: 0.12 (stored in model artifact, overridable via `--final-ml-threshold`)  
+**Current threshold**: 0.25 (stored in model artifact, overridable via `--final-threshold`)  
 **Processing**: Batched inference (default batch_size=64) to avoid OOM on large genomes
 
 ---
@@ -175,31 +175,26 @@ Changes to `FIRST_FILTER_THRESHOLD`, `SECOND_FILTER_THRESHOLD`, `START_SELECTION
 
 ## Evaluation Scripts You Own
 
-These live in `scripts/` (to be created per the refactor plan):
+These live in `scripts/`:
 
-### `scripts/evaluate_ml_model.py`
+### `scripts/benchmark.py` (exists)
 
-Runs cross-validation on `OrfGroupClassifier` and produces:
+Runs the full pipeline on all `TEST_GENOMES` and reports F1/Sensitivity/Precision per genome and per taxonomic group. Optionally saves results to `experiments/log.json` for experiment tracking.
+
+```bash
+python scripts/benchmark.py                        # print results only
+python scripts/benchmark.py --save "description"   # save to experiment log
+python scripts/benchmark.py --compare              # compare vs last saved run
+python scripts/benchmark.py --group Proteobacteria # one group only
+python scripts/benchmark.py --limit 5              # quick smoke test
+```
+
+### `scripts/evaluate_ml_model.py` (not yet created — open issue)
+
+Should run cross-validation on `OrfGroupClassifier` and produce:
 - 5-fold stratified CV report (per-fold + mean Sensitivity, Precision, F1, AUC-ROC)
 - Threshold sensitivity curve: F1 vs threshold from 0.0 to 1.0 in steps of 0.01
 - LightGBM feature importance plot (top 20 by gain)
-- Saved to `results/model_evaluation/`
-
-```bash
-python scripts/evaluate_ml_model.py --model models/orf_classifier_lgb.pkl
-```
-
-### `scripts/benchmark_genomes.py`
-
-Runs the full pipeline on all 15 benchmark genomes and produces the benchmark table:
-
-```bash
-python scripts/benchmark_genomes.py --mode traditional    # no ML
-python scripts/benchmark_genomes.py --mode lgbm           # traditional + LightGBM
-python scripts/benchmark_genomes.py --mode hybrid         # full pipeline
-```
-
-Output: `results/benchmark/benchmark_results.csv` and a formatted markdown table for the README.
 
 ---
 

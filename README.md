@@ -288,16 +288,22 @@ python hybrid_predictor.py NC_000913.3 --email your@email.com
 python hybrid_predictor.py genome.fasta
 
 # Adjust group ML threshold (default: 0.07, range: 0.0-1.0)
-python hybrid_predictor.py genome.fasta --ml-threshold 0.1
+python hybrid_predictor.py genome.fasta --group-threshold 0.1
 
 # Adjust hybrid ML threshold (default: 0.25, range: 0.0-1.0)
-python hybrid_predictor.py genome.fasta --final-ml-threshold 0.3
+python hybrid_predictor.py genome.fasta --final-threshold 0.3
 
 # Disable group ML filtering
 python hybrid_predictor.py genome.fasta --no-group-ml
 
 # Disable final ML filtering
 python hybrid_predictor.py genome.fasta --no-final-ml
+
+# Minimal output (one line per stage, no banners) — useful for scripting
+python hybrid_predictor.py genome.fasta --quiet
+
+# Show pipeline step details
+python hybrid_predictor.py genome.fasta --verbose
 
 # Force interactive mode even with arguments
 python hybrid_predictor.py --interactive
@@ -374,7 +380,7 @@ Each ORF is scored using five features:
   - Genome sizes (1.5-10 Mbp)
   - Codon usage patterns
 - Requires: `models/orf_classifier_lgb.pkl` (optional - prediction works without it)
-- Default threshold: 0.07 (adjustable via `--ml-threshold`)
+- Default threshold: 0.07 (adjustable via `--group-threshold`)
 
 ### Step 8: Start Site Selection
 - Selects optimal start codon for each gene
@@ -395,7 +401,7 @@ Each ORF is scored using five features:
 - Combines sequence-based embeddings (via CNN) with traditional features such as codon bias, IMM score, RBS score, and ORF length
 - Reduces residual false positives that remain after the main LightGBM group filter
 - Model file: `models/hybrid_best_model.pkl`
-- Default threshold: 0.25 (adjustable via `--final-ml-threshold`)
+- Default threshold: 0.25 (adjustable via `--final-threshold`)
 - Can be disabled with `--no-final-ml`
 
 ## Project Structure
@@ -455,6 +461,7 @@ bacterial-gene-prediction/
 │   └── eslint.config.js       # ESLint configuration
 │
 ├── src/                        # Core prediction algorithms
+│   ├── pipeline.py            # Unified entry point: predict_genome(), write_gff()
 │   ├── config.py              # Configuration & genome catalog (100 genomes)
 │   ├── data_management.py     # NCBI download & file I/O
 │   ├── traditional_methods.py # ORF detection & scoring algorithms
@@ -463,6 +470,12 @@ bacterial-gene-prediction/
 │   ├── ml_models.py           # Optional ML classifiers
 │   ├── cache.py               # Caching utilities
 │   └── __init__.py
+│
+├── scripts/                    # Standalone utility scripts
+│   ├── benchmark.py           # Benchmark pipeline on TEST_GENOMES
+│   ├── predict_batch.py       # Batch prediction on multiple FASTA files
+│   ├── train_lgb.py           # Train LightGBM group classifier
+│   └── train_hybrid.py        # Train CNN+Dense hybrid filter
 │
 ├── models/                     # Trained ML models (optional)
 │   ├── orf_classifier_lgb.pkl # LightGBM group filter
@@ -512,7 +525,7 @@ START_SELECTION_WEIGHTS = {
 
 # ML thresholds (adjustable)
 ML_THRESHOLD = 0.07        # Group filter
-FINAL_ML_THRESHOLD = 0.072 # Hybrid filter
+FINAL_ML_THRESHOLD = 0.25  # Hybrid filter
 ```
 
 ## Examples
@@ -587,10 +600,10 @@ python hybrid_predictor.py my_bacterial_genome.fasta
 
 ```bash
 # More lenient group filter (more predictions)
-python hybrid_predictor.py NC_000913.3 --email user@email.com --ml-threshold 0.05
+python hybrid_predictor.py NC_000913.3 --email user@email.com --group-threshold 0.05
 
 # More strict final filter (higher precision)
-python hybrid_predictor.py NC_000913.3 --email user@email.com --final-ml-threshold 0.2
+python hybrid_predictor.py NC_000913.3 --email user@email.com --final-threshold 0.2
 ```
 
 **Example 5: Command-line workflow**
@@ -658,7 +671,7 @@ The cleanup shows you all files before deletion and asks for confirmation.
 ## Requirements
 
 ### Backend (Python)
-- **Python 3.7 or higher**
+- **Python 3.9 or higher**
 
 **Dependencies:**
 ```
@@ -845,10 +858,10 @@ chmod 755 results/
 - Try adjusting ML thresholds:
   ```bash
   # More lenient (may increase sensitivity)
-  python hybrid_predictor.py genome.fasta --ml-threshold 0.05
+  python hybrid_predictor.py genome.fasta --group-threshold 0.05
   
   # More strict (may increase precision)
-  python hybrid_predictor.py genome.fasta --final-ml-threshold 0.2
+  python hybrid_predictor.py genome.fasta --final-threshold 0.2
   ```
 
 **ML model not found**

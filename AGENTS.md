@@ -131,10 +131,12 @@ Tests live in `tests/`. Mirror the `src/` structure:
 
 | Source file | Test file |
 |-------------|-----------|
+| `src/pipeline.py` | `tests/integration/test_pipeline_smoke.py` |
 | `src/traditional_methods.py` | `tests/test_traditional_methods.py` |
 | `src/ml_models.py` | `tests/test_ml_models.py` |
 | `src/data_management.py` | `tests/test_data_management.py` |
 | `src/comparative_analysis.py` | `tests/test_comparative_analysis.py` |
+| `src/validation.py` | `tests/test_validation.py` |
 | `api/main.py` | `tests/test_api.py` |
 
 Rules:
@@ -149,12 +151,13 @@ Rules:
 
 | Type | Pattern | Example |
 |------|---------|---------|
-| Feature / enhancement | `feature/issue-N-short-description` | `feature/issue-12-kmer-features` |
+| Feature / enhancement | `enh/issue-N-short-description` | `enh/issue-12-kmer-features` |
 | Bug fix | `fix/issue-N-short-description` | `fix/issue-7-rbs-scoring-crash` |
 | Documentation | `doc/issue-N-short-description` | `doc/issue-3-pipeline-diagram` |
 | Performance | `perf/issue-N-short-description` | `perf/issue-9-lightgbm-speed` |
 | Refactor | `refactor/issue-N-short-description` | `refactor/issue-5-modularize-cli` |
 | Tests | `tst/issue-N-short-description` | `tst/issue-15-orf-unit-tests` |
+| ML | `ml/issue-N-short-description` | `ml/issue-123-lgb-feature-reduction` |
 
 ---
 
@@ -162,19 +165,30 @@ Rules:
 
 ```
 src/                        # Core Python pipeline
+  pipeline.py               # Unified entry point: predict_genome(), write_gff()
   traditional_methods.py    # ORF detection, RBS, IMM, scoring
   ml_models.py              # LightGBM + CNN+Dense classifiers
   data_management.py        # NCBI download, file I/O
   comparative_analysis.py   # Validation metrics
   config.py                 # Thresholds, weights, genome catalog
   cache.py                  # ORF cache layer
+  validation.py             # Validation wrapper functions
 api/                        # FastAPI REST backend
   main.py                   # 10+ prediction and validation endpoints
   models.py                 # Pydantic request/response schemas
+scripts/                    # Standalone utility scripts (not importable)
+  benchmark.py              # Run benchmark on TEST_GENOMES, save to experiments/log.json
+  predict_batch.py          # Batch prediction over multiple FASTA files
+  train_lgb.py              # Train OrfGroupClassifier (LightGBM)
+  train_hybrid.py           # Train HybridGeneFilter
+  manage_lgb.py             # LGB model management and evaluation
+  calibrate_start_weights.py# Calibrate START_SELECTION_WEIGHTS
+  compare_lgb_models.py     # Compare LGB model versions
 gene-prediction-frontend/   # React 19 + Vite + Tailwind web UI
 models/                     # Trained ML model artifacts (.pkl)
 notebooks/                  # Research notebooks (not production)
 tests/                      # pytest test suite
+  integration/              # Integration tests (marked @pytest.mark.slow)
 .github/
   workflows/ci.yml          # Lint + pytest on Python 3.9–3.11
   ISSUE_TEMPLATE/           # bug_report, feature_request, performance,
