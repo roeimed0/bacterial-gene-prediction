@@ -270,20 +270,23 @@ if test_cands is not None and test_labels is not None and PROD_MODEL.exists():
     with contextlib.redirect_stdout(io.StringIO()):
         old_hf.load(str(PROD_MODEL))
 
-    evaluate(old_hf, test_cands, test_labels, "current model (t=0.12)", threshold=0.12)
+    old_t = old_hf.threshold
+    evaluate(old_hf, test_cands, test_labels, f"current model (t={old_t:.3f})", threshold=old_t)
     evaluate(hf, test_cands, test_labels, "new model (calibrated threshold)", threshold=best_t)
-    evaluate(hf, test_cands, test_labels, "new model (t=0.12 for fair compare)", threshold=0.12)
+    evaluate(
+        hf, test_cands, test_labels, f"new model (t={old_t:.3f} for fair compare)", threshold=old_t
+    )
 
     # Threshold sweep
     import numpy as _np
     from sklearn.metrics import recall_score as _rs
 
-    old_hf_thresh = 0.12
+    old_hf_thresh = old_t
     _, old_probs, _ = old_hf.predict(test_cands, batch_size=64)
     _, new_probs, _ = hf.predict(test_cands, batch_size=64)
     old_recall = _rs(test_labels, (old_probs >= old_hf_thresh).astype(int), zero_division=0)
 
-    print(f"\n  Threshold sweep (old recall target at t=0.12: {old_recall:.4f}):")
+    print(f"\n  Threshold sweep (old recall target at t={old_t:.3f}: {old_recall:.4f}):")
     print(
         f"  {'t':>5}  {'OLD F1':>7}  {'OLD Rec':>8}  |  {'NEW F1':>7}  {'NEW Rec':>8}  {'dF1':>7}"
     )
