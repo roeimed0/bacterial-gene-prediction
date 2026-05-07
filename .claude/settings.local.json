@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs ls:*)",
+      "Read(//c/Program Files/GitHub CLI//**)",
+      "Read(//c/Users/User/AppData/Local/**)",
+      "Read(//c/Users/User/**)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" auth status)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" auth login --web --hostname github.com)"
+    ]
+  }
+}

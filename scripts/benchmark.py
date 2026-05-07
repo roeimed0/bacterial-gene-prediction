@@ -33,25 +33,10 @@ from statistics import mean
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.comparative_analysis import compare_orfs_to_reference
-from src.config import (
-    FIRST_FILTER_THRESHOLD,
-    GENOME_CATALOG,
-    SECOND_FILTER_THRESHOLD,
-    START_SELECTION_WEIGHTS,
-    TEST_GENOMES,
-)
-from src.data_management import get_data_dir, load_genome_sequence
+from src.config import GENOME_CATALOG, TEST_GENOMES
+from src.data_management import get_data_dir
 from src.ml_models import HybridGeneFilter, OrfGroupClassifier
-from src.traditional_methods import (
-    build_all_scoring_models,
-    create_intergenic_set,
-    create_training_set,
-    filter_candidates,
-    find_orfs_candidates,
-    organize_nested_orfs,
-    score_all_orfs,
-    select_best_starts,
-)
+from src.pipeline import predict_genome_from_file
 
 MODELS_DIR = Path(__file__).parent.parent / "models"
 DATA_DIR = get_data_dir("full_dataset")
@@ -91,26 +76,15 @@ def run_genome(
     fasta = os.path.join(DATA_DIR, f"{accession}.fasta")
     if not os.path.exists(fasta):
         return None
-    genome = load_genome_sequence(fasta)
-    if not genome:
-        return None
-    seq = genome["sequence"]
 
     with contextlib.redirect_stdout(io.StringIO()):
-        orfs = find_orfs_candidates(seq, min_length=100)
-        training = create_training_set(sequence=seq, all_orfs=orfs)
-        intergenic = create_intergenic_set(sequence=seq, all_orfs=orfs)
-        models = build_all_scoring_models(training, intergenic)
-        scored = score_all_orfs(orfs, models)
-        filtered = filter_candidates(scored, **FIRST_FILTER_THRESHOLD)
-        groups = organize_nested_orfs(filtered)
-        groups = lgb.filter_groups(
-            groups=groups, genome_id=accession, weights=START_SELECTION_WEIGHTS, threshold=lgb_t
-        )
-        top = select_best_starts(groups, START_SELECTION_WEIGHTS)
-        final = filter_candidates(top, **SECOND_FILTER_THRESHOLD)
-        final = hf.filter_candidates(
-            candidates=final, genome_id=accession, threshold=hf_t, batch_size=32
+        final = predict_genome_from_file(
+            fasta_path=fasta,
+            genome_id=accession,
+            lgb=lgb,
+            lgb_threshold=lgb_t,
+            hf=hf,
+            hf_threshold=hf_t,
         )
 
     with contextlib.redirect_stdout(io.StringIO()):
@@ -213,7 +187,8 @@ all_s = [r["sensitivity"] for r in results]
 all_p = [r["precision"] for r in results]
 overall = {"f1": mean(all_f1), "sensitivity": mean(all_s), "precision": mean(all_p)}
 print(
-    f"\n  {'OVERALL':<22} {overall['f1']:>7.2f} {overall['sensitivity']:>7.2f} {overall['precision']:>7.2f}  {len(results)}"
+    f"\n  {'OVERALL':<22} {overall['f1']:>7.2f}"
+    f" {overall['sensitivity']:>7.2f} {overall['precision']:>7.2f}  {len(results)}"
 )
 
 # Compare vs previous run
@@ -235,7 +210,7 @@ if args.compare:
             if r["accession"] in prev_by_acc and r["f1"] < prev_by_acc[r["accession"]]["f1"] - 0.05
         ]
         if regressions:
-            print(f"\n  Regressions (>0.05pp drop):")
+            print("\n  Regressions (>0.05pp drop):")
             for r in regressions:
                 delta = r["f1"] - prev_by_acc[r["accession"]]["f1"]
                 print(f"    {r['accession']:<16} {delta:+.2f}pp F1")
