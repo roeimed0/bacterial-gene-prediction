@@ -160,9 +160,9 @@ for info in genomes:
     if r is None:
         print("SKIP")
         continue
-    f1 = r["f1_score"]
-    sens = r["sensitivity"]
-    prec = r["precision"]
+    f1 = r["f1_pct"]
+    sens = r["sensitivity_pct"]
+    prec = r["precision_pct"]
     print(f"\r  {acc:<16} {group:<18} {f1:>7.2f} {sens:>7.2f} {prec:>7.2f}")
     results.append(
         {"accession": acc, "group": group, "f1": f1, "sensitivity": sens, "precision": prec}
