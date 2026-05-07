@@ -57,6 +57,19 @@ FORWARD_ONLY_SEQ = "C" * 30 + "ATG" + "CAG" * 32 + "TAA" + "C" * 30
 _RC_ORF_FORWARD = "TTA" + "CTG" * 32 + "CAT"
 REVERSE_STRAND_SEQ = "G" * 30 + _RC_ORF_FORWARD + "G" * 30
 
+# 175 bp sequence whose reverse complement contains a canonical AGGAGG Shine-Dalgarno
+# motif at optimal 7 bp spacing upstream of the reverse-strand ORF start codon.
+#
+# On the reverse complement this reads (5'→3'):
+#   C*30 + AGGAGG + A*7 + ATG + CAG*32 + TAA + C*30
+# which is REVCOMP of the forward sequence below.
+#
+# Derivation: REVCOMP("C*30 AGGAGG A*7 ATG CAG*32 TAA C*30") =
+#             G*30 + TTA + CTG*32 + CAT + T*7 + CCTCCT + G*30
+_SD_REVSTRAND_ORF = "TTA" + "CTG" * 32 + "CAT" + "T" * 7 + "CCTCCT"
+SD_REVERSE_STRAND_SEQ = "G" * 30 + _SD_REVSTRAND_ORF + "G" * 30
+# ATG position in reverse_seq: 30 (C flank) + 6 (AGGAGG) + 7 (spacer) = 43 (0-based)
+
 # 120 bp sequence with a canonical Shine-Dalgarno (AGGAGG) placed 7 bp
 # upstream of an ATG — within the optimal 6-8 bp spacing window.
 # ATG is at position 44 (1-indexed), comfortably past the 20-bp upstream_length.
@@ -154,6 +167,30 @@ class TestFindOrfCandidates:
     def test_rbs_score_is_numeric(self):
         orfs = find_orfs_candidates(FORWARD_ONLY_SEQ)
         assert orfs["rbs_score"].dtype.kind == "f"
+
+    def test_reverse_strand_sd_motif_yields_positive_rbs_score(self):
+        # Regression: RBS upstream window must be extracted from the reverse
+        # complement sequence (not the forward genome) so that Shine-Dalgarno
+        # signals on the minus strand are correctly detected.
+        #
+        # SD_REVERSE_STRAND_SEQ is constructed so that its reverse complement
+        # contains AGGAGG at optimal 7 bp spacing upstream of the reverse-strand
+        # ATG.  The reverse-strand ORF must receive a positive rbs_score.
+        orfs = find_orfs_candidates(SD_REVERSE_STRAND_SEQ)
+        rev_orfs = orfs[orfs["strand"] == "reverse"]
+        assert len(rev_orfs) >= 1, "Expected at least one reverse-strand ORF"
+        assert (
+            rev_orfs["rbs_score"].max() > 0
+        ), "Reverse-strand ORF with upstream AGGAGG should have positive RBS score"
+
+    def test_reverse_strand_no_sd_motif_yields_low_rbs_score(self):
+        # Complement of REVERSE_STRAND_SEQ has all-C flanks — no SD motif.
+        # The reverse-strand ORF should score near zero (no penalty, no bonus).
+        orfs = find_orfs_candidates(REVERSE_STRAND_SEQ)
+        rev_orfs = orfs[orfs["strand"] == "reverse"]
+        assert len(rev_orfs) >= 1
+        # AGGAGG-positive sequence scores > 0; plain sequence should score ≤ 0
+        assert rev_orfs["rbs_score"].max() <= 0
 
 
 # ===========================================================================
