@@ -64,9 +64,12 @@ class TestCompareOrfsToReference:
         assert result["true_positives"] == 3
         assert result["false_negatives"] == 0
         assert result["false_positives"] == 0
-        assert result["sensitivity"] == pytest.approx(100.0)
-        assert result["precision"] == pytest.approx(100.0)
-        assert result["f1_score"] == pytest.approx(100.0)
+        assert result["sensitivity"] == pytest.approx(1.0)
+        assert result["precision"] == pytest.approx(1.0)
+        assert result["f1_score"] == pytest.approx(1.0)
+        assert result["sensitivity_pct"] == pytest.approx(100.0)
+        assert result["precision_pct"] == pytest.approx(100.0)
+        assert result["f1_pct"] == pytest.approx(100.0)
 
     def test_no_overlap_gives_zero_sensitivity_and_precision(self, tmp_path):
         gff = _make_gff_file(tmp_path)
@@ -93,18 +96,18 @@ class TestCompareOrfsToReference:
         assert result["false_negatives"] == 1  # (900, 1100) was missed
 
     def test_sensitivity_formula(self, tmp_path):
-        """Sensitivity = TP / reference_count * 100."""
+        """Sensitivity = TP / reference_count, returned as 0.0–1.0 fraction."""
         gff = _make_gff_file(tmp_path)
         orfs = _orfs_from_coords([(100, 300)])  # 1 of 3 reference genes
 
         with patch("src.comparative_analysis.get_gff_path", return_value=gff):
             result = compare_orfs_to_reference(orfs, "NC_TEST")
 
-        expected = 1 / 3 * 100
-        assert result["sensitivity"] == pytest.approx(expected)
+        assert result["sensitivity"] == pytest.approx(1 / 3)
+        assert result["sensitivity_pct"] == pytest.approx(1 / 3 * 100)
 
     def test_precision_formula(self, tmp_path):
-        """Precision = TP / predicted_count * 100."""
+        """Precision = TP / predicted_count, returned as 0.0–1.0 fraction."""
         gff = _make_gff_file(tmp_path)
         # predict 1 correct + 1 wrong out of 2 predictions
         orfs = _orfs_from_coords([(100, 300), (9999, 10000)])
@@ -112,8 +115,8 @@ class TestCompareOrfsToReference:
         with patch("src.comparative_analysis.get_gff_path", return_value=gff):
             result = compare_orfs_to_reference(orfs, "NC_TEST")
 
-        expected = 1 / 2 * 100
-        assert result["precision"] == pytest.approx(expected)
+        assert result["precision"] == pytest.approx(1 / 2)
+        assert result["precision_pct"] == pytest.approx(1 / 2 * 100)
 
     def test_f1_formula(self, tmp_path):
         """F1 = 2 * P * S / (P + S)."""

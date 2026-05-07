@@ -528,12 +528,12 @@ def compare_orfs_to_reference(
     false_neg = len(ref) - true_pos
     false_pos = len(pred_coords) - true_pos
 
-    sensitivity = (true_pos / len(ref) * 100) if len(ref) > 0 else 0
-    precision = (true_pos / len(pred_coords) * 100) if len(pred_coords) > 0 else 0
+    sensitivity = (true_pos / len(ref)) if len(ref) > 0 else 0.0
+    precision = (true_pos / len(pred_coords)) if len(pred_coords) > 0 else 0.0
     f1 = (
         (2 * precision * sensitivity / (precision + sensitivity))
         if (precision + sensitivity) > 0
-        else 0
+        else 0.0
     )
 
     match_mode = (
@@ -548,9 +548,9 @@ def compare_orfs_to_reference(
     print(f"False negatives (missed):    {false_neg:,}")
     print(f"False positives (spurious):  {false_pos:,}")
     print()
-    print(f"Sensitivity (Recall):        {sensitivity:.2f}%")
-    print(f"Precision:                   {precision:.2f}%")
-    print(f"F1 Score:                    {f1:.2f}")
+    print(f"Sensitivity (Recall):        {sensitivity:.2%}")
+    print(f"Precision:                   {precision:.2%}")
+    print(f"F1 Score:                    {f1:.4f}")
     print("=" * 80)
 
     return {
@@ -562,6 +562,9 @@ def compare_orfs_to_reference(
         "sensitivity": sensitivity,
         "precision": precision,
         "f1_score": f1,
+        "sensitivity_pct": sensitivity * 100,
+        "precision_pct": precision * 100,
+        "f1_pct": f1 * 100,
         "match_mode": match_mode,
         "start_tolerance": start_tolerance,
         "stop_tolerance": stop_tolerance,
@@ -715,6 +718,9 @@ def compare_results_file_to_reference(genome_id: str) -> Dict:
         "recall": sensitivity,
         "precision": precision,
         "f1_score": f1_score,
+        "sensitivity_pct": sensitivity * 100,
+        "precision_pct": precision * 100,
+        "f1_pct": f1_score * 100,
     }
 
 

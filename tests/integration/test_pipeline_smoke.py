@@ -22,8 +22,10 @@ REPO_ROOT = Path(__file__).parent.parent.parent
 DATA_DIR = REPO_ROOT / "data" / "full_dataset"
 MODELS_DIR = REPO_ROOT / "models"
 
-# Minimum acceptable F1 on E. coli K-12 — if we drop below this something is wrong
-MIN_F1 = 75.0
+# Minimum acceptable thresholds on E. coli K-12 (0.0–1.0 fractions)
+MIN_F1 = 0.75
+MIN_SENSITIVITY = 0.60
+MIN_PRECISION = 0.80
 SMOKE_GENOME = "NC_000913.3"
 
 
@@ -122,19 +124,19 @@ class TestPipelineSmoke:
         """F1 score must be above the minimum acceptable threshold."""
         f1 = pipeline_output["metrics"]["f1_score"]
         assert f1 >= MIN_F1, (
-            f"Pipeline F1 {f1:.2f}% is below minimum {MIN_F1}%. "
+            f"Pipeline F1 {f1:.2%} is below minimum {MIN_F1:.0%}. "
             "A model or code change may have broken the pipeline."
         )
 
     def test_sensitivity_above_minimum(self, pipeline_output):
         """Sensitivity must be above 60% — catching fewer than that is a red flag."""
         sens = pipeline_output["metrics"]["sensitivity"]
-        assert sens >= 60.0, f"Sensitivity {sens:.2f}% is below 60%"
+        assert sens >= MIN_SENSITIVITY, f"Sensitivity {sens:.2%} is below {MIN_SENSITIVITY:.0%}"
 
     def test_precision_above_minimum(self, pipeline_output):
         """Precision must be above 80% — predicting mostly false genes is a red flag."""
         prec = pipeline_output["metrics"]["precision"]
-        assert prec >= 80.0, f"Precision {prec:.2f}% is below 80%"
+        assert prec >= MIN_PRECISION, f"Precision {prec:.2%} is below {MIN_PRECISION:.0%}"
 
     def test_all_predictions_in_genome_bounds(self, pipeline_output):
         """Every predicted gene must be within the genome sequence boundaries."""
