@@ -1,5 +1,9 @@
 # Bacterial Gene Prediction Tool
 
+[![CI](https://github.com/roeimed0/bacterial-gene-prediction/actions/workflows/ci.yml/badge.svg)](https://github.com/roeimed0/bacterial-gene-prediction/actions/workflows/ci.yml)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A hybrid machine learning and traditional algorithm approach to bacterial gene prediction. This tool combines classical bioinformatics methods (codon usage bias, Interpolated Markov Models, Ribosome Binding Site detection) with supervised learning to predict genes in bacterial and archaeal genomes.
 
 ## Overview
