@@ -2,9 +2,11 @@
 FastAPI wrapper for Bacterial Gene Prediction
 """
 
+import os
 import sys
 import tempfile
 import traceback
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -13,6 +15,12 @@ from fastapi.middleware.cors import CORSMiddleware
 # Add parent directory to path to import from src
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
+
+from src.pipeline import load_models, predict_genome_from_file  # noqa: E402
+
+# Module-level model cache — populated once at startup by the lifespan handler
+_api_lgb = None
+_api_hf = None
 
 from api.models import (  # noqa: E402
     DeleteFilesRequest,
@@ -28,17 +36,27 @@ from api.models import (  # noqa: E402
     ValidationResponse,
 )
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Preload ML models once at startup so prediction endpoints pay no load cost."""
+    global _api_lgb, _api_hf
+    _api_lgb, _api_hf = load_models()
+    yield
+
+
 # Create FastAPI app
 app = FastAPI(
     title="Bacterial Gene Predictor API",
     description="Hybrid gene prediction combining traditional bioinformatics with ML",
     version="1.1.0",
+    lifespan=lifespan,
 )
 
-# Enable CORS for React frontend
+# Enable CORS — override origin via CORS_ORIGIN env var for non-dev deployments
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[os.getenv("CORS_ORIGIN", "http://localhost:5173")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -91,6 +109,13 @@ async def predict_genes(request: PredictionRequest):
 
     Accepts raw DNA sequence or FASTA format string
     """
+    if not request.sequence or not request.sequence.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Sequence is empty. Provide a raw DNA sequence or a FASTA-formatted string.",
+        )
+
+    tmp_file_path = None
     try:
         filename = request.filename if request.filename else "pasted_sequence"
 
@@ -103,37 +128,33 @@ async def predict_genes(request: PredictionRequest):
                 f.write(f">{filename}\n")
             f.write(request.sequence)
 
-        from hybrid_predictor import predict_fasta_file
-
-        predictions = predict_fasta_file(
+        raw = predict_genome_from_file(
             fasta_path=str(tmp_file_path),
-            use_ml=request.use_group_ml,
-            ml_threshold=request.group_threshold,
-            use_final_filtration_ml=request.use_final_ml,
-            final_ml_threshold=request.final_threshold,
+            genome_id=filename,
+            lgb=_api_lgb if request.use_group_ml else None,
+            lgb_threshold=request.group_threshold,
+            hf=_api_hf if request.use_final_ml else None,
+            hf_threshold=request.final_threshold,
         )
-
         tmp_file_path.unlink(missing_ok=True)
 
-        gene_predictions = []
-        for i, pred in enumerate(predictions, 1):
-            gene_predictions.append(
-                GenePrediction(
-                    gene_id=f"gene_{i}",
-                    start=pred.get("genome_start", pred.get("start")),
-                    end=pred.get("genome_end", pred.get("end")),
-                    strand="forward" if pred.get("strand") == "forward" else "reverse",
-                    length=pred.get("genome_end", pred.get("end"))
-                    - pred.get("genome_start", pred.get("start"))
-                    + 1,
-                    combined_score=pred.get("combined_score", 0.0),
-                    rbs_score=pred.get("rbs_score"),
-                )
+        predictions = raw.to_dict("records") if hasattr(raw, "to_dict") else list(raw)
+        gene_predictions = [
+            GenePrediction(
+                gene_id=f"gene_{i}",
+                start=p.get("genome_start", p.get("start")),
+                end=p.get("genome_end", p.get("end")),
+                strand="forward" if p.get("strand") == "forward" else "reverse",
+                length=p.get("genome_end", p.get("end"))
+                - p.get("genome_start", p.get("start"))
+                + 1,
+                combined_score=p.get("combined_score", 0.0),
+                rbs_score=p.get("rbs_score"),
             )
+            for i, p in enumerate(predictions, 1)
+        ]
 
-        sequence = request.sequence.replace(">", "").replace("\n", "").replace(" ", "")
-        sequence = "".join(c for c in sequence if c in "ATGCatgc")
-
+        sequence = "".join(c for c in request.sequence if c in "ATGCatgcNn")
         return PredictionResponse(
             genome_id=filename,
             sequence_length=len(sequence),
@@ -147,12 +168,11 @@ async def predict_genes(request: PredictionRequest):
             },
         )
 
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        try:
+        if tmp_file_path:
             tmp_file_path.unlink(missing_ok=True)
-        except Exception:
-            pass
-
         print(f"Prediction error: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
@@ -174,6 +194,7 @@ async def predict_genes_from_file(
             status_code=400, detail="Invalid file type. Must be .fasta, .fa, or .fna"
         )
 
+    tmp_file_path = None
     try:
         temp_dir = Path(tempfile.gettempdir()) / "gene_predictions"
         temp_dir.mkdir(exist_ok=True)
@@ -183,37 +204,34 @@ async def predict_genes_from_file(
             content = await file.read()
             f.write(content)
 
-        from hybrid_predictor import predict_fasta_file
-
-        predictions = predict_fasta_file(
+        genome_id = Path(file.filename).stem
+        raw = predict_genome_from_file(
             fasta_path=str(tmp_file_path),
-            use_ml=use_group_ml,
-            ml_threshold=group_threshold,
-            use_final_filtration_ml=use_final_ml,
-            final_ml_threshold=final_threshold,
+            genome_id=genome_id,
+            lgb=_api_lgb if use_group_ml else None,
+            lgb_threshold=group_threshold,
+            hf=_api_hf if use_final_ml else None,
+            hf_threshold=final_threshold,
         )
-
         tmp_file_path.unlink(missing_ok=True)
 
-        gene_predictions = []
-        for i, pred in enumerate(predictions, 1):
-            gene_predictions.append(
-                GenePrediction(
-                    gene_id=f"gene_{i}",
-                    start=pred.get("genome_start", pred.get("start")),
-                    end=pred.get("genome_end", pred.get("end")),
-                    strand="forward" if pred.get("strand") == "forward" else "reverse",
-                    length=pred.get("genome_end", pred.get("end"))
-                    - pred.get("genome_start", pred.get("start"))
-                    + 1,
-                    combined_score=pred.get("combined_score", 0.0),
-                    rbs_score=pred.get("rbs_score"),
-                )
+        predictions = raw.to_dict("records") if hasattr(raw, "to_dict") else list(raw)
+        gene_predictions = [
+            GenePrediction(
+                gene_id=f"gene_{i}",
+                start=p.get("genome_start", p.get("start")),
+                end=p.get("genome_end", p.get("end")),
+                strand="forward" if p.get("strand") == "forward" else "reverse",
+                length=p.get("genome_end", p.get("end"))
+                - p.get("genome_start", p.get("start"))
+                + 1,
+                combined_score=p.get("combined_score", 0.0),
+                rbs_score=p.get("rbs_score"),
             )
+            for i, p in enumerate(predictions, 1)
+        ]
 
         sequence_length = max(p.end for p in gene_predictions) if gene_predictions else 0
-        genome_id = Path(file.filename).stem
-
         return PredictionResponse(
             genome_id=genome_id,
             sequence_length=sequence_length,
@@ -227,12 +245,11 @@ async def predict_genes_from_file(
             },
         )
 
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        try:
+        if tmp_file_path:
             tmp_file_path.unlink(missing_ok=True)
-        except Exception:
-            pass
-
         print(f"Prediction error: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
@@ -288,6 +305,10 @@ async def predict_ncbi(request: NcbiPredictionRequest):
             },
         )
 
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except (OSError, IOError) as e:
+        raise HTTPException(status_code=502, detail=f"NCBI download failed: {str(e)}")
     except Exception as e:
         print(f"NCBI prediction error: {e}")
         traceback.print_exc()
