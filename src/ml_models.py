@@ -788,6 +788,12 @@ class HybridGeneFilter:
         )
         y_tensor = torch.tensor(labels, dtype=torch.float32).to(self.device)
 
+        # Pre-encode ALL sequences upfront on GPU — eliminates per-batch CPU encoding bottleneck
+        # Memory: N × 1500 × 4 × 4 bytes (~4.9 GB for 206K seqs — fits in 12 GB VRAM)
+        print(f"  Pre-encoding {len(candidates):,} sequences on {self.device}...", flush=True)
+        X_seq = self._one_hot_encode_dna(candidates, max_len=max_seq_len).to(self.device)
+        print(f"  Sequence tensor: {X_seq.shape} on {X_seq.device}", flush=True)
+
         val_feat_tensor = val_label_tensor = None
         if val_candidates is not None and val_labels is not None:
             vdf = (
@@ -814,9 +820,7 @@ class HybridGeneFilter:
                 idx_t = perm[i : i + batch_size]
                 if len(idx_t) < 2:
                     continue  # BatchNorm requires >1 sample
-                idx = idx_t.tolist()
-                batch_cands = [candidates[j] for j in idx]
-                xs = self._one_hot_encode_dna(batch_cands, max_len=max_seq_len).to(self.device)
+                xs = X_seq[idx_t]  # pre-encoded, already on device
                 xf = X_feat[idx_t]  # already on device
                 yt = y_tensor[idx_t]  # already on device
                 optimizer.zero_grad()
