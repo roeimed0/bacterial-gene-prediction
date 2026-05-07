@@ -16,8 +16,6 @@ import re
 import sys
 from pathlib import Path
 
-import pandas as pd
-
 script_dir = Path(__file__).parent.resolve()
 src_dir = script_dir / "src"
 sys.path.insert(0, str(src_dir))
@@ -640,23 +638,11 @@ def predict_fasta_file(
 
 
 def write_gff(predictions, output_path: str, sequence_id: str = "sequence"):
-    """Write predictions to GFF3 format. Accepts List[Dict] or DataFrame."""
-    rows = predictions.to_dict("records") if isinstance(predictions, pd.DataFrame) else predictions
-    with open(output_path, "w") as f:
-        f.write("##gff-version 3\n")
-        for i, pred in enumerate(rows, 1):
-            start = pred.get("genome_start", pred.get("start"))
-            end = pred.get("genome_end", pred.get("end"))
-            strand = "+" if pred.get("strand") == "forward" else "-"
-            score = pred.get("combined_score", 0.0)
-            rbs = pred.get("rbs_score", 0.0)
-            attrs = f"ID=gene_{i};rbs_score={rbs:.2f};combined_score={score:.2f}"
-            row = (
-                f"{sequence_id}\tHybridPredictor\tCDS\t"
-                f"{start}\t{end}\t{score:.3f}\t{strand}\t0\t{attrs}\n"
-            )
-            f.write(row)
-    print(f"[+] Wrote {len(predictions)} predictions to {output_path}")
+    """Write predictions to GFF3 format — delegates to src.pipeline.write_gff."""
+    from src.pipeline import write_gff as _wg
+
+    n = _wg(predictions, output_path, sequence_id=sequence_id)
+    print(f"[+] Wrote {n} predictions to {output_path}")
 
 
 def main():

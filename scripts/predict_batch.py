@@ -41,6 +41,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.data_management import load_genome_sequence
 from src.ml_models import HybridGeneFilter, OrfGroupClassifier
 from src.pipeline import predict_genome
+from src.pipeline import write_gff as _write_gff_fn
 
 MODELS_DIR = Path(__file__).parent.parent / "models"
 SEP = "=" * 70
@@ -131,21 +132,7 @@ print(f"  Min ORF length:   {args.min_length} bp\n")
 
 
 def _write_gff(predictions, genome_id: str, out_path: Path) -> None:
-    with open(out_path, "w") as f:
-        f.write("##gff-version 3\n")
-        if hasattr(predictions, "to_dict"):
-            predictions = predictions.to_dict("records")
-        for i, pred in enumerate(predictions, 1):
-            start = pred.get("genome_start", pred.get("start", 0))
-            end = pred.get("genome_end", pred.get("end", 0))
-            strand = "+" if pred.get("strand", "forward") == "forward" else "-"
-            score = pred.get("combined_score", 0.0)
-            f.write(
-                f"{genome_id}\tHybridPredictor\tCDS\t{start}\t{end}\t"
-                f"{score:.3f}\t{strand}\t0\t"
-                f"ID=gene_{i};rbs_score={pred.get('rbs_score', 0.0):.2f};"
-                f"combined_score={score:.2f}\n"
-            )
+    _write_gff_fn(predictions, str(out_path), sequence_id=genome_id)
 
 
 succeeded, failed, skipped = 0, [], 0

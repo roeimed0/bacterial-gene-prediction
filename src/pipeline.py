@@ -31,7 +31,7 @@ from .traditional_methods import (
     select_best_starts,
 )
 
-__all__ = ["predict_genome", "predict_genome_from_file", "load_models"]
+__all__ = ["predict_genome", "predict_genome_from_file", "load_models", "write_gff"]
 
 logger = logging.getLogger(__name__)
 
@@ -190,3 +190,39 @@ def predict_genome_from_file(
         hf_threshold=hf_threshold,
         min_orf_length=min_orf_length,
     )
+
+
+# ── GFF output ────────────────────────────────────────────────────────────────
+
+
+def write_gff(
+    predictions,
+    output_path: str,
+    sequence_id: str = "genome",
+) -> int:
+    """
+    Write gene predictions to GFF3 format.
+
+    Args:
+        predictions: List of dicts or DataFrame from predict_genome().
+        output_path: Destination file path.
+        sequence_id: Sequence identifier written in column 1 (default: "genome").
+
+    Returns:
+        Number of genes written.
+    """
+    rows = predictions.to_dict("records") if hasattr(predictions, "to_dict") else list(predictions)
+    with open(output_path, "w") as f:
+        f.write("##gff-version 3\n")
+        for i, pred in enumerate(rows, 1):
+            start = pred.get("genome_start", pred.get("start", 0))
+            end = pred.get("genome_end", pred.get("end", 0))
+            strand = "+" if pred.get("strand", "forward") == "forward" else "-"
+            score = pred.get("combined_score", 0.0)
+            rbs = pred.get("rbs_score", 0.0)
+            attrs = f"ID=gene_{i};rbs_score={rbs:.2f};combined_score={score:.2f}"
+            f.write(
+                f"{sequence_id}\tHybridPredictor\tCDS\t"
+                f"{start}\t{end}\t{score:.3f}\t{strand}\t0\t{attrs}\n"
+            )
+    return len(rows)
