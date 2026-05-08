@@ -180,7 +180,7 @@ def collect_features(accessions: list, clf: OrfGroupClassifier, desc: str):
 
 
 def evaluate(clf: OrfGroupClassifier, X: pd.DataFrame, y: np.ndarray, label: str, threshold: float):
-    from sklearn.metrics import classification_report, f1_score, precision_score, recall_score
+    from sklearn.metrics import f1_score, precision_score, recall_score
 
     probs = np.asarray(clf.model.predict_proba(X.values, num_threads=1))[:, 1]
     preds = (probs >= threshold).astype(int)
