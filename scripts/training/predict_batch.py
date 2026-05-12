@@ -36,14 +36,14 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.data_management import load_genome_sequence
 from src.ml_models import HybridGeneFilter, OrfGroupClassifier
 from src.pipeline import predict_genome
 from src.pipeline import write_gff as _write_gff_fn
 
-MODELS_DIR = Path(__file__).parent.parent / "models"
+MODELS_DIR = Path(__file__).parent.parent.parent / "models"
 SEP = "=" * 70
 
 

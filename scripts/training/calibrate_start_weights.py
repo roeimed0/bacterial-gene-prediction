@@ -32,7 +32,7 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.config import (
     FIRST_FILTER_THRESHOLD,
@@ -51,7 +51,7 @@ from src.traditional_methods import (
     score_all_orfs,
 )
 
-MODELS_DIR = Path(__file__).parent.parent / "models"
+MODELS_DIR = Path(__file__).parent.parent.parent / "models"
 DATA_DIR = get_data_dir("full_dataset")
 REPORT_PATH = MODELS_DIR / "calibration_report.json"
 SEP = "=" * 80

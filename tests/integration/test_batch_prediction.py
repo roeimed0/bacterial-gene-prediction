@@ -15,7 +15,7 @@ import pytest
 REPO_ROOT = Path(__file__).parent.parent.parent
 FIXTURES = REPO_ROOT / "tests" / "fixtures" / "sequences"
 DATA_DIR = REPO_ROOT / "data" / "full_dataset"
-SCRIPT = REPO_ROOT / "scripts" / "predict_batch.py"
+SCRIPT = REPO_ROOT / "scripts" / "training" / "predict_batch.py"
 PYTHON = sys.executable
 
 # Synthetic seqs are too small for full pipeline — use no-ML mode + low min-length

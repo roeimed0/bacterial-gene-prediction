@@ -30,7 +30,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.config import FIRST_FILTER_THRESHOLD, GENOME_CATALOG, START_SELECTION_WEIGHTS
 from src.data_management import get_data_dir, get_gff_path, load_genome_sequence
@@ -45,7 +45,7 @@ from src.traditional_methods import (
     score_all_orfs,
 )
 
-MODELS_DIR = Path(__file__).parent.parent / "models"
+MODELS_DIR = Path(__file__).parent.parent.parent / "models"
 DATA_DIR = get_data_dir("full_dataset")
 
 VAL_PER_GROUP = 4  # used for early stopping + threshold calibration
