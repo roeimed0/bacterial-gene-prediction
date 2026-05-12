@@ -31,7 +31,7 @@ NCBI_EMAIL = "your_email@example.com"
 # Use ONLY this list for benchmark evaluation — never add GENOME_CATALOG
 # entries here and never add these entries to GENOME_CATALOG.
 TEST_GENOMES = [
-    # ── Proteobacteria (5) — distinct genera (Pseudomonas/Bordetella/Yersinia/Neisseria/Nitrosomonas)
+    # ── Proteobacteria (5) — 5 distinct genera, no overlap with GENOME_CATALOG
     "NC_002947.4",  # Pseudomonas putida KT2440             (Gammaproteobacteria)
     "NC_002929.2",  # Bordetella pertussis Tohama I          (Betaproteobacteria)
     "NC_003143.1",  # Yersinia pestis CO92                   (Gammaproteobacteria)
@@ -43,7 +43,7 @@ TEST_GENOMES = [
     "NC_006270.3",  # Bacillus licheniformis DSM 13
     "NC_006274.1",  # Bacillus cereus E33L
     "NC_003030.1",  # Clostridium acetobutylicum ATCC 824
-    # ── Actinobacteria (5) — distinct genera (Streptomyces/Corynebacterium/Mycobacterium/Nocardia)
+    # ── Actinobacteria (5) — 5 distinct genera, no overlap with GENOME_CATALOG
     "NC_003155.5",  # Streptomyces avermitilis MA-4680
     "NC_003450.3",  # Corynebacterium glutamicum ATCC 13032
     "NC_002677.1",  # Mycobacterium leprae TN
