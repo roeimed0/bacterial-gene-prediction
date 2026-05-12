@@ -193,6 +193,15 @@ class TestPredictRbsSimple:
         result = predict_rbs_simple(short_seq, {"start": 2})
         assert result["rbs_score"] == -5.0
 
+    def test_no_sd_motif_upstream_yields_low_rbs_score_issue_148(self):
+        # Regression for #148: when the upstream region is all pyrimidines
+        # (zero purines, no SD-like motif), rbs_score must be non-positive —
+        # the no-RBS-found sentinel (-5.0) must not produce a false positive.
+        # 40 C's before ATG: no AGGAGG, no purine-rich region possible.
+        seq = "C" * 40 + "ATG" + "CAG" * 32 + "TAA"
+        result = predict_rbs_simple(seq, {"start": 41})
+        assert result["rbs_score"] <= 0.0
+
 
 # ===========================================================================
 # Tests: build_codon_model()
@@ -1005,6 +1014,17 @@ class TestNormalizeAllOrfScores:
         originals = [o["codon_score"] for o in orfs]
         result = normalize_all_orf_scores(orfs)
         assert list(result["codon_score"]) == originals
+
+    def test_zero_std_one_column_does_not_nan_others_issue_147(self):
+        # Regression for #147: when one score component has std=0 (all identical),
+        # normalizing it to zero must not produce NaN in any other column.
+        orfs = [_make_scored_orf(codon=2.5, imm=float(i), rbs=1.0) for i in range(5)]
+        result = normalize_all_orf_scores(orfs)
+        assert len(result) == 5
+        assert (result["codon_score_norm"] == 0.0).all()
+        assert not result["imm_score_norm"].isna().any()
+        assert not result["rbs_score_norm"].isna().any()
+        assert (result["codon_score"] == 2.5).all()  # raw score unchanged
 
 
 # ===========================================================================

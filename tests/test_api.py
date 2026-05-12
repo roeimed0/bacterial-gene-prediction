@@ -13,9 +13,9 @@ exercised here — those belong in integration tests.  These tests cover:
 - 404 / error responses for missing resources
 """
 
+import httpx
 import pytest
 import pytest_asyncio
-import httpx
 
 from api.main import app
 
@@ -131,9 +131,21 @@ class TestPredictValidation:
         assert r.status_code == 422
 
     async def test_non_json_body_returns_422(self, ac):
-        r = await ac.post("/predict", content=b"not json",
-                          headers={"Content-Type": "application/json"})
+        r = await ac.post(
+            "/predict", content=b"not json", headers={"Content-Type": "application/json"}
+        )
         assert r.status_code == 422
+
+    @pytest.mark.xfail(
+        reason="issue #151: invalid nucleotides return 500 until issue #135 is fixed"
+    )
+    async def test_invalid_nucleotides_returns_400_issue_151(self, ac):
+        # Regression for #151: a sequence with non-nucleotide characters must
+        # return 400 with a descriptive message, not a generic 500.
+        r = await ac.post("/predict", json={"sequence": "AAA@#$INVALID"})
+        assert r.status_code == 400
+        detail = r.json()["detail"].lower()
+        assert "invalid" in detail or "nucleotide" in detail or "fasta" in detail
 
 
 # ---------------------------------------------------------------------------
