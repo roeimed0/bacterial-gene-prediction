@@ -74,7 +74,7 @@ The IMM captures k-mer composition patterns that distinguish coding from non-cod
 | `RBS_MIN_PURINE_CONTENT` | 0.6 | Minimum purine fraction in SD candidate |
 | `KNOWN_RBS_MOTIFS` | AGGAGG, GGAGG, AGGAG, GAGG, AGGA, GGAG | Shine-Dalgarno variants |
 
-**Score weights** (`SCORE_WEIGHTS`): codon (0.35), IMM (0.35), RBS (0.15), length (0.10), start (0.05).
+**Score weights** (`SCORE_WEIGHTS`): all components weighted equally (1.0 each) after z-score normalisation. Equal weights are intentional — z-scoring puts each component on the same scale, so no additional biological weighting is needed at this stage. The empirically calibrated `START_SELECTION_WEIGHTS` (codon ≈ 4.86, IMM ≈ 1.01, RBS ≈ 0.64, length ≈ 7.44, start ≈ 0.28) apply in the later start-site selection step.
 
 **Filter thresholds**:
 - Step 7 (initial): removes ORFs where all three of codon/IMM/length are below threshold OR combined score < 0.26

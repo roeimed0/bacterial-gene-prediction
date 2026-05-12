@@ -187,3 +187,19 @@ class TestPipelineSmoke:
             "false_negatives",
         ):
             assert key in metrics, f"Missing key: {key}"
+
+
+# ── Standalone regression tests ────────────────────────────────────────────────
+
+
+def test_load_models_missing_file_raises_clear_error_issue_152(tmp_path):
+    # Regression for #152: passing a non-existent explicit path must raise
+    # FileNotFoundError with the path in the message.
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT))
+    from src.pipeline import load_models
+
+    with pytest.raises(FileNotFoundError) as exc_info:
+        load_models(lgb_path=str(tmp_path / "missing.pkl"))
+    assert "missing.pkl" in str(exc_info.value)

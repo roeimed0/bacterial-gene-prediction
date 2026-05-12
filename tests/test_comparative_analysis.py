@@ -131,14 +131,20 @@ class TestCompareOrfsToReference:
         expected_f1 = 2 * p * s / (p + s)
         assert result["f1_score"] == pytest.approx(expected_f1)
 
-    def test_empty_orf_list_raises_value_error(self, tmp_path):
-        # Current behaviour: pd.DataFrame([]) has no columns, triggering the
-        # coord-column check.  Ideal behaviour would be to return 0.0 precision
-        # (see issue #29 for the planned fix).
+    def test_empty_orf_list_returns_zero_metrics_issue_149(self, tmp_path):
+        # Regression for #149: empty predictions must return zero metrics,
+        # not raise ValueError (precision denominator = 0).
         gff = _make_gff_file(tmp_path)
         with patch("src.comparative_analysis.get_gff_path", return_value=gff):
-            with pytest.raises(ValueError):
-                compare_orfs_to_reference([], "NC_TEST")
+            result = compare_orfs_to_reference([], "NC_TEST")
+        assert result["sensitivity"] == 0.0
+        assert result["precision"] == 0.0
+        assert result["f1_score"] == 0.0
+        assert result["true_positives"] == 0
+        assert result["false_positives"] == 0
+        for v in result.values():
+            if isinstance(v, float):
+                assert v == v, f"NaN in result: {result}"
 
     def test_empty_reference_gff_raises_empty_data_error(self, tmp_path):
         # Current behaviour: pandas raises EmptyDataError on a header-only GFF.
