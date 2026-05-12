@@ -1795,8 +1795,6 @@ def score_all_orfs(
     numba_coding = models.get("numba_coding_table")
     numba_noncoding = models.get("numba_noncoding_table")
     codon_ratio_tbl = models.get("codon_log_ratio_table")
-    coding_log = models.get("coding_log_table")
-    noncoding_log = models.get("noncoding_log_table")
     codon_model = models["codon_model"]
     bg_codon_model = models["background_codon_model"]
     use_numba = _NUMBA_AVAILABLE and numba_coding is not None and codon_ratio_tbl is not None
