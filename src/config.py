@@ -24,60 +24,37 @@ __all__ = [
 # NCBI Configuration
 NCBI_EMAIL = "your_email@example.com"
 
-# Test genomes for gene prediction analysis.
-# Expanded from 15 → 41 genomes to give ≥ 10 per taxonomic group, enabling
-# statistically meaningful per-group benchmarking via validate_batch().
-# Minimum reliable estimate requires n ≥ 10; n ≥ 20 for publication claims.
-#
-# Group counts: Proteobacteria 12, Firmicutes 10, Actinobacteria 10, Archaea 11
+# Holdout benchmark genomes — completely disjoint from GENOME_CATALOG.
+# These 20 genomes were NEVER used in any training or validation run.
+# 5 genomes per taxonomic group, chosen from distinct genera to maximise
+# diversity while avoiding overlap with the training pool.
+# Use ONLY this list for benchmark evaluation — never add GENOME_CATALOG
+# entries here and never add these entries to GENOME_CATALOG.
 TEST_GENOMES = [
-    # ── Proteobacteria (10) ──────────────────────────────────────────────────
-    "NC_000913.3",  # Escherichia coli K-12 MG1655
-    "NC_002695.2",  # Escherichia coli O157:H7 Sakai
-    "NC_003197.2",  # Salmonella enterica LT2
-    "NC_002505.1",  # Vibrio cholerae
-    "NC_002516.2",  # Pseudomonas aeruginosa PAO1
-    "NC_000915.1",  # Helicobacter pylori 26695
-    "NC_004741.1",  # Shigella flexneri 2a          [added #101]
-    "NC_008570.1",  # Aeromonas hydrophila ATCC 7966 [added #101]
-    "NC_009648.1",  # Klebsiella pneumoniae 342       [added #101]
-    "NC_007503.1",  # Carboxydothermus hydrogenoformans [added #101]
-    "NC_004547.2",  # Erwinia carotovora SCRI1043       [added #101]
-    "NC_008253.1",  # Escherichia coli 536              [restored #101]
-    # ── Firmicutes (10) ──────────────────────────────────────────────────────
-    "NC_000964.3",  # Bacillus subtilis 168
-    "NC_003210.1",  # Listeria monocytogenes EGD-e
-    "NC_002737.2",  # Streptococcus pyogenes M1 GAS   [added #101]
-    "NC_003098.1",  # Streptococcus pneumoniae R6      [added #101]
-    "NC_007795.1",  # Staphylococcus aureus NCTC 8325  [added #101]
-    "NC_004668.1",  # Enterococcus faecalis V583        [added #101]
-    "NC_020291.1",  # Clostridium difficile R20291      [added #101]
-    "NC_013891.1",  # Listeria seeligeri serovar 1/2b   [added #101]
-    "NC_014829.1",  # Bacillus cellulosilyticus         [added #101]
-    "NC_012469.1",  # Streptococcus mutans NN2025       [added #101]
-    # ── Actinobacteria (10) ──────────────────────────────────────────────────
-    "NC_000962.3",  # Mycobacterium tuberculosis H37Rv
-    "NC_003888.3",  # Streptomyces coelicolor A3(2)     [added #101]
-    "NC_008769.1",  # Mycobacterium bovis BCG Pasteur   [added #101]
-    "NC_009525.1",  # Mycobacterium tuberculosis H37Ra  [added #101]
-    "NC_009664.1",  # Kineococcus radiotolerans          [added #101]
-    "NC_014666.1",  # Frankia sp. EAN1pec               [added #101]
-    "NC_016111.1",  # Streptomyces cattleya NRRL 8057   [added #101]
-    "NC_017093.1",  # Actinoplanes missouriensis 431    [added #101]
-    "NC_018524.1",  # Nocardiopsis dassonvillei          [added #101]
-    "NC_020133.1",  # Mycobacterium liflandii 128FXT     [added #101]
-    # ── Archaea (11) ─────────────────────────────────────────────────────────
-    "NC_000854.2",  # Aeropyrum pernix K1               (Crenarchaeota)
-    "NC_000868.1",  # Pyrococcus abyssi GE5             (Euryarchaeota)
-    "NC_002607.1",  # Halobacterium salinarum R1         (Euryarchaeota)
-    "NC_003552.1",  # Methanosarcina acetivorans C2A     (Euryarchaeota)
-    "NC_000917.1",  # Archaeoglobus fulgidus DSM 4304   (Euryarchaeota)
-    "NC_003106.2",  # Sulfolobus tokodaii str. 7         (Crenarchaeota)   [added #101]
-    "NC_003413.1",  # Pyrococcus furiosus DSM 3638       (Euryarchaeota)   [added #101]
-    "NC_007426.1",  # Natronomonas pharaonis             (Euryarchaeota)   [added #101]
-    "NC_009975.1",  # Methanococcus maripaludis C6       (Euryarchaeota)   [added #101]
-    "NC_010085.1",  # Nitrosopumilus maritimus SCM1      (Thaumarchaeota)  [added #101]
-    "NC_021054.1",  # Haloferax volcanii DS2             (Euryarchaeota)   [added #101]
+    # ── Proteobacteria (5) — distinct genera: Pseudomonas/Bordetella/Yersinia/Neisseria/Nitrosomonas
+    "NC_002947.4",  # Pseudomonas putida KT2440             (Gammaproteobacteria)
+    "NC_002929.2",  # Bordetella pertussis Tohama I          (Betaproteobacteria)
+    "NC_003143.1",  # Yersinia pestis CO92                   (Gammaproteobacteria)
+    "NC_003116.1",  # Neisseria meningitidis Z2491           (Betaproteobacteria)
+    "NC_004757.1",  # Nitrosomonas europaea ATCC 19718       (Betaproteobacteria)
+    # ── Firmicutes (5) — Lactobacillus/Streptococcus agalactiae/Bacillus licheniformis/cereus/Clostridium
+    "NC_008497.1",  # Lactobacillus brevis ATCC 367
+    "NC_004350.2",  # Streptococcus agalactiae A909
+    "NC_006270.3",  # Bacillus licheniformis DSM 13
+    "NC_006274.1",  # Bacillus cereus E33L
+    "NC_003030.1",  # Clostridium acetobutylicum ATCC 824
+    # ── Actinobacteria (5) — Streptomyces avermitilis/Corynebacterium x2/Mycobacterium leprae/Nocardia
+    "NC_003155.5",  # Streptomyces avermitilis MA-4680
+    "NC_003450.3",  # Corynebacterium glutamicum ATCC 13032
+    "NC_002677.1",  # Mycobacterium leprae TN
+    "NC_008268.1",  # Nocardia farcinica IFM 10152
+    "NC_006958.1",  # Corynebacterium glutamicum R
+    # ── Archaea (5) — Hyperthermus/Haloarcula/Methanobrevibacter/Methanosaeta/Methanoculleus
+    "NC_008818.1",  # Hyperthermus butylicus DSM 5456        (Crenarchaeota)
+    "NC_015948.1",  # Haloarcula hispanica ATCC 33960        (Euryarchaeota)
+    "NC_014408.1",  # Methanobrevibacter ruminantium M1      (Euryarchaeota)
+    "NC_019977.1",  # Methanosaeta harundinacea 6Ac          (Euryarchaeota)
+    "NC_007644.1",  # Methanoculleus marisnigri JR1          (Euryarchaeota)
 ]
 
 LENGTH_REFERENCE_BP = 300  # Reference length for scaling

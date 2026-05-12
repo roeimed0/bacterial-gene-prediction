@@ -58,12 +58,12 @@ def _model_hash(path: Path) -> str:
     return h.hexdigest()[:10]
 
 
-def load_models():
+def load_models(lgb_path: str = None, hf_path: str = None):
     lgb = OrfGroupClassifier()
-    lgb.load(str(MODELS_DIR / "orf_classifier_lgb.pkl"))
+    lgb.load(lgb_path or str(MODELS_DIR / "orf_classifier_lgb.pkl"))
     hf = HybridGeneFilter()
     with contextlib.redirect_stdout(io.StringIO()):
-        hf.load(str(MODELS_DIR / "hybrid_best_model.pkl"))
+        hf.load(hf_path or str(MODELS_DIR / "hybrid_best_model.pkl"))
     return lgb, hf
 
 
@@ -118,6 +118,12 @@ parser.add_argument("--compare", action="store_true", help="Show delta vs previo
 parser.add_argument("--set-baseline", action="store_true", help="Mark this run as the new baseline")
 parser.add_argument("--group", help="Run only this taxonomy group")
 parser.add_argument("--limit", type=int, default=0, help="Limit to N genomes (0=all)")
+parser.add_argument(
+    "--lgb-path", help="Override LGB model path (default: models/orf_classifier_lgb.pkl)"
+)
+parser.add_argument(
+    "--hf-path", help="Override Hybrid model path (default: models/hybrid_best_model.pkl)"
+)
 args = parser.parse_args()
 
 # Build genome list from TEST_GENOMES + GENOME_CATALOG for group lookup
@@ -138,13 +144,15 @@ print(f"\n{SEP}")
 print(f"BENCHMARK — {len(genomes)} genomes from TEST_GENOMES")
 print(SEP)
 
-lgb, hf = load_models()
+_lgb_path = args.lgb_path or str(MODELS_DIR / "orf_classifier_lgb.pkl")
+_hf_path = args.hf_path or str(MODELS_DIR / "hybrid_best_model.pkl")
+lgb, hf = load_models(_lgb_path, _hf_path)
 lgb_t = 0.07
 hf_t = hf.threshold
 
 print(f"LGB threshold: {lgb_t}  |  Hybrid threshold: {hf_t}")
-print(f"LGB hash: {_model_hash(MODELS_DIR / 'orf_classifier_lgb.pkl')}")
-print(f"Hybrid hash: {_model_hash(MODELS_DIR / 'hybrid_best_model.pkl')}\n")
+print(f"LGB model: {_lgb_path}  [{_model_hash(Path(_lgb_path))}]")
+print(f"Hybrid model: {_hf_path}  [{_model_hash(Path(_hf_path))}]\n")
 
 print(f"  {'Accession':<16} {'Group':<18} {'F1':>7} {'Sens':>7} {'Prec':>7}")
 print(f"  {'-'*16} {'-'*18} {'-'*7} {'-'*7} {'-'*7}")
@@ -228,13 +236,13 @@ if args.save:
         "is_baseline": args.set_baseline,
         "models": {
             "lgb": {
-                "path": str(MODELS_DIR / "orf_classifier_lgb.pkl"),
-                "hash": _model_hash(MODELS_DIR / "orf_classifier_lgb.pkl"),
+                "path": _lgb_path,
+                "hash": _model_hash(Path(_lgb_path)),
                 "threshold": lgb_t,
             },
             "hybrid": {
-                "path": str(MODELS_DIR / "hybrid_best_model.pkl"),
-                "hash": _model_hash(MODELS_DIR / "hybrid_best_model.pkl"),
+                "path": _hf_path,
+                "hash": _model_hash(Path(_hf_path)),
                 "threshold": hf_t,
             },
         },
