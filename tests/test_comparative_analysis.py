@@ -193,6 +193,23 @@ class TestCompareOrfsToReference:
         }
         assert required <= set(result.keys())
 
+    @pytest.mark.xfail(
+        reason="issue #149: empty predictions should return zero metrics, not raise ValueError"
+    )
+    def test_empty_predictions_returns_zero_metrics_issue_149(self, tmp_path):
+        # Desired behaviour for #149: when no ORFs are predicted the function
+        # should return {sensitivity: 0.0, precision: 0.0, f1_score: 0.0}
+        # instead of raising ValueError (precision denominator = 0).
+        gff = _make_gff_file(tmp_path)
+        with patch("src.comparative_analysis.get_gff_path", return_value=gff):
+            result = compare_orfs_to_reference([], "NC_TEST")
+        assert result["sensitivity"] == 0.0
+        assert result["precision"] == 0.0
+        assert result["f1_score"] == 0.0
+        for v in result.values():
+            if isinstance(v, float):
+                assert v == v, f"NaN in result: {result}"
+
 
 # ---------------------------------------------------------------------------
 # compare_orfs_to_reference — fuzzy coordinate matching (issue #99)
