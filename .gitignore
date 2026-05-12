@@ -1,3 +1,11 @@
+# Experiment output — never commit run logs or result dumps
+*_results.txt
+*_log.txt
+baseline_run.txt
+benchmark_final.txt
+benchmark_new_pipeline.txt
+*.lock
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

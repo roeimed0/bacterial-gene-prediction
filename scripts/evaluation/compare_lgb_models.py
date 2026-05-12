@@ -23,6 +23,7 @@ from sklearn.metrics import f1_score, precision_score, recall_score
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.train_lgb import _load_ref_set, label_groups
+
 from src.config import FIRST_FILTER_THRESHOLD, GENOME_CATALOG, START_SELECTION_WEIGHTS
 from src.data_management import (
     download_genome_and_reference,
