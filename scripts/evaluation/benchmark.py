@@ -41,7 +41,16 @@ from src.pipeline import predict_genome_from_file
 MODELS_DIR = Path(__file__).parent.parent.parent / "models"
 DATA_DIR = get_data_dir("full_dataset")
 LOG_FILE = Path(__file__).parent.parent.parent / "experiments" / "log.json"
+THRESHOLDS_FILE = MODELS_DIR / "thresholds.json"
 SEP = "=" * 85
+
+
+def _load_thresholds() -> dict:
+    """Load calibrated thresholds from models/thresholds.json."""
+    if THRESHOLDS_FILE.exists():
+        with open(THRESHOLDS_FILE) as f:
+            return json.load(f)
+    return {}
 
 
 # ── Model loading ─────────────────────────────────────────────────────────────
@@ -192,8 +201,11 @@ print(SEP)
 _lgb_path = args.lgb_path or str(MODELS_DIR / "orf_classifier_lgb.pkl")
 _hf_path = args.hf_path or str(MODELS_DIR / "hybrid_best_model.pkl")
 lgb, hf = load_models(_lgb_path, _hf_path)
-lgb_t = args.lgb_threshold if args.lgb_threshold is not None else 0.07
-hf_t = args.hf_threshold if args.hf_threshold is not None else hf.threshold
+_thresh = _load_thresholds()
+_lgb_stem = Path(_lgb_path).stem
+_hf_stem = Path(_hf_path).stem
+lgb_t = args.lgb_threshold or _thresh.get(_lgb_stem, {}).get("threshold") or 0.07
+hf_t = args.hf_threshold or _thresh.get(_hf_stem, {}).get("threshold") or hf.threshold
 
 print(f"LGB threshold: {lgb_t}  |  Hybrid threshold: {hf_t}")
 print(f"LGB model: {_lgb_path}  [{_model_hash(Path(_lgb_path))}]")
