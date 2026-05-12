@@ -371,6 +371,64 @@ def _score_imm_fast(
     return (c_total - nc_total) / n
 
 
+def _score_imm_numpy(
+    sequence: str,
+    coding_tbl: np.ndarray,
+    noncoding_tbl: np.ndarray,
+    max_order: int,
+) -> float:
+    """Vectorised IMM scorer using integer-indexed numpy tables (#141).
+
+    Replaces the per-nucleotide Python loop in _score_imm_fast with numpy
+    sliding-window fancy indexing.  The bulk of positions (i >= max_order)
+    are handled in a single matrix-multiply + fancy-index operation.
+    Numerically identical to _score_imm_fast for the same model.
+
+    Index layout (from build_numba_log_table):
+        offset(L) = (4^L - 1) // 3
+        index     = offset(L) + base4_value(k-mer)
+    """
+    arr = _seq_to_int_fast(sequence)
+    n = len(arr)
+    if n < 3:
+        return 0.0
+
+    L_full = max_order + 1
+    # Pre-built multipliers for base-4 encoding: [4^(L-1), ..., 4^0]
+    weights = (4 ** np.arange(L_full - 1, -1, -1)).astype(np.int64)
+    offset_full = int((4**L_full - 1) // 3)
+
+    c_total = nc_total = 0.0
+
+    # ── Bulk: positions max_order … n-1 (all use k-mer length L_full) ──────
+    if n > max_order:
+        # sliding_window_view is O(1) — returns a view, no copy
+        wins = np.lib.stride_tricks.sliding_window_view(arr, L_full)  # (n-max_order, L_full)
+        valid = (wins < 4).all(axis=1)
+        v = wins.astype(np.int64) @ weights
+        idx = offset_full + v
+        pos = np.arange(max_order, n, dtype=np.int64) % 3
+        c_total += np.where(valid, coding_tbl[pos, idx], _LOG_EPSILON).sum()
+        nc_total += np.where(valid, noncoding_tbl[pos, idx], _LOG_EPSILON).sum()
+
+    # ── Prefix: positions 0 … max_order-1 (k-mer grows from 1 to max_order) ─
+    for i in range(min(max_order, n)):
+        L = i + 1
+        kmer = arr[:L]
+        if (kmer >= 4).any():
+            c_total += _LOG_EPSILON
+            nc_total += _LOG_EPSILON
+            continue
+        v = int(np.dot(kmer, (4 ** np.arange(L - 1, -1, -1)).astype(np.int64)))
+        offset_L = int((4**L - 1) // 3)
+        idx = offset_L + v
+        pos = i % 3
+        c_total += coding_tbl[pos, idx]
+        nc_total += noncoding_tbl[pos, idx]
+
+    return (c_total - nc_total) / n
+
+
 # Pre-built ASCII→int lookup table (length 128): A=0, C=1, G=2, T=3, other=4.
 # A single numpy fancy-index replaces four boolean scan passes.
 _ASCII_TO_INT: np.ndarray = np.full(128, 4, dtype=np.int32)
@@ -600,6 +658,72 @@ def predict_rbs_simple(sequence: str, orf: Dict, upstream_length: int = 20) -> D
         "spacing": 0,
         "position": 0,
     }
+
+
+def _score_rbs_batch_python(
+    seq: str,
+    starts_0based: np.ndarray,
+    upstream_length: int = 20,
+) -> np.ndarray:
+    """Vectorised Python RBS batch scorer for the no-Numba fallback (#137).
+
+    Replaces 176K per-ORF calls to predict_rbs_simple() with a single-pass
+    batch.  Uses numpy cumsum for sliding-window purine counting; relies on
+    score_motif_similarity's LRU cache for repeated SD-candidate strings.
+    Returns the same rbs_score float as predict_rbs_simple()['rbs_score'].
+    """
+    n_orfs = len(starts_0based)
+    scores = np.full(n_orfs, -5.0, dtype=np.float64)
+
+    # ASCII codes for purines A=65, G=71
+    _A, _G = 65, 71
+
+    for i in range(n_orfs):
+        s = int(starts_0based[i])  # 0-based start of ORF
+        # predict_rbs_simple(seq, {"start": s+1}) extracts seq[s+1-L : s+1]
+        # = seq[s-L+1 : s+1], which INCLUDES the first ATG base (index s).
+        us_start = s - upstream_length + 1
+        if us_start < 0:
+            continue  # not enough upstream — keep -5.0
+
+        upstream = seq[us_start : s + 1]
+        n = len(upstream)
+        if n < 4:
+            continue
+
+        # Vectorised purine indicator via ASCII codes
+        u_arr = np.frombuffer(upstream.encode("ascii"), dtype=np.uint8)
+        is_purine = (u_arr == _A) | (u_arr == _G)
+
+        # Prefix sum for O(1) window purine counts
+        cumsum = np.empty(n + 1, dtype=np.int32)
+        cumsum[0] = 0
+        np.cumsum(is_purine, out=cumsum[1:])
+
+        best = -5.0
+        for start in range(n):
+            for length in range(4, min(9, n - start + 1)):
+                pur_count = int(cumsum[start + length] - cumsum[start])
+                pur_frac = pur_count / length
+                if pur_frac < 0.6:
+                    continue
+                spacing = n - (start + length)
+                if spacing < 4 or spacing > 12:
+                    continue
+                if 6 <= spacing <= 8:
+                    spacing_score = 3.0
+                elif 5 <= spacing <= 10:
+                    spacing_score = 2.5
+                else:
+                    spacing_score = 1.5
+                motif_score, _ = score_motif_similarity(upstream[start : start + length])
+                combined = spacing_score * 2.0 + motif_score * 1.5 + (pur_frac - 0.6) * 2.0
+                if combined > best:
+                    best = combined
+
+        scores[i] = best
+
+    return scores
 
 
 # =============================================================================
@@ -1565,12 +1689,14 @@ def build_all_scoring_models(
     coding_log_table = build_flat_log_table(coding_imm, estimated_order)
     noncoding_log_table = build_flat_log_table(noncoding_imm, estimated_order)
 
-    numba_coding_table = numba_noncoding_table = None
+    # Always build integer tables — used by both Numba (_score_imm_numba) and
+    # the pure-numpy fallback (_score_imm_numpy).  Build cost is <0.1 s.
+    logger.info("  Building integer log tables...")
+    numba_coding_table = build_numba_log_table(coding_log_table, estimated_order)
+    numba_noncoding_table = build_numba_log_table(noncoding_log_table, estimated_order)
     codon_log_ratio_table = None
     if _NUMBA_AVAILABLE:
-        logger.info("  Building Numba integer tables...")
-        numba_coding_table = build_numba_log_table(coding_log_table, estimated_order)
-        numba_noncoding_table = build_numba_log_table(noncoding_log_table, estimated_order)
+        logger.info("  Building Numba codon table and warming up JIT...")
         codon_log_ratio_table = build_codon_log_ratio_table(codon_model, background_codon_model)
         # Warm up both JIT functions so first scoring call has no compile latency
         _warmup = np.array([0, 1, 2, 3, 0, 1, 2], dtype=np.int32)
@@ -1695,7 +1821,7 @@ def score_all_orfs(
             )
         else:
             codon_scores[i] = score_codon_bias_ratio(seq, codon_model, bg_codon_model)
-            imm_scores[i] = _score_imm_fast(seq, coding_log, noncoding_log, max_order)
+            imm_scores[i] = _score_imm_numpy(seq, numba_coding, numba_noncoding, max_order)
 
     all_orfs = all_orfs.copy()
     all_orfs["codon_score"] = codon_scores
