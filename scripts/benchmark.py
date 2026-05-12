@@ -58,12 +58,12 @@ def _model_hash(path: Path) -> str:
     return h.hexdigest()[:10]
 
 
-def load_models():
+def load_models(lgb_path: str = None, hf_path: str = None):
     lgb = OrfGroupClassifier()
-    lgb.load(str(MODELS_DIR / "orf_classifier_lgb.pkl"))
+    lgb.load(lgb_path or str(MODELS_DIR / "orf_classifier_lgb.pkl"))
     hf = HybridGeneFilter()
     with contextlib.redirect_stdout(io.StringIO()):
-        hf.load(str(MODELS_DIR / "hybrid_best_model.pkl"))
+        hf.load(hf_path or str(MODELS_DIR / "hybrid_best_model.pkl"))
     return lgb, hf
 
 
@@ -118,13 +118,64 @@ parser.add_argument("--compare", action="store_true", help="Show delta vs previo
 parser.add_argument("--set-baseline", action="store_true", help="Mark this run as the new baseline")
 parser.add_argument("--group", help="Run only this taxonomy group")
 parser.add_argument("--limit", type=int, default=0, help="Limit to N genomes (0=all)")
+parser.add_argument(
+    "--lgb-path", help="Override LGB model path (default: models/orf_classifier_lgb.pkl)"
+)
+parser.add_argument(
+    "--hf-path", help="Override Hybrid model path (default: models/hybrid_best_model.pkl)"
+)
+parser.add_argument(
+    "--lgb-threshold", type=float, default=None, help="Override LGB threshold (default: 0.07)"
+)
+parser.add_argument(
+    "--hf-threshold",
+    type=float,
+    default=None,
+    help="Override Hybrid threshold (default: model's saved value)",
+)
 args = parser.parse_args()
 
-# Build genome list from TEST_GENOMES + GENOME_CATALOG for group lookup
+# Taxonomy group mapping for the clean holdout genomes.
+# These accessions are intentionally absent from GENOME_CATALOG (training pool),
+# so their group must be declared here rather than looked up from the catalog.
+_HOLDOUT_GROUPS = {
+    # Proteobacteria
+    "NC_002947.4": ("Pseudomonas putida KT2440", "Proteobacteria"),
+    "NC_002929.2": ("Bordetella pertussis Tohama I", "Proteobacteria"),
+    "NC_003143.1": ("Yersinia pestis CO92", "Proteobacteria"),
+    "NC_003116.1": ("Neisseria meningitidis Z2491", "Proteobacteria"),
+    "NC_004757.1": ("Nitrosomonas europaea ATCC 19718", "Proteobacteria"),
+    # Firmicutes
+    "NC_008497.1": ("Lactobacillus brevis ATCC 367", "Firmicutes"),
+    "NC_004350.2": ("Streptococcus agalactiae A909", "Firmicutes"),
+    "NC_006270.3": ("Bacillus licheniformis DSM 13", "Firmicutes"),
+    "NC_006274.1": ("Bacillus cereus E33L", "Firmicutes"),
+    "NC_003030.1": ("Clostridium acetobutylicum ATCC 824", "Firmicutes"),
+    # Actinobacteria
+    "NC_003155.5": ("Streptomyces avermitilis MA-4680", "Actinobacteria"),
+    "NC_003450.3": ("Corynebacterium glutamicum ATCC 13032", "Actinobacteria"),
+    "NC_002677.1": ("Mycobacterium leprae TN", "Actinobacteria"),
+    "NC_008268.1": ("Nocardia farcinica IFM 10152", "Actinobacteria"),
+    "NC_006958.1": ("Corynebacterium glutamicum R", "Actinobacteria"),
+    # Archaea
+    "NC_008818.1": ("Hyperthermus butylicus DSM 5456", "Archaea"),
+    "NC_015948.1": ("Haloarcula hispanica ATCC 33960", "Archaea"),
+    "NC_014408.1": ("Methanobrevibacter ruminantium M1", "Archaea"),
+    "NC_019977.1": ("Methanosaeta harundinacea 6Ac", "Archaea"),
+    "NC_007644.1": ("Methanoculleus marisnigri JR1", "Archaea"),
+}
+
+# Build genome list: look up group from GENOME_CATALOG first, then holdout map
 catalog_map = {g["accession"]: g for g in GENOME_CATALOG}
 genomes = []
 for acc in TEST_GENOMES:
-    info = catalog_map.get(acc, {"accession": acc, "name": acc, "group": "Unknown"})
+    if acc in catalog_map:
+        info = catalog_map[acc]
+    elif acc in _HOLDOUT_GROUPS:
+        name, group = _HOLDOUT_GROUPS[acc]
+        info = {"accession": acc, "name": name, "group": group}
+    else:
+        info = {"accession": acc, "name": acc, "group": "Unknown"}
     if args.group and info["group"] != args.group:
         continue
     fasta = os.path.join(DATA_DIR, f"{acc}.fasta")
@@ -138,13 +189,15 @@ print(f"\n{SEP}")
 print(f"BENCHMARK — {len(genomes)} genomes from TEST_GENOMES")
 print(SEP)
 
-lgb, hf = load_models()
-lgb_t = 0.07
-hf_t = hf.threshold
+_lgb_path = args.lgb_path or str(MODELS_DIR / "orf_classifier_lgb.pkl")
+_hf_path = args.hf_path or str(MODELS_DIR / "hybrid_best_model.pkl")
+lgb, hf = load_models(_lgb_path, _hf_path)
+lgb_t = args.lgb_threshold if args.lgb_threshold is not None else 0.07
+hf_t = args.hf_threshold if args.hf_threshold is not None else hf.threshold
 
 print(f"LGB threshold: {lgb_t}  |  Hybrid threshold: {hf_t}")
-print(f"LGB hash: {_model_hash(MODELS_DIR / 'orf_classifier_lgb.pkl')}")
-print(f"Hybrid hash: {_model_hash(MODELS_DIR / 'hybrid_best_model.pkl')}\n")
+print(f"LGB model: {_lgb_path}  [{_model_hash(Path(_lgb_path))}]")
+print(f"Hybrid model: {_hf_path}  [{_model_hash(Path(_hf_path))}]\n")
 
 print(f"  {'Accession':<16} {'Group':<18} {'F1':>7} {'Sens':>7} {'Prec':>7}")
 print(f"  {'-'*16} {'-'*18} {'-'*7} {'-'*7} {'-'*7}")
@@ -228,13 +281,13 @@ if args.save:
         "is_baseline": args.set_baseline,
         "models": {
             "lgb": {
-                "path": str(MODELS_DIR / "orf_classifier_lgb.pkl"),
-                "hash": _model_hash(MODELS_DIR / "orf_classifier_lgb.pkl"),
+                "path": _lgb_path,
+                "hash": _model_hash(Path(_lgb_path)),
                 "threshold": lgb_t,
             },
             "hybrid": {
-                "path": str(MODELS_DIR / "hybrid_best_model.pkl"),
-                "hash": _model_hash(MODELS_DIR / "hybrid_best_model.pkl"),
+                "path": _hf_path,
+                "hash": _model_hash(Path(_hf_path)),
                 "threshold": hf_t,
             },
         },

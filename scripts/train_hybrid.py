@@ -72,13 +72,21 @@ parser.add_argument("--epochs", type=int, default=50)
 parser.add_argument("--focal-loss", action="store_true")
 parser.add_argument("--seed", type=int, default=None)
 parser.add_argument("--limit", type=int, default=0)
+parser.add_argument(
+    "--lgb-path", default=None, help="LGB model path (default: models/orf_classifier_lgb.pkl)"
+)
+parser.add_argument(
+    "--no-compare", action="store_true", help="Skip comparison against production model at the end"
+)
 args = parser.parse_args()
 rng = np.random.default_rng(args.seed)
 
 # ── Load LGB model ────────────────────────────────────────────────────────────
 
 lgb_clf = OrfGroupClassifier()
-lgb_clf.load(str(MODELS_DIR / "orf_classifier_lgb.pkl"))
+lgb_path = args.lgb_path or str(MODELS_DIR / "orf_classifier_lgb.pkl")
+print(f"LGB model: {lgb_path}")
+lgb_clf.load(lgb_path)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -271,7 +279,12 @@ else:
 
 # ── Compare on test set ───────────────────────────────────────────────────────
 
-if test_cands is not None and test_labels is not None and PROD_MODEL.exists():
+if (
+    not args.no_compare
+    and test_cands is not None
+    and test_labels is not None
+    and PROD_MODEL.exists()
+):
     print(f"\n{SEP}\nTEST-SET COMPARISON (held out — not seen during training)\n{SEP}")
 
     old_hf = HybridGeneFilter()

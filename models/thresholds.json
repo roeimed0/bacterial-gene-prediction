@@ -1,0 +1,10 @@
+{
+  "orf_classifier_lgb": {
+    "threshold": 0.05,
+    "note": "LGB v2 (26-feat). Calibrated via lgb_threshold_sweep.py on 20-genome holdout."
+  },
+  "hybrid_best_model": {
+    "threshold": 0.471,
+    "note": "Hybrid v2 (26-feat). Calibrated via hybrid_threshold_sweep.py on 20-genome holdout."
+  }
+}
