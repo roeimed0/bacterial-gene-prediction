@@ -115,6 +115,20 @@ async def predict_genes(request: PredictionRequest):
             detail="Sequence is empty. Provide a raw DNA sequence or a FASTA-formatted string.",
         )
 
+    # Strip FASTA header lines and whitespace, then validate nucleotide alphabet.
+    _seq_body = (
+        "".join(line for line in request.sequence.splitlines() if not line.startswith(">"))
+        .replace(" ", "")
+        .replace("\t", "")
+    )
+    _invalid = set(_seq_body.upper()) - set("ACGTNRYWSKMBDHV")
+    if _invalid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid nucleotide characters in sequence: {sorted(_invalid)}. "
+            "Only IUPAC nucleotide characters (A/C/G/T/N and ambiguity codes) are accepted.",
+        )
+
     tmp_file_path = None
     try:
         filename = request.filename if request.filename else "pasted_sequence"

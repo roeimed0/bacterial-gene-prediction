@@ -97,12 +97,16 @@ STOP_CODONS = {"TAA", "TAG", "TGA"}
 # Cache Settings
 CACHE_FILENAME = "cached_orfs.pkl"
 
+# Equal weights are intentional: each component is z-score normalised before
+# this step, so all dimensions are already on the same scale and no additional
+# biological weighting is required here.  Empirically calibrated weights for
+# the later start-site selection step live in START_SELECTION_WEIGHTS below.
 SCORE_WEIGHTS = {
-    "codon": 1.0,  # Codon usage bias
-    "imm": 1.0,  # Interpolated Markov Model
-    "rbs": 1.0,  # Ribosome Binding Site
-    "length": 1.0,  # ORF length
-    "start": 1.0,  # Start codon type
+    "codon": 1.0,
+    "imm": 1.0,
+    "rbs": 1.0,
+    "length": 1.0,
+    "start": 1.0,
 }
 
 
