@@ -110,7 +110,7 @@ class OrfGroupClassifier:
             codon = orf_group["codon_score"].values.astype(np.float64)
             start = orf_group["start_score"].values.astype(np.float64)
             imm = orf_group["imm_score"].values.astype(np.float64)
-            strands = orf_group["strand"].tolist()
+            lengths = orf_group["length"].values.astype(np.float64)
 
             if weights is not None:
                 cols = orf_group.columns
@@ -177,23 +177,17 @@ class OrfGroupClassifier:
                 "imm_mean": imm.mean(),
                 "start_select_max": max_ss,
                 "start_select_mean": ss.mean(),
-                "strand_plus_frac": strands.count("forward") / n,
-                "strand_minus_frac": strands.count("reverse") / n,
-                # Relative features
+                # Relative-mean features (max variants removed — always 1.0 or redundant)
                 "rel_combined_mean": (
                     combined / max_combined if max_combined > 0 else np.zeros(n)
                 ).mean(),
-                "rel_combined_max": (
-                    combined / max_combined if max_combined > 0 else np.zeros(n)
-                ).max(),
                 "rel_rbs_mean": (rbs / max_rbs if max_rbs > 0 else np.zeros(n)).mean(),
-                "rel_rbs_max": (rbs / max_rbs if max_rbs > 0 else np.zeros(n)).max(),
                 "rel_codon_mean": (codon / max_codon if max_codon > 0 else np.zeros(n)).mean(),
-                "rel_codon_max": (codon / max_codon if max_codon > 0 else np.zeros(n)).max(),
                 "rel_start_mean": (start / max_start if max_start > 0 else np.zeros(n)).mean(),
-                "rel_start_max": (start / max_start if max_start > 0 else np.zeros(n)).max(),
                 "rel_start_select_mean": (ss / max_ss if max_ss > 0 else np.zeros(n)).mean(),
-                "rel_start_select_max": (ss / max_ss if max_ss > 0 else np.zeros(n)).max(),
+                # Biological priors: longest ORF is usually the true gene in nested groups
+                "top_orf_is_longest": int(combined.argmax() == lengths.argmax()),
+                "length_ratio_max_min": float(lengths.max() / max(lengths.min(), 1.0)),
                 "frac_top_combined": (combined >= 0.95 * max_combined).sum() / n,
                 "frac_top_start_select": (ss >= 0.95 * max_ss).sum() / n,
             }
@@ -467,18 +461,20 @@ class HybridGeneFilter:
             "start_score_norm",
             "combined_score",
             "length_bp",
-            "length_codons",
-            "length_log",
+            "length_log",  # length_codons removed (monotone duplicate of length_bp)
             "start_codon_type",
             "stop_codon_type",
-            "has_kozak_like",
+            # has_kozak_like removed (eukaryotic signal, always ~0 in bacteria)
             "gc_content",
+            "gc_deviation",  # orf_gc - genome_gc: better discriminator than absolute GC
+            "gc3_content",  # GC at third codon position: strong coding signal
             "gc_skew",
             "at_skew",
             "purine_content",
             "effective_num_codons",
             "codon_bias_index",
             "has_hairpin_near_stop",
+            "minus10_box_score",  # prokaryotic promoter -10 box (replaces has_kozak_like)
             "hydrophobicity_mean",
             "hydrophobicity_std",
             "charge_mean",
@@ -794,7 +790,58 @@ class HybridGeneFilter:
                 polar_frac=0.0,
             )
 
-    def extract_features(self, candidates: List[Dict], genome_id: str = "unknown") -> pd.DataFrame:
+    @staticmethod
+    def _calculate_gc3(sequence: str) -> float:
+        """GC content at third codon positions — strong coding-region signal."""
+        codons = [sequence[i : i + 3] for i in range(0, len(sequence) - 2, 3)]
+        valid = [c for c in codons if len(c) == 3 and "N" not in c]
+        if not valid:
+            return 0.0
+        return float(sum(1 for c in valid if c[2] in "GC") / len(valid))
+
+    @staticmethod
+    def _score_minus10_box(genome_seq: str, start_1based: int, upstream: int = 50) -> float:
+        """Similarity to TATAAT consensus in the -50 to -25 window upstream of ATG."""
+        if start_1based < upstream + 1:
+            return 0.0
+        region = genome_seq[start_1based - upstream - 1 : start_1based - 25]
+        if not region:
+            return 0.0
+        consensus = "TATAAT"
+        best = 0.0
+        clen = len(consensus)
+        for i in range(len(region) - clen + 1):
+            match = sum(a == b for a, b in zip(region[i:], consensus)) / clen
+            if match > best:
+                best = match
+        return float(best)
+
+    def extract_features(
+        self,
+        candidates: List[Dict],
+        genome_id: str = "unknown",
+        genome_gc: Optional[float] = None,
+        genome_seq: Optional[str] = None,
+    ) -> pd.DataFrame:
+        """Extract tabular features from candidate dicts.
+
+        Args:
+            candidates: List of ORF candidate dicts.
+            genome_id: Identifier (used for logging only).
+            genome_gc: Genome-level GC fraction for gc_deviation.  When None,
+                estimated as the mean GC across candidates in this batch.
+            genome_seq: Full genome sequence for minus10_box_score.  When None,
+                the feature defaults to 0.0 (graceful degradation).
+        """
+        # Compute genome_gc proxy if not provided: mean GC across this batch
+        if genome_gc is None and candidates:
+            gc_vals = []
+            for cand in candidates:
+                s = cand.get("sequence", "")
+                if s:
+                    gc_vals.append((s.count("G") + s.count("C")) / max(len(s), 1))
+            genome_gc = float(np.mean(gc_vals)) if gc_vals else 0.5
+
         rows = []
         for candidate in candidates:
             sequence = candidate.get("sequence", "").upper()
@@ -808,7 +855,6 @@ class HybridGeneFilter:
             }
             length = int(candidate.get("length", len(sequence)))
             feature_dict["length_bp"] = float(length)
-            feature_dict["length_codons"] = float(length / 3.0)
             feature_dict["length_log"] = math.log(max(length, 1))
             start_codon = candidate.get(
                 "start_codon", sequence[:3] if len(sequence) >= 3 else "ATG"
@@ -818,20 +864,30 @@ class HybridGeneFilter:
             stop_codon = sequence[-3:] if len(sequence) >= 3 else "TAA"
             stop_map = {"TAA": 0.0, "TAG": 1.0, "TGA": 2.0}
             feature_dict["stop_codon_type"] = float(stop_map.get(stop_codon, 0.0))
-            feature_dict["has_kozak_like"] = float(candidate.get("rbs_score", 0) > 3.0)
             counts = Counter(sequence)
             seq_len = len(sequence)
             g = counts.get("G", 0)
             c = counts.get("C", 0)
             a = counts.get("A", 0)
             t = counts.get("T", 0)
-            feature_dict["gc_content"] = (g + c) / seq_len if seq_len > 0 else 0.0
+            orf_gc = (g + c) / seq_len if seq_len > 0 else 0.0
+            feature_dict["gc_content"] = orf_gc
+            feature_dict["gc_deviation"] = orf_gc - (genome_gc or 0.0)
+            feature_dict["gc3_content"] = self._calculate_gc3(sequence)
             feature_dict["gc_skew"] = (g - c) / (g + c) if (g + c) > 0 else 0.0
             feature_dict["at_skew"] = (a - t) / (a + t) if (a + t) > 0 else 0.0
             feature_dict["purine_content"] = (a + g) / seq_len if seq_len > 0 else 0.0
             feature_dict["effective_num_codons"] = self._calculate_enc(sequence)
             feature_dict["codon_bias_index"] = self._calculate_cbi(sequence)
             feature_dict["has_hairpin_near_stop"] = self._detect_hairpin_near_stop(sequence)
+            # -10 box: use genome_start if genome_seq provided, else 0.0
+            if genome_seq is not None:
+                gstart = int(candidate.get("genome_start", candidate.get("start", 0)))
+                feature_dict["minus10_box_score"] = self._score_minus10_box(
+                    genome_seq, gstart, upstream=50
+                )
+            else:
+                feature_dict["minus10_box_score"] = 0.0
             aa_props = self._calculate_amino_acid_properties(sequence)
             feature_dict.update(
                 {
