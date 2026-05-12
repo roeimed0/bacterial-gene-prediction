@@ -4,7 +4,28 @@ Records trained artifact provenance for models in this directory.
 
 ---
 
-## orf_classifier_lgb.pkl
+## orf_classifier_lgb.pkl  ← **CURRENT PRODUCTION** (promoted 2026-05-13)
+
+| Field | Value |
+|---|---|
+| Type | LightGBM binary classifier (OrfGroupClassifier) |
+| Task | Predict whether a group of nested ORFs contains a real gene |
+| Features | 26 group-level features (see feature_names.pkl) |
+| Training data | 68 genomes from GENOME_CATALOG (stratified by taxonomy, seed=42) |
+| Validation | 16 genomes (early stopping) |
+| Test | 16 held-out genomes |
+| Threshold | 0.05 (calibrated via holdout sweep — best F1 at precision ≥ 81.57%) |
+| Trained | 2026-05-12 |
+| Performance | +0.31pp overall F1, +0.77pp Actinobacteria, 0 regressions on 20 clean holdout genomes |
+| Script | `scripts/train_lgb.py --seed 42 --no-val-compare` |
+| Previous | `orf_classifier_lgb_v1_backup.pkl` (31 features, 2026-05-06) |
+
+**Feature changes vs v1:** Removed 7 zero-importance features (strand fractions, 5 *_max relative).
+Added `top_orf_is_longest` and `length_ratio_max_min`.
+
+---
+
+## orf_classifier_lgb.pkl  ← ARCHIVED BELOW (was v1)
 
 | Field | Value |
 |---|---|

@@ -54,13 +54,17 @@ class OrfGroupClassifier:
         self.model = joblib.load(str(model_path))
         logger.info("Loaded model: %s", {model_path})
 
-        # Load feature names (should be in same directory)
-        feature_path = model_path.parent / "feature_names.pkl"
-        if feature_path.exists():
+        # Prefer model-specific feature file so multiple versions don't collide.
+        specific = model_path.parent / f"{model_path.stem}_feature_names.pkl"
+        shared = model_path.parent / "feature_names.pkl"
+        feature_path = specific if specific.exists() else (shared if shared.exists() else None)
+        if feature_path:
             self.feature_names = joblib.load(str(feature_path))
-            logger.info("Loaded %d features", len(self.feature_names or []))
+            logger.info(
+                "Loaded %d features from %s", len(self.feature_names or []), feature_path.name
+            )
         else:
-            logger.warning("feature_names.pkl not found in %s", model_path.parent)
+            logger.warning("No feature_names file found for %s", model_path.name)
             self.feature_names = None
 
     def _entropy_from_probs(self, arr, base=2):
@@ -497,6 +501,37 @@ class HybridGeneFilter:
         self.threshold = data["threshold"]
         if "feature_names" in data:
             self.feature_names = data["feature_names"]
+        else:
+            # Legacy model saved before feature_names was included.
+            n = data["num_traditional_features"]
+            if n == 25:
+                self.feature_names = [
+                    "codon_score_norm",
+                    "imm_score_norm",
+                    "rbs_score_norm",
+                    "length_score_norm",
+                    "start_score_norm",
+                    "combined_score",
+                    "length_bp",
+                    "length_codons",
+                    "length_log",
+                    "start_codon_type",
+                    "stop_codon_type",
+                    "has_kozak_like",
+                    "gc_content",
+                    "gc_skew",
+                    "at_skew",
+                    "purine_content",
+                    "effective_num_codons",
+                    "codon_bias_index",
+                    "has_hairpin_near_stop",
+                    "hydrophobicity_mean",
+                    "hydrophobicity_std",
+                    "charge_mean",
+                    "aromatic_fraction",
+                    "small_fraction",
+                    "polar_fraction",
+                ]
 
         logger.info("Loaded hybrid model from %s", {model_path})
 
@@ -523,11 +558,13 @@ class HybridGeneFilter:
         if n_pos == 0:
             raise ValueError("Training set has no positive examples.")
 
-        # Extract features and sequences once
+        # Extract features and pre-encode sequences — both kept as CPU tensors.
+        # Moving the full tensor to GPU would OOM on large training sets;
+        # instead index into the CPU tensor and move each batch to device.
         df_train = self.extract_features(candidates)
         X_feat = torch.tensor(df_train[self.feature_names].values, dtype=torch.float32)
         max_len = min(max((len(c.get("sequence", "")) for c in candidates), default=300), 1500)
-        X_seq = self._one_hot_encode_dna(candidates, max_len=max_len)
+        X_seq = self._one_hot_encode_dna(candidates, max_len=max_len)  # stays on CPU
         y = torch.tensor(labels, dtype=torch.float32)
 
         num_features = len(self.feature_names)
@@ -540,19 +577,18 @@ class HybridGeneFilter:
 
         def _loss_fn(logits, targets):
             if focal_loss:
-                # Focal loss: -alpha*(1-p)^gamma * log(p)
                 bce = F.binary_cross_entropy_with_logits(logits, targets, reduction="none")
                 p_t = torch.exp(-bce)
                 return (0.25 * (1 - p_t) ** 2 * bce).mean()
             return F.binary_cross_entropy_with_logits(logits, targets, pos_weight=pos_weight)
 
-        # Validation tensors (extracted once)
+        # Validation tensors — pre-encoded on CPU, chunked to GPU during eval
         val_feat, val_seq, val_y = None, None, None
         if val_candidates is not None and val_labels is not None:
             val_labels_arr = np.asarray(val_labels, dtype=np.float32)
             df_val = self.extract_features(val_candidates)
             val_feat = torch.tensor(df_val[self.feature_names].values, dtype=torch.float32)
-            val_seq = self._one_hot_encode_dna(val_candidates, max_len=max_len)
+            val_seq = self._one_hot_encode_dna(val_candidates, max_len=max_len)  # CPU
             val_y = val_labels_arr
 
         from tqdm import tqdm
@@ -584,6 +620,7 @@ class HybridGeneFilter:
             )
             for start in batch_bar:
                 batch_idx = idx[start : start + batch_size]
+                # Index CPU tensors, then move batch to GPU — no full-dataset GPU alloc
                 b_seq = X_seq[batch_idx].to(self.device)
                 b_feat = X_feat[batch_idx].to(self.device)
                 b_y = y[batch_idx].to(self.device)
@@ -597,19 +634,27 @@ class HybridGeneFilter:
 
                 epoch_loss += loss.item()
                 batch_bar.set_postfix(loss=f"{loss.item():.4f}")
-
                 del b_seq, b_feat, b_y
-                if self.device == "cuda":
-                    torch.cuda.empty_cache()
 
             avg_loss = epoch_loss / num_batches_per_epoch
 
-            # Validation
+            # Validation in chunks of 2048 — balance throughput vs GPU memory.
+            # cache_clear only once after the loop, not per-chunk.
+            val_chunk = 2048
             if val_feat is not None:
                 self.model.eval()
+                v_probs_list = []
                 with torch.no_grad():
-                    v_logits = self.model(val_seq.to(self.device), val_feat.to(self.device))
-                    v_probs = torch.sigmoid(v_logits).cpu().numpy()
+                    for vs in range(0, len(val_seq), val_chunk):
+                        ve = min(vs + val_chunk, len(val_seq))
+                        vb_seq = val_seq[vs:ve].to(self.device)
+                        vb_feat = val_feat[vs:ve].to(self.device)
+                        v_probs_list.append(
+                            torch.sigmoid(self.model(vb_seq, vb_feat)).cpu().numpy()
+                        )
+                if self.device == "cuda":
+                    torch.cuda.empty_cache()
+                v_probs = np.concatenate(v_probs_list)
                 val_preds = (v_probs >= 0.5).astype(int)
                 val_f1 = float(_f1(val_y, val_preds, zero_division=0))
                 scheduler.step(1 - val_f1)
@@ -855,6 +900,7 @@ class HybridGeneFilter:
             }
             length = int(candidate.get("length", len(sequence)))
             feature_dict["length_bp"] = float(length)
+            feature_dict["length_codons"] = float(length / 3.0)  # legacy compat
             feature_dict["length_log"] = math.log(max(length, 1))
             start_codon = candidate.get(
                 "start_codon", sequence[:3] if len(sequence) >= 3 else "ATG"
@@ -864,6 +910,7 @@ class HybridGeneFilter:
             stop_codon = sequence[-3:] if len(sequence) >= 3 else "TAA"
             stop_map = {"TAA": 0.0, "TAG": 1.0, "TGA": 2.0}
             feature_dict["stop_codon_type"] = float(stop_map.get(stop_codon, 0.0))
+            feature_dict["has_kozak_like"] = float(candidate.get("rbs_score", 0) > 3.0)  # legacy
             counts = Counter(sequence)
             seq_len = len(sequence)
             g = counts.get("G", 0)
