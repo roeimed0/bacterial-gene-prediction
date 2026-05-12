@@ -126,11 +126,47 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-# Build genome list from TEST_GENOMES + GENOME_CATALOG for group lookup
+# Taxonomy group mapping for the clean holdout genomes.
+# These accessions are intentionally absent from GENOME_CATALOG (training pool),
+# so their group must be declared here rather than looked up from the catalog.
+_HOLDOUT_GROUPS = {
+    # Proteobacteria
+    "NC_002947.4": ("Pseudomonas putida KT2440", "Proteobacteria"),
+    "NC_002929.2": ("Bordetella pertussis Tohama I", "Proteobacteria"),
+    "NC_003143.1": ("Yersinia pestis CO92", "Proteobacteria"),
+    "NC_003116.1": ("Neisseria meningitidis Z2491", "Proteobacteria"),
+    "NC_004757.1": ("Nitrosomonas europaea ATCC 19718", "Proteobacteria"),
+    # Firmicutes
+    "NC_008497.1": ("Lactobacillus brevis ATCC 367", "Firmicutes"),
+    "NC_004350.2": ("Streptococcus agalactiae A909", "Firmicutes"),
+    "NC_006270.3": ("Bacillus licheniformis DSM 13", "Firmicutes"),
+    "NC_006274.1": ("Bacillus cereus E33L", "Firmicutes"),
+    "NC_003030.1": ("Clostridium acetobutylicum ATCC 824", "Firmicutes"),
+    # Actinobacteria
+    "NC_003155.5": ("Streptomyces avermitilis MA-4680", "Actinobacteria"),
+    "NC_003450.3": ("Corynebacterium glutamicum ATCC 13032", "Actinobacteria"),
+    "NC_002677.1": ("Mycobacterium leprae TN", "Actinobacteria"),
+    "NC_008268.1": ("Nocardia farcinica IFM 10152", "Actinobacteria"),
+    "NC_006958.1": ("Corynebacterium glutamicum R", "Actinobacteria"),
+    # Archaea
+    "NC_008818.1": ("Hyperthermus butylicus DSM 5456", "Archaea"),
+    "NC_015948.1": ("Haloarcula hispanica ATCC 33960", "Archaea"),
+    "NC_014408.1": ("Methanobrevibacter ruminantium M1", "Archaea"),
+    "NC_019977.1": ("Methanosaeta harundinacea 6Ac", "Archaea"),
+    "NC_007644.1": ("Methanoculleus marisnigri JR1", "Archaea"),
+}
+
+# Build genome list: look up group from GENOME_CATALOG first, then holdout map
 catalog_map = {g["accession"]: g for g in GENOME_CATALOG}
 genomes = []
 for acc in TEST_GENOMES:
-    info = catalog_map.get(acc, {"accession": acc, "name": acc, "group": "Unknown"})
+    if acc in catalog_map:
+        info = catalog_map[acc]
+    elif acc in _HOLDOUT_GROUPS:
+        name, group = _HOLDOUT_GROUPS[acc]
+        info = {"accession": acc, "name": name, "group": group}
+    else:
+        info = {"accession": acc, "name": acc, "group": "Unknown"}
     if args.group and info["group"] != args.group:
         continue
     fasta = os.path.join(DATA_DIR, f"{acc}.fasta")
