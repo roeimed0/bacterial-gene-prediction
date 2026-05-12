@@ -30,7 +30,7 @@ from datetime import datetime
 from pathlib import Path
 from statistics import mean
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.comparative_analysis import compare_orfs_to_reference
 from src.config import GENOME_CATALOG, TEST_GENOMES
@@ -38,9 +38,9 @@ from src.data_management import get_data_dir
 from src.ml_models import HybridGeneFilter, OrfGroupClassifier
 from src.pipeline import predict_genome_from_file
 
-MODELS_DIR = Path(__file__).parent.parent / "models"
+MODELS_DIR = Path(__file__).parent.parent.parent / "models"
 DATA_DIR = get_data_dir("full_dataset")
-LOG_FILE = Path(__file__).parent.parent / "experiments" / "log.json"
+LOG_FILE = Path(__file__).parent.parent.parent / "experiments" / "log.json"
 SEP = "=" * 85
 
 

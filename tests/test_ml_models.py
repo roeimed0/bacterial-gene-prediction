@@ -495,7 +495,7 @@ class TestLabelGroups:
 
     @pytest.fixture(autouse=True)
     def _import(self):
-        from scripts.train_lgb import label_groups
+        from scripts.training.train_lgb import label_groups
 
         self.label_groups = label_groups
 
@@ -551,7 +551,7 @@ class TestBuildSplits:
 
     @pytest.fixture(autouse=True)
     def _import(self):
-        from scripts.train_lgb import build_splits
+        from scripts.training.train_lgb import build_splits
 
         self.build_splits = build_splits
 

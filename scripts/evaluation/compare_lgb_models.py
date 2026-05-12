@@ -20,10 +20,9 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import f1_score, precision_score, recall_score
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from scripts.train_lgb import _load_ref_set, label_groups
-
 from src.config import FIRST_FILTER_THRESHOLD, GENOME_CATALOG, START_SELECTION_WEIGHTS
 from src.data_management import (
     download_genome_and_reference,
@@ -42,7 +41,7 @@ from src.traditional_methods import (
     score_all_orfs,
 )
 
-MODELS_DIR = Path(__file__).parent.parent / "models"
+MODELS_DIR = Path(__file__).parent.parent.parent / "models"
 DATA_DIR = get_data_dir("full_dataset")
 SEP = "=" * 85
 

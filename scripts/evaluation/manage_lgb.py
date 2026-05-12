@@ -30,7 +30,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from sklearn.metrics import f1_score, precision_score, recall_score
 
@@ -52,7 +52,7 @@ from src.traditional_methods import (
     score_all_orfs,
 )
 
-MODELS_DIR = Path(__file__).parent.parent / "models"
+MODELS_DIR = Path(__file__).parent.parent.parent / "models"
 DATA_DIR = get_data_dir("full_dataset")
 PROD_MODEL = MODELS_DIR / "orf_classifier_lgb.pkl"
 NEW_MODEL = MODELS_DIR / "orf_classifier_lgb_v2.pkl"
