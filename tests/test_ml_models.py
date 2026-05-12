@@ -263,6 +263,18 @@ class TestHybridGeneFilterPredict:
         assert len(probs) == 0
         assert len(gene_ids) == 0
 
+    def test_empty_list_return_types_are_1d_issue_150(self):
+        # Regression for #150: empty input must return 1-D arrays (shape (0,))
+        # not 2-D arrays (shape (0, 1)) which would silently break unpacking.
+        import numpy as np
+
+        hgf = HybridGeneFilter()
+        hgf.model = MagicMock()
+        preds, probs, gene_ids = hgf.predict([], genome_id="test")
+        for arr in (preds, probs):
+            if isinstance(arr, np.ndarray):
+                assert arr.ndim == 1, f"Expected 1-D, got shape {arr.shape}"
+
     def test_raises_value_error_on_missing_features_issue_47(self, synthetic_candidate):
         """
         Regression for issue #47: predict() silently constructed a feature
