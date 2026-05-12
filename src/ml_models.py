@@ -160,6 +160,9 @@ class OrfGroupClassifier:
             max_start = start.max()
             max_ss = ss.max()
 
+            # Superset: always compute ALL known features across every model
+            # generation so predict_groups() can select what it needs.
+            strands = orf_group["strand"].tolist()
             group_features = {
                 "group_id": group_id,
                 "num_orfs": n,
@@ -181,7 +184,17 @@ class OrfGroupClassifier:
                 "imm_mean": imm.mean(),
                 "start_select_max": max_ss,
                 "start_select_mean": ss.mean(),
-                # Relative-mean features (max variants removed — always 1.0 or redundant)
+                # v1 features kept for backward compat with old models
+                "strand_plus_frac": strands.count("forward") / n,
+                "strand_minus_frac": strands.count("reverse") / n,
+                "rel_combined_max": (
+                    combined / max_combined if max_combined > 0 else np.zeros(n)
+                ).max(),
+                "rel_rbs_max": (rbs / max_rbs if max_rbs > 0 else np.zeros(n)).max(),
+                "rel_codon_max": (codon / max_codon if max_codon > 0 else np.zeros(n)).max(),
+                "rel_start_max": (start / max_start if max_start > 0 else np.zeros(n)).max(),
+                "rel_start_select_max": (ss / max_ss if max_ss > 0 else np.zeros(n)).max(),
+                # Current features
                 "rel_combined_mean": (
                     combined / max_combined if max_combined > 0 else np.zeros(n)
                 ).mean(),
@@ -189,7 +202,6 @@ class OrfGroupClassifier:
                 "rel_codon_mean": (codon / max_codon if max_codon > 0 else np.zeros(n)).mean(),
                 "rel_start_mean": (start / max_start if max_start > 0 else np.zeros(n)).mean(),
                 "rel_start_select_mean": (ss / max_ss if max_ss > 0 else np.zeros(n)).mean(),
-                # Biological priors: longest ORF is usually the true gene in nested groups
                 "top_orf_is_longest": int(combined.argmax() == lengths.argmax()),
                 "length_ratio_max_min": float(lengths.max() / max(lengths.min(), 1.0)),
                 "frac_top_combined": (combined >= 0.95 * max_combined).sum() / n,
