@@ -14,18 +14,15 @@ import contextlib
 import io
 import os
 import sys
-from collections import defaultdict
 from pathlib import Path
 from statistics import mean
-
-import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.comparative_analysis import compare_orfs_to_reference
 from src.config import GENOME_CATALOG, TEST_GENOMES
 from src.data_management import get_data_dir
-from src.ml_models import HybridGeneFilter, OrfGroupClassifier
+from src.ml_models import OrfGroupClassifier
 from src.pipeline import predict_genome_from_file
 
 MODELS_DIR = Path(__file__).parent.parent / "models"
@@ -77,7 +74,7 @@ hf = None
 hf_t = None
 
 print(f"LGB: {args.lgb_path}")
-print(f"HF:  DISABLED (LGB threshold sweep only)")
+print("HF:  DISABLED (LGB threshold sweep only)")
 print(f"Target precision >= {args.target_prec:.2f}%\n")
 
 # Run pipeline at each threshold for all genomes

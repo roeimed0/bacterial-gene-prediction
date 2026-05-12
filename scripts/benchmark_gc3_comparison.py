@@ -17,14 +17,11 @@ from collections import defaultdict
 from pathlib import Path
 from statistics import mean
 
-import numpy as np
-
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import src.traditional_methods as tm
 from src.comparative_analysis import compare_orfs_to_reference
 from src.config import (
-    FIRST_FILTER_THRESHOLD,
     GENOME_CATALOG,
     START_SELECTION_WEIGHTS,
     TEST_GENOMES,

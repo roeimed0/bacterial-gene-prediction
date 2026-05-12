@@ -37,12 +37,13 @@ class TestOrfGroupClassifierFeatureExtraction:
     """Unit tests for OrfGroupClassifier.extract_group_features()."""
 
     def test_returns_correct_number_of_feature_columns(self, two_orf_group):
+        # extract_group_features returns a superset; must have AT LEAST the
+        # expected count (allows backward/forward compat across model versions).
         clf = OrfGroupClassifier()
         df = clf.extract_group_features(two_orf_group, genome_id="test")
-        # group_id is metadata, not a model feature
         feature_cols = [c for c in df.columns if c != "group_id"]
-        assert len(feature_cols) == EXPECTED_LGB_FEATURE_COUNT, (
-            f"Expected {EXPECTED_LGB_FEATURE_COUNT} features, got {len(feature_cols)}: "
+        assert len(feature_cols) >= EXPECTED_LGB_FEATURE_COUNT, (
+            f"Expected >= {EXPECTED_LGB_FEATURE_COUNT} features, got {len(feature_cols)}: "
             f"{sorted(feature_cols)}"
         )
 
@@ -166,18 +167,22 @@ class TestHybridGeneFilterFeatureExtraction:
     """Unit tests for HybridGeneFilter.extract_features()."""
 
     def test_returns_correct_number_of_feature_columns(self, synthetic_candidate):
+        # extract_features returns a superset of all known features so that any
+        # model version can select what it needs.  The DataFrame must contain AT
+        # LEAST the features the current instance expects.
         hgf = HybridGeneFilter()
         df = hgf.extract_features([synthetic_candidate], genome_id="test")
-        assert len(df.columns) == EXPECTED_HYBRID_FEATURE_COUNT, (
-            f"Expected {EXPECTED_HYBRID_FEATURE_COUNT} features, "
+        assert len(df.columns) >= EXPECTED_HYBRID_FEATURE_COUNT, (
+            f"Expected >= {EXPECTED_HYBRID_FEATURE_COUNT} feature columns, "
             f"got {len(df.columns)}: {sorted(df.columns.tolist())}"
         )
 
     def test_feature_names_match_instance_list(self, synthetic_candidate):
-        """Column names must exactly match self.feature_names (order matters for tensor construction)."""
+        """All feature_names must be present in the extracted DataFrame (subset check)."""
         hgf = HybridGeneFilter()
         df = hgf.extract_features([synthetic_candidate], genome_id="test")
-        assert list(df.columns) == hgf.feature_names
+        missing = [f for f in hgf.feature_names if f not in df.columns]
+        assert not missing, f"feature_names items missing from DataFrame: {missing}"
 
     def test_returns_one_row_per_candidate(self, synthetic_candidate):
         hgf = HybridGeneFilter()

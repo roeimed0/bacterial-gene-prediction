@@ -31,19 +31,19 @@ NCBI_EMAIL = "your_email@example.com"
 # Use ONLY this list for benchmark evaluation — never add GENOME_CATALOG
 # entries here and never add these entries to GENOME_CATALOG.
 TEST_GENOMES = [
-    # ── Proteobacteria (5) — distinct genera: Pseudomonas/Bordetella/Yersinia/Neisseria/Nitrosomonas
+    # ── Proteobacteria (5) — distinct genera (Pseudomonas/Bordetella/Yersinia/Neisseria/Nitrosomonas)
     "NC_002947.4",  # Pseudomonas putida KT2440             (Gammaproteobacteria)
     "NC_002929.2",  # Bordetella pertussis Tohama I          (Betaproteobacteria)
     "NC_003143.1",  # Yersinia pestis CO92                   (Gammaproteobacteria)
     "NC_003116.1",  # Neisseria meningitidis Z2491           (Betaproteobacteria)
     "NC_004757.1",  # Nitrosomonas europaea ATCC 19718       (Betaproteobacteria)
-    # ── Firmicutes (5) — Lactobacillus/Streptococcus agalactiae/Bacillus licheniformis/cereus/Clostridium
+    # ── Firmicutes (5) — distinct genera (Lactobacillus/Streptococcus/Bacillus/Clostridium)
     "NC_008497.1",  # Lactobacillus brevis ATCC 367
     "NC_004350.2",  # Streptococcus agalactiae A909
     "NC_006270.3",  # Bacillus licheniformis DSM 13
     "NC_006274.1",  # Bacillus cereus E33L
     "NC_003030.1",  # Clostridium acetobutylicum ATCC 824
-    # ── Actinobacteria (5) — Streptomyces avermitilis/Corynebacterium x2/Mycobacterium leprae/Nocardia
+    # ── Actinobacteria (5) — distinct genera (Streptomyces/Corynebacterium/Mycobacterium/Nocardia)
     "NC_003155.5",  # Streptomyces avermitilis MA-4680
     "NC_003450.3",  # Corynebacterium glutamicum ATCC 13032
     "NC_002677.1",  # Mycobacterium leprae TN
