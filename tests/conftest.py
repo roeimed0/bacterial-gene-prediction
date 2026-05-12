@@ -71,6 +71,7 @@ _BASE_ORF = {
     "start_score": 0.7,
     "imm_score": 0.3,
     "strand": "forward",
+    "length": 300,
     # normalized scores used by start-selection weighting
     "codon_score_norm": 0.6,
     "imm_score_norm": 0.4,

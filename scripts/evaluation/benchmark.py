@@ -124,6 +124,15 @@ parser.add_argument(
 parser.add_argument(
     "--hf-path", help="Override Hybrid model path (default: models/hybrid_best_model.pkl)"
 )
+parser.add_argument(
+    "--lgb-threshold", type=float, default=None, help="Override LGB threshold (default: 0.07)"
+)
+parser.add_argument(
+    "--hf-threshold",
+    type=float,
+    default=None,
+    help="Override Hybrid threshold (default: model's saved value)",
+)
 args = parser.parse_args()
 
 # Taxonomy group mapping for the clean holdout genomes.
@@ -183,8 +192,8 @@ print(SEP)
 _lgb_path = args.lgb_path or str(MODELS_DIR / "orf_classifier_lgb.pkl")
 _hf_path = args.hf_path or str(MODELS_DIR / "hybrid_best_model.pkl")
 lgb, hf = load_models(_lgb_path, _hf_path)
-lgb_t = 0.07
-hf_t = hf.threshold
+lgb_t = args.lgb_threshold if args.lgb_threshold is not None else 0.07
+hf_t = args.hf_threshold if args.hf_threshold is not None else hf.threshold
 
 print(f"LGB threshold: {lgb_t}  |  Hybrid threshold: {hf_t}")
 print(f"LGB model: {_lgb_path}  [{_model_hash(Path(_lgb_path))}]")

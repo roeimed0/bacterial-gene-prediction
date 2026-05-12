@@ -24,8 +24,8 @@ from src.ml_models import HybridGeneFilter, OrfGroupClassifier
 # HybridGeneFilter.feature_names — see role_ml_engineer.md for the full list)
 # ---------------------------------------------------------------------------
 
-EXPECTED_LGB_FEATURE_COUNT = 31
-EXPECTED_HYBRID_FEATURE_COUNT = 25
+EXPECTED_LGB_FEATURE_COUNT = 26  # 31 - 7 removed + 2 added (#123, #125)
+EXPECTED_HYBRID_FEATURE_COUNT = 26  # 25 - 2 removed + 3 added (#124, #126, #127)
 
 
 # ===========================================================================
@@ -81,41 +81,24 @@ class TestOrfGroupClassifierFeatureExtraction:
         df = clf.extract_group_features(two_orf_group, genome_id="test")
         assert df.loc[0, "num_orfs"] == 2
 
-    def test_strand_fractions_sum_to_one(self, two_orf_group):
+    def test_top_orf_is_longest_is_binary(self, two_orf_group):
+        # top_orf_is_longest must be 0 or 1 (int boolean)
         clf = OrfGroupClassifier()
         df = clf.extract_group_features(two_orf_group, genome_id="test")
-        total = df.loc[0, "strand_plus_frac"] + df.loc[0, "strand_minus_frac"]
-        assert total == pytest.approx(1.0, abs=1e-6)
+        assert df.loc[0, "top_orf_is_longest"] in (0, 1)
 
-    def test_strand_fractions_use_forward_reverse_labels_issue_97(self, two_orf_group):
-        """Regression #97: strand_plus_frac / strand_minus_frac must use
-        'forward' / 'reverse' labels (not '+' / '-').
-
-        Before the fix both features were always 0.0 because the pipeline
-        stores strand as 'forward'/'reverse' but the code counted '+'/'-'.
-        """
+    def test_length_ratio_max_min_ge_one(self, two_orf_group):
+        # length_ratio_max_min >= 1.0 by definition
         clf = OrfGroupClassifier()
         df = clf.extract_group_features(two_orf_group, genome_id="test")
-        # All ORFs in two_orf_group are on the 'forward' strand (conftest.py)
-        assert df.loc[0, "strand_plus_frac"] == pytest.approx(
-            1.0, abs=1e-6
-        ), "strand_plus_frac should be 1.0 for a forward-strand group"
-        assert df.loc[0, "strand_minus_frac"] == pytest.approx(
-            0.0, abs=1e-6
-        ), "strand_minus_frac should be 0.0 for a forward-strand group"
+        assert df.loc[0, "length_ratio_max_min"] >= 1.0
 
-    def test_strand_fractions_reverse_group_issue_97(self):
-        """Regression #97: verify reverse-strand group gives correct fractions."""
-        from tests.conftest import _BASE_ORF
-
-        reverse_orf = dict(_BASE_ORF)
-        reverse_orf["strand"] = "reverse"
-        reverse_group = {"group_1": [reverse_orf, dict(reverse_orf)]}
-
+    def test_top_orf_is_longest_single_orf_group(self, single_orf_group):
+        # Single-ORF group: top scorer == longest by definition
         clf = OrfGroupClassifier()
-        df = clf.extract_group_features(reverse_group, genome_id="test")
-        assert df.loc[0, "strand_plus_frac"] == pytest.approx(0.0, abs=1e-6)
-        assert df.loc[0, "strand_minus_frac"] == pytest.approx(1.0, abs=1e-6)
+        df = clf.extract_group_features(single_orf_group, genome_id="test")
+        assert df.loc[0, "top_orf_is_longest"] == 1
+        assert df.loc[0, "length_ratio_max_min"] == pytest.approx(1.0, abs=1e-6)
 
     def test_combined_mean_within_score_range(self, two_orf_group):
         clf = OrfGroupClassifier()

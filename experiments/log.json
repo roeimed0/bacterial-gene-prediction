@@ -343,5 +343,387 @@
         "precision": 87.05035971223022
       }
     ]
+  },
+  {
+    "timestamp": "2026-05-13T00:37:14.715142",
+    "description": "new pipeline: LGB v2 (26-feat) + Hybrid v2 (26-feat)",
+    "is_baseline": false,
+    "models": {
+      "lgb": {
+        "path": "models/orf_classifier_lgb_v2.pkl",
+        "hash": "32960f5f2f",
+        "threshold": 0.07
+      },
+      "hybrid": {
+        "path": "models/hybrid_best_model_v2.pkl",
+        "hash": "4c291c2bb1",
+        "threshold": 0.4356970489025116
+      }
+    },
+    "n_genomes": 20,
+    "overall": {
+      "f1": 70.91636477363532,
+      "sensitivity": 63.19716512951182,
+      "precision": 82.03454375792136
+    },
+    "by_group": {
+      "Proteobacteria": {
+        "f1": 69.50923080440296,
+        "sensitivity": 59.97173487636,
+        "precision": 83.5542204017402,
+        "n": 5
+      },
+      "Firmicutes": {
+        "f1": 82.70874950664769,
+        "sensitivity": 78.15292810527382,
+        "precision": 87.85826936469378,
+        "n": 5
+      },
+      "Actinobacteria": {
+        "f1": 61.03342957686296,
+        "sensitivity": 50.30420348052568,
+        "precision": 78.67670635619278,
+        "n": 5
+      },
+      "Archaea": {
+        "f1": 70.41404920662765,
+        "sensitivity": 64.3597940558878,
+        "precision": 78.04897890905866,
+        "n": 5
+      }
+    },
+    "results": [
+      {
+        "accession": "NC_002947.4",
+        "group": "Proteobacteria",
+        "f1": 69.39575394665214,
+        "sensitivity": 56.708185053380774,
+        "precision": 89.39691444600281
+      },
+      {
+        "accession": "NC_002929.2",
+        "group": "Proteobacteria",
+        "f1": 57.30612244897959,
+        "sensitivity": 45.525291828793776,
+        "precision": 77.31277533039648
+      },
+      {
+        "accession": "NC_003143.1",
+        "group": "Proteobacteria",
+        "f1": 79.31803278688524,
+        "sensitivity": 73.5051045211473,
+        "precision": 86.12930788949016
+      },
+      {
+        "accession": "NC_003116.1",
+        "group": "Proteobacteria",
+        "f1": 70.3723986856517,
+        "sensitivity": 60.159176029962545,
+        "precision": 84.76253298153034
+      },
+      {
+        "accession": "NC_004757.1",
+        "group": "Proteobacteria",
+        "f1": 71.15384615384616,
+        "sensitivity": 63.9609169485156,
+        "precision": 80.16957136128121
+      },
+      {
+        "accession": "NC_008497.1",
+        "group": "Firmicutes",
+        "f1": 83.97527341892534,
+        "sensitivity": 80.0543970988214,
+        "precision": 88.3
+      },
+      {
+        "accession": "NC_004350.2",
+        "group": "Firmicutes",
+        "f1": 86.05729877216916,
+        "sensitivity": 81.62525879917185,
+        "precision": 90.99826889786497
+      },
+      {
+        "accession": "NC_006270.3",
+        "group": "Firmicutes",
+        "f1": 76.04963027948365,
+        "sensitivity": 70.78861409239384,
+        "precision": 82.15542919036014
+      },
+      {
+        "accession": "NC_006274.1",
+        "group": "Firmicutes",
+        "f1": 81.92022449388656,
+        "sensitivity": 76.32119514472456,
+        "precision": 88.40579710144928
+      },
+      {
+        "accession": "NC_003030.1",
+        "group": "Firmicutes",
+        "f1": 85.54132056877376,
+        "sensitivity": 81.97517539125741,
+        "precision": 89.43185163379452
+      },
+      {
+        "accession": "NC_003155.5",
+        "group": "Actinobacteria",
+        "f1": 63.23232323232323,
+        "sensitivity": 51.80799592564298,
+        "precision": 81.12041467304624
+      },
+      {
+        "accession": "NC_003450.3",
+        "group": "Actinobacteria",
+        "f1": 70.11339611762445,
+        "sensitivity": 60.77974008663779,
+        "precision": 82.83378746594006
+      },
+      {
+        "accession": "NC_002677.1",
+        "group": "Actinobacteria",
+        "f1": 40.169332079021636,
+        "sensitivity": 29.20656634746922,
+        "precision": 64.30722891566265
+      },
+      {
+        "accession": "NC_008268.1",
+        "group": "Actinobacteria",
+        "f1": 62.43340780202783,
+        "sensitivity": 50.34645232815964,
+        "precision": 82.15739484396201
+      },
+      {
+        "accession": "NC_006958.1",
+        "group": "Actinobacteria",
+        "f1": 69.21868865331764,
+        "sensitivity": 59.380262714718754,
+        "precision": 82.96470588235294
+      },
+      {
+        "accession": "NC_008818.1",
+        "group": "Archaea",
+        "f1": 58.03660565723794,
+        "sensitivity": 49.043869516310465,
+        "precision": 71.0676446617767
+      },
+      {
+        "accession": "NC_015948.1",
+        "group": "Archaea",
+        "f1": 75.17857142857143,
+        "sensitivity": 68.58911697621375,
+        "precision": 83.16870802054524
+      },
+      {
+        "accession": "NC_014408.1",
+        "group": "Archaea",
+        "f1": 73.94856278366113,
+        "sensitivity": 70.43227665706053,
+        "precision": 77.8343949044586
+      },
+      {
+        "accession": "NC_019977.1",
+        "group": "Archaea",
+        "f1": 74.36241610738256,
+        "sensitivity": 69.42355889724311,
+        "precision": 80.05780346820809
+      },
+      {
+        "accession": "NC_007644.1",
+        "group": "Archaea",
+        "f1": 70.54409005628517,
+        "sensitivity": 64.31014823261117,
+        "precision": 78.1163434903047
+      }
+    ]
+  },
+  {
+    "timestamp": "2026-05-13T01:23:04.124054",
+    "description": "new pipeline: LGB v2 (26-feat, t=0.05) + Hybrid v2 (26-feat, t=0.471)",
+    "is_baseline": false,
+    "models": {
+      "lgb": {
+        "path": "models/orf_classifier_lgb_v2.pkl",
+        "hash": "32960f5f2f",
+        "threshold": 0.05
+      },
+      "hybrid": {
+        "path": "models/hybrid_best_model_v2.pkl",
+        "hash": "0c32f4ed79",
+        "threshold": 0.471
+      }
+    },
+    "n_genomes": 20,
+    "overall": {
+      "f1": 70.89052068180251,
+      "sensitivity": 63.1479927906303,
+      "precision": 81.98573640999027
+    },
+    "by_group": {
+      "Proteobacteria": {
+        "f1": 69.64989935434797,
+        "sensitivity": 60.23812143783975,
+        "precision": 83.40115360312582,
+        "n": 5
+      },
+      "Firmicutes": {
+        "f1": 82.91955649416434,
+        "sensitivity": 78.09308185330251,
+        "precision": 88.41793237034018,
+        "n": 5
+      },
+      "Actinobacteria": {
+        "f1": 61.033190972024435,
+        "sensitivity": 50.40050237126804,
+        "precision": 78.4510635206455,
+        "n": 5
+      },
+      "Archaea": {
+        "f1": 69.95943590667329,
+        "sensitivity": 63.86026550011087,
+        "precision": 77.67279614584957,
+        "n": 5
+      }
+    },
+    "results": [
+      {
+        "accession": "NC_002947.4",
+        "group": "Proteobacteria",
+        "f1": 69.57844415471534,
+        "sensitivity": 56.97508896797153,
+        "precision": 89.34151785714286
+      },
+      {
+        "accession": "NC_002929.2",
+        "group": "Proteobacteria",
+        "f1": 57.25832525056579,
+        "sensitivity": 45.94033722438392,
+        "precision": 75.97597597597597
+      },
+      {
+        "accession": "NC_003143.1",
+        "group": "Proteobacteria",
+        "f1": 79.54366640440598,
+        "sensitivity": 73.72386971317452,
+        "precision": 86.36104783599089
+      },
+      {
+        "accession": "NC_003116.1",
+        "group": "Proteobacteria",
+        "f1": 71.16868798235943,
+        "sensitivity": 60.44007490636704,
+        "precision": 86.52815013404826
+      },
+      {
+        "accession": "NC_004757.1",
+        "group": "Proteobacteria",
+        "f1": 70.70037297969331,
+        "sensitivity": 64.11123637730176,
+        "precision": 78.79907621247114
+      },
+      {
+        "accession": "NC_008497.1",
+        "group": "Firmicutes",
+        "f1": 84.20047732696898,
+        "sensitivity": 79.9637352674524,
+        "precision": 88.91129032258065
+      },
+      {
+        "accession": "NC_004350.2",
+        "group": "Firmicutes",
+        "f1": 86.12859097127222,
+        "sensitivity": 81.46997929606626,
+        "precision": 91.35229251305861
+      },
+      {
+        "accession": "NC_006270.3",
+        "group": "Firmicutes",
+        "f1": 76.3962597927723,
+        "sensitivity": 70.53196453569763,
+        "precision": 83.32414553472988
+      },
+      {
+        "accession": "NC_006274.1",
+        "group": "Firmicutes",
+        "f1": 82.12996389891697,
+        "sensitivity": 76.47058823529412,
+        "precision": 88.69395711500975
+      },
+      {
+        "accession": "NC_003030.1",
+        "group": "Firmicutes",
+        "f1": 85.74249048089126,
+        "sensitivity": 82.02914193200216,
+        "precision": 89.80797636632201
+      },
+      {
+        "accession": "NC_003155.5",
+        "group": "Actinobacteria",
+        "f1": 63.46242863755593,
+        "sensitivity": 52.368220015278844,
+        "precision": 80.52075176194205
+      },
+      {
+        "accession": "NC_003450.3",
+        "group": "Actinobacteria",
+        "f1": 70.00385059684251,
+        "sensitivity": 60.57980673108963,
+        "precision": 82.9001367989056
+      },
+      {
+        "accession": "NC_002677.1",
+        "group": "Actinobacteria",
+        "f1": 40.301673344331846,
+        "sensitivity": 29.24076607387141,
+        "precision": 64.8218347232752
+      },
+      {
+        "accession": "NC_008268.1",
+        "group": "Actinobacteria",
+        "f1": 62.32280102476516,
+        "sensitivity": 50.56818181818182,
+        "precision": 81.19715175789942
+      },
+      {
+        "accession": "NC_006958.1",
+        "group": "Actinobacteria",
+        "f1": 69.07520125662674,
+        "sensitivity": 59.24553721791849,
+        "precision": 82.81544256120527
+      },
+      {
+        "accession": "NC_008818.1",
+        "group": "Archaea",
+        "f1": 58.48303393213573,
+        "sensitivity": 49.437570303712036,
+        "precision": 71.57980456026058
+      },
+      {
+        "accession": "NC_015948.1",
+        "group": "Archaea",
+        "f1": 74.4956772334294,
+        "sensitivity": 67.38351254480287,
+        "precision": 83.28634716069271
+      },
+      {
+        "accession": "NC_014408.1",
+        "group": "Archaea",
+        "f1": 73.02452316076295,
+        "sensitivity": 69.5100864553314,
+        "precision": 76.91326530612244
+      },
+      {
+        "accession": "NC_019977.1",
+        "group": "Archaea",
+        "f1": 73.7877094972067,
+        "sensitivity": 68.96407685881371,
+        "precision": 79.33685728015377
+      },
+      {
+        "accession": "NC_007644.1",
+        "group": "Archaea",
+        "f1": 70.00623570983163,
+        "sensitivity": 64.00608133789434,
+        "precision": 77.24770642201835
+      }
+    ]
   }
 ]
