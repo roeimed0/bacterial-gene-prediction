@@ -611,3 +611,159 @@ class TestBuildSplits:
         _, val1, test1 = self.build_splits(groups, val_per_group=4, test_per_group=4, seed=1)
         _, val2, test2 = self.build_splits(groups, val_per_group=4, test_per_group=4, seed=2)
         assert val1 != val2 or test1 != test2
+
+
+# ===========================================================================
+# HybridGeneFilter — train / calibrate_threshold / save  (issue #131)
+# ===========================================================================
+
+_SEQ = "ATG" + "CAG" * 30 + "TAA"  # 96 bp synthetic ORF
+_CANDIDATE = {
+    "sequence": _SEQ,
+    "length": len(_SEQ),
+    "start_codon": "ATG",
+    "codon_score_norm": 0.5,
+    "imm_score_norm": 0.5,
+    "rbs_score_norm": 0.5,
+    "length_score_norm": 0.5,
+    "start_score_norm": 0.5,
+    "combined_score": 0.7,
+    "rbs_score": 2.0,
+}
+
+
+def _make_candidates(n: int, rng=None) -> list:
+    """Return n candidate dicts with slightly varied scores."""
+    rng = rng or np.random.default_rng(0)
+    cands = []
+    for _ in range(n):
+        c = dict(_CANDIDATE)
+        c["codon_score_norm"] = float(rng.uniform(0, 1))
+        c["combined_score"] = float(rng.uniform(0, 1))
+        cands.append(c)
+    return cands
+
+
+def _make_binary_labels(n: int, pos_frac: float = 0.2, seed: int = 0) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    labels = np.zeros(n, dtype=np.float32)
+    pos_idx = rng.choice(n, size=int(n * pos_frac), replace=False)
+    labels[pos_idx] = 1.0
+    return labels
+
+
+class TestHybridGeneFilterTrain:
+    """Unit tests for HybridGeneFilter.train() — issue #131."""
+
+    def test_train_sets_model_attribute(self):
+        hgf = HybridGeneFilter()
+        cands = _make_candidates(40)
+        labels = _make_binary_labels(40, pos_frac=0.25)
+        hgf.train(cands, labels, epochs=2, batch_size=16)
+        assert hgf.model is not None
+
+    def test_train_raises_on_all_negative_labels(self):
+        hgf = HybridGeneFilter()
+        cands = _make_candidates(20)
+        labels = np.zeros(20, dtype=np.float32)
+        with pytest.raises(ValueError, match="no positive examples"):
+            hgf.train(cands, labels, epochs=1)
+
+    def test_trained_model_produces_probabilities_in_unit_interval(self):
+        hgf = HybridGeneFilter()
+        cands = _make_candidates(40)
+        labels = _make_binary_labels(40, pos_frac=0.25)
+        hgf.train(cands, labels, epochs=2, batch_size=16)
+        _, probs, _ = hgf.predict(cands, batch_size=16)
+        assert probs.shape == (40,)
+        assert np.all((probs >= 0.0) & (probs <= 1.0))
+
+    def test_train_with_val_set_runs_without_error(self):
+        hgf = HybridGeneFilter()
+        tr = _make_candidates(40, rng=np.random.default_rng(0))
+        vl = _make_candidates(10, rng=np.random.default_rng(1))
+        hgf.train(
+            tr,
+            _make_binary_labels(40, pos_frac=0.25, seed=0),
+            val_candidates=vl,
+            val_labels=_make_binary_labels(10, pos_frac=0.3, seed=1),
+            epochs=3,
+            batch_size=16,
+        )
+        assert hgf.model is not None
+
+    def test_focal_loss_flag_runs_without_error(self):
+        hgf = HybridGeneFilter()
+        cands = _make_candidates(30)
+        labels = _make_binary_labels(30, pos_frac=0.3)
+        hgf.train(cands, labels, epochs=2, batch_size=16, focal_loss=True)
+        assert hgf.model is not None
+
+
+class TestHybridGeneFilterCalibrateThreshold:
+    """Unit tests for HybridGeneFilter.calibrate_threshold() — issue #131."""
+
+    @pytest.fixture(autouse=True)
+    def trained_hgf(self):
+        hgf = HybridGeneFilter()
+        cands = _make_candidates(60)
+        labels = _make_binary_labels(60, pos_frac=0.25)
+        hgf.train(cands, labels, epochs=3, batch_size=16)
+        self.hgf = hgf
+        self.cands = cands
+        self.labels = labels
+
+    def test_returns_float_in_unit_interval(self):
+        t = self.hgf.calibrate_threshold(self.cands, self.labels)
+        assert isinstance(t, float)
+        assert 0.0 < t < 1.0
+
+    def test_does_not_mutate_threshold_attribute(self):
+        original = self.hgf.threshold
+        self.hgf.calibrate_threshold(self.cands, self.labels)
+        assert self.hgf.threshold == original
+
+
+class TestHybridGeneFilterSave:
+    """Unit tests for HybridGeneFilter.save() / load() round-trip — issue #131."""
+
+    def _trained(self) -> HybridGeneFilter:
+        hgf = HybridGeneFilter()
+        cands = _make_candidates(40)
+        labels = _make_binary_labels(40, pos_frac=0.25)
+        hgf.train(cands, labels, epochs=2, batch_size=16)
+        return hgf
+
+    def test_save_creates_file(self, tmp_path):
+        hgf = self._trained()
+        path = tmp_path / "model.pkl"
+        hgf.save(str(path))
+        assert path.exists()
+
+    def test_save_raises_when_not_trained(self, tmp_path):
+        hgf = HybridGeneFilter()
+        with pytest.raises(RuntimeError, match="train()"):
+            hgf.save(str(tmp_path / "model.pkl"))
+
+    def test_load_restores_threshold(self, tmp_path):
+        hgf = self._trained()
+        hgf.threshold = 0.42
+        path = tmp_path / "model.pkl"
+        hgf.save(str(path))
+
+        hgf2 = HybridGeneFilter()
+        hgf2.load(str(path))
+        assert hgf2.threshold == pytest.approx(0.42)
+
+    def test_load_roundtrip_preserves_predictions(self, tmp_path):
+        cands = _make_candidates(20)
+        hgf = self._trained()
+        path = tmp_path / "model.pkl"
+        hgf.save(str(path))
+
+        hgf2 = HybridGeneFilter()
+        hgf2.load(str(path))
+
+        _, probs1, _ = hgf.predict(cands, batch_size=16)
+        _, probs2, _ = hgf2.predict(cands, batch_size=16)
+        np.testing.assert_allclose(probs1, probs2, rtol=1e-5)

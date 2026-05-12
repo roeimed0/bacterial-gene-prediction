@@ -499,8 +499,197 @@ class HybridGeneFilter:
 
         self.model = model
         self.threshold = data["threshold"]
+        if "feature_names" in data:
+            self.feature_names = data["feature_names"]
 
         logger.info("Loaded hybrid model from %s", {model_path})
+
+    def train(
+        self,
+        candidates: List[Dict],
+        labels: np.ndarray,
+        val_candidates: Optional[List[Dict]] = None,
+        val_labels: Optional[np.ndarray] = None,
+        epochs: int = 50,
+        batch_size: int = 64,
+        focal_loss: bool = False,
+    ) -> None:
+        """Train HybridGenePredictor from candidate dicts and binary labels.
+
+        Handles class imbalance via pos_weight (BCEWithLogitsLoss) or focal
+        loss.  Runs early stopping on validation F1 with patience=10.
+        """
+        from sklearn.metrics import f1_score as _f1
+
+        labels = np.asarray(labels, dtype=np.float32)
+        n_pos = int(labels.sum())
+        n_neg = int(len(labels) - n_pos)
+        if n_pos == 0:
+            raise ValueError("Training set has no positive examples.")
+
+        # Extract features and sequences once
+        df_train = self.extract_features(candidates)
+        X_feat = torch.tensor(df_train[self.feature_names].values, dtype=torch.float32)
+        max_len = min(max((len(c.get("sequence", "")) for c in candidates), default=300), 1500)
+        X_seq = self._one_hot_encode_dna(candidates, max_len=max_len)
+        y = torch.tensor(labels, dtype=torch.float32)
+
+        num_features = len(self.feature_names)
+        self.model = HybridGenePredictor(num_traditional_features=num_features)
+        self.model.to(self.device)
+
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=1e-3, weight_decay=1e-4)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=5, factor=0.5)
+        pos_weight = torch.tensor([n_neg / n_pos], dtype=torch.float32).to(self.device)
+
+        def _loss_fn(logits, targets):
+            if focal_loss:
+                # Focal loss: -alpha*(1-p)^gamma * log(p)
+                bce = F.binary_cross_entropy_with_logits(logits, targets, reduction="none")
+                p_t = torch.exp(-bce)
+                return (0.25 * (1 - p_t) ** 2 * bce).mean()
+            return F.binary_cross_entropy_with_logits(logits, targets, pos_weight=pos_weight)
+
+        # Validation tensors (extracted once)
+        val_feat, val_seq, val_y = None, None, None
+        if val_candidates is not None and val_labels is not None:
+            val_labels_arr = np.asarray(val_labels, dtype=np.float32)
+            df_val = self.extract_features(val_candidates)
+            val_feat = torch.tensor(df_val[self.feature_names].values, dtype=torch.float32)
+            val_seq = self._one_hot_encode_dna(val_candidates, max_len=max_len)
+            val_y = val_labels_arr
+
+        from tqdm import tqdm
+
+        n = len(candidates)
+        best_val_f1 = -1.0
+        patience_left = 10
+        best_state = None
+        num_batches_per_epoch = max((n + batch_size - 1) // batch_size, 1)
+
+        print(
+            f"  Training HybridGeneFilter: {n} samples, {n_pos} pos, {n_neg} neg, "
+            f"{'focal loss' if focal_loss else f'pos_weight={n_neg/n_pos:.1f}'}, "
+            f"device={self.device}"
+        )
+
+        epoch_bar = tqdm(range(1, epochs + 1), desc="  Training", unit="epoch", leave=True)
+        for epoch in epoch_bar:
+            self.model.train()
+            idx = torch.randperm(n)
+            epoch_loss = 0.0
+
+            batch_bar = tqdm(
+                range(0, n, batch_size),
+                desc=f"    epoch {epoch}/{epochs}",
+                unit="batch",
+                total=num_batches_per_epoch,
+                leave=False,
+            )
+            for start in batch_bar:
+                batch_idx = idx[start : start + batch_size]
+                b_seq = X_seq[batch_idx].to(self.device)
+                b_feat = X_feat[batch_idx].to(self.device)
+                b_y = y[batch_idx].to(self.device)
+
+                optimizer.zero_grad()
+                logits = self.model(b_seq, b_feat)
+                loss = _loss_fn(logits, b_y)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                optimizer.step()
+
+                epoch_loss += loss.item()
+                batch_bar.set_postfix(loss=f"{loss.item():.4f}")
+
+                del b_seq, b_feat, b_y
+                if self.device == "cuda":
+                    torch.cuda.empty_cache()
+
+            avg_loss = epoch_loss / num_batches_per_epoch
+
+            # Validation
+            if val_feat is not None:
+                self.model.eval()
+                with torch.no_grad():
+                    v_logits = self.model(val_seq.to(self.device), val_feat.to(self.device))
+                    v_probs = torch.sigmoid(v_logits).cpu().numpy()
+                val_preds = (v_probs >= 0.5).astype(int)
+                val_f1 = float(_f1(val_y, val_preds, zero_division=0))
+                scheduler.step(1 - val_f1)
+
+                if val_f1 > best_val_f1:
+                    best_val_f1 = val_f1
+                    best_state = {k: v.cpu().clone() for k, v in self.model.state_dict().items()}
+                    patience_left = 10
+                else:
+                    patience_left -= 1
+
+                epoch_bar.set_postfix(
+                    loss=f"{avg_loss:.4f}",
+                    val_f1=f"{val_f1:.4f}",
+                    best=f"{best_val_f1:.4f}",
+                    pat=patience_left,
+                )
+
+                if patience_left == 0:
+                    print(f"\n  Early stopping at epoch {epoch} (best val_f1={best_val_f1:.4f}).")
+                    break
+            else:
+                epoch_bar.set_postfix(loss=f"{avg_loss:.4f}")
+
+        # Restore best checkpoint when validation was used
+        if best_state is not None:
+            self.model.load_state_dict(best_state)
+            print(f"  Restored best checkpoint (val_f1={best_val_f1:.4f})")
+
+        self.model.to(self.device)
+        self.model.eval()
+
+    def calibrate_threshold(
+        self,
+        candidates: List[Dict],
+        labels: np.ndarray,
+    ) -> float:
+        """Sweep decision thresholds and return the one maximising F1.
+
+        Does not mutate self.threshold — caller decides whether to adopt it.
+        """
+        from sklearn.metrics import precision_recall_curve
+
+        labels = np.asarray(labels)
+        _, probs, _ = self.predict(candidates, batch_size=256)
+        precision, recall, thresholds = precision_recall_curve(labels, probs)
+        f1_scores = np.where(
+            (precision + recall) > 0,
+            2 * precision * recall / (precision + recall),
+            0.0,
+        )
+        best_idx = int(np.argmax(f1_scores[:-1]))
+        best_t = float(thresholds[best_idx])
+        best_f1 = float(f1_scores[best_idx])
+        logger.info("Best threshold: %.3f  (val F1=%.4f)", best_t, best_f1)
+        print(f"  Calibrated threshold: {best_t:.3f}  (F1={best_f1:.4f})")
+        return best_t
+
+    def save(self, model_path: str) -> None:
+        """Persist model weights, threshold, and feature list to a pickle file."""
+        import pickle
+
+        if self.model is None:
+            raise RuntimeError("No trained model to save. Call train() first.")
+
+        p = Path(model_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "model_state_dict": self.model.state_dict(),
+            "threshold": float(self.threshold),
+            "num_traditional_features": len(self.feature_names),
+            "feature_names": list(self.feature_names),
+        }
+        with open(p, "wb") as f:
+            pickle.dump(payload, f)
+        logger.info("Saved HybridGeneFilter -> %s", p)
 
     @staticmethod
     def _calculate_enc(sequence: str) -> float:
