@@ -559,23 +559,34 @@ class HybridGeneFilter:
             val_seq = self._one_hot_encode_dna(val_candidates, max_len=max_len)
             val_y = val_labels_arr
 
+        from tqdm import tqdm
+
         n = len(candidates)
         best_val_f1 = -1.0
         patience_left = 10
         best_state = None
+        num_batches_per_epoch = max((n + batch_size - 1) // batch_size, 1)
 
         print(
             f"  Training HybridGeneFilter: {n} samples, {n_pos} pos, {n_neg} neg, "
-            f"{'focal loss' if focal_loss else f'pos_weight={n_neg/n_pos:.1f}'}"
+            f"{'focal loss' if focal_loss else f'pos_weight={n_neg/n_pos:.1f}'}, "
+            f"device={self.device}"
         )
 
-        for epoch in range(1, epochs + 1):
+        epoch_bar = tqdm(range(1, epochs + 1), desc="  Training", unit="epoch", leave=True)
+        for epoch in epoch_bar:
             self.model.train()
             idx = torch.randperm(n)
             epoch_loss = 0.0
-            num_batches = 0
 
-            for start in range(0, n, batch_size):
+            batch_bar = tqdm(
+                range(0, n, batch_size),
+                desc=f"    epoch {epoch}/{epochs}",
+                unit="batch",
+                total=num_batches_per_epoch,
+                leave=False,
+            )
+            for start in batch_bar:
                 batch_idx = idx[start : start + batch_size]
                 b_seq = X_seq[batch_idx].to(self.device)
                 b_feat = X_feat[batch_idx].to(self.device)
@@ -589,13 +600,13 @@ class HybridGeneFilter:
                 optimizer.step()
 
                 epoch_loss += loss.item()
-                num_batches += 1
+                batch_bar.set_postfix(loss=f"{loss.item():.4f}")
 
                 del b_seq, b_feat, b_y
                 if self.device == "cuda":
                     torch.cuda.empty_cache()
 
-            avg_loss = epoch_loss / max(num_batches, 1)
+            avg_loss = epoch_loss / num_batches_per_epoch
 
             # Validation
             if val_feat is not None:
@@ -614,18 +625,18 @@ class HybridGeneFilter:
                 else:
                     patience_left -= 1
 
-                if epoch % 10 == 0 or epoch == 1:
-                    print(
-                        f"  epoch {epoch:3d}/{epochs}  loss={avg_loss:.4f}  val_f1={val_f1:.4f}"
-                        f"  best={best_val_f1:.4f}  patience={patience_left}"
-                    )
+                epoch_bar.set_postfix(
+                    loss=f"{avg_loss:.4f}",
+                    val_f1=f"{val_f1:.4f}",
+                    best=f"{best_val_f1:.4f}",
+                    pat=patience_left,
+                )
 
                 if patience_left == 0:
-                    print(f"  Early stopping at epoch {epoch}.")
+                    print(f"\n  Early stopping at epoch {epoch} (best val_f1={best_val_f1:.4f}).")
                     break
             else:
-                if epoch % 10 == 0 or epoch == 1:
-                    print(f"  epoch {epoch:3d}/{epochs}  loss={avg_loss:.4f}")
+                epoch_bar.set_postfix(loss=f"{avg_loss:.4f}")
 
         # Restore best checkpoint when validation was used
         if best_state is not None:
