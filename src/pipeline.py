@@ -54,13 +54,6 @@ def load_models(
     lgb_file = Path(lgb_path) if lgb_path else _MODELS_DIR / "orf_classifier_lgb.pkl"
     hf_file = Path(hf_path) if hf_path else _MODELS_DIR / "hybrid_best_model.pkl"
 
-    # Raise early when an explicit path was given but the file is absent —
-    # a missing custom path is always a caller error, not a graceful skip.
-    if lgb_path and not lgb_file.exists():
-        raise FileNotFoundError(f"LGB model file not found: {lgb_file}")
-    if hf_path and not hf_file.exists():
-        raise FileNotFoundError(f"Hybrid model file not found: {hf_file}")
-
     if _lgb_cache is None and lgb_file.exists():
         _lgb_cache = OrfGroupClassifier()
         _lgb_cache.load(str(lgb_file))

@@ -508,9 +508,7 @@ def compare_orfs_to_reference(
 
     pred = pd.DataFrame(orfs) if not isinstance(orfs, pd.DataFrame) else orfs.copy()
 
-    if len(pred) == 0:
-        pred_coords = pd.DataFrame(columns=["start", "end"])
-    elif "genome_start" in pred.columns and "genome_end" in pred.columns:
+    if "genome_start" in pred.columns and "genome_end" in pred.columns:
         pred_coords = pred[["genome_start", "genome_end"]].rename(
             columns={"genome_start": "start", "genome_end": "end"}
         )
