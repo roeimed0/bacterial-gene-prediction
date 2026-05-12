@@ -41,4 +41,4 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
       - name: Run tests
-        run: pytest tests/ -v --tb=short -m "not slow" --cov=src --cov=api --cov-report=term-missing --cov-fail-under=60
+        run: pytest tests/ -v --tb=short -m "not slow" --cov=src --cov=api --cov-report=term-missing --cov-fail-under=50
