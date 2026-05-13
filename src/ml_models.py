@@ -83,10 +83,21 @@ class OrfGroupClassifier:
         return -np.sum(p * np.log(p) / np.log(base))
 
     def extract_group_features(
-        self, groups: Dict[str, List[Dict]], genome_id: str, weights: Dict = None
+        self,
+        groups: Dict[str, List[Dict]],
+        genome_id: str,
+        weights: Dict = None,
+        genome_context: Dict = None,
     ) -> pd.DataFrame:
         """
         Extract features from ORF groups for prediction.
+
+        genome_context: optional dict of genome-level statistics computed once
+        per genome (genome_gc, genome_mean_rbs_max, genome_cv_rbs_max,
+        genome_mean_combined).  Passed as constant features to every group row
+        so the LGB can contextualise its group-level features against the
+        genome background — enabling de-novo discrimination in Archaea and
+        high-GC organisms where RBS or codon signals are genome-wide flat.
 
         Args:
             groups: Dictionary of {group_id: [list of ORFs]}
@@ -208,6 +219,11 @@ class OrfGroupClassifier:
                 "frac_top_start_select": (ss >= 0.95 * max_ss).sum() / n,
             }
 
+            # Genome-level context features — constant per genome, enable the
+            # LGB to contextualise group scores against the genome background.
+            if genome_context:
+                group_features.update(genome_context)
+
             rows.append(group_features)
 
         return pd.DataFrame(rows).fillna(0.0)
@@ -218,6 +234,7 @@ class OrfGroupClassifier:
         genome_id: str = "unknown",
         weights: Dict = None,
         threshold: float = 0.07,
+        genome_context: Dict = None,
     ) -> tuple:
         """
         Predict which groups contain real genes.
@@ -235,8 +252,8 @@ class OrfGroupClassifier:
             - probabilities: Probability of being a real gene
             - group_ids: List of group IDs in same order
         """
-        # Extract features
-        df = self.extract_group_features(groups, genome_id, weights)
+        # Extract features (pass genome context so model can contextualise scores)
+        df = self.extract_group_features(groups, genome_id, weights, genome_context=genome_context)
 
         # Resolve feature column order.
         # Models trained on numpy arrays get generic names ("Column_0" …).
@@ -363,6 +380,7 @@ class OrfGroupClassifier:
         genome_id: str = "unknown",
         weights: Dict = None,
         threshold: float = 0.07,
+        genome_context: Dict = None,
     ) -> Dict[str, List[Dict]]:
         """
         Filter groups, keeping only those predicted to contain real genes.
@@ -371,7 +389,7 @@ class OrfGroupClassifier:
         """
         # Get predictions
         predictions, probabilities, group_ids = self.predict_groups(
-            groups, genome_id, weights, threshold
+            groups, genome_id, weights, threshold, genome_context=genome_context
         )
 
         # Create set of kept group IDs (those above threshold)

@@ -129,6 +129,38 @@ def predict_genome(
     # Step 7: Group nested ORFs
     groups = organize_nested_orfs(filtered)
 
+    # Compute genome-level context for the LGB — de novo from the groups.
+    # Enables the model to contextualise its features against the genome
+    # background (e.g. "rbs_max=8 is average here, not a strong signal").
+    genome_gc = float((sequence.count("G") + sequence.count("C")) / max(len(sequence), 1))
+    rbs_maxes = []
+    combined_maxes = []
+    for grp_df in groups.values():
+        if isinstance(grp_df, list):
+            import pandas as _pd
+
+            grp_df = _pd.DataFrame(grp_df)
+        if len(grp_df):
+            rbs_maxes.append(float(grp_df["rbs_score"].max()))
+            combined_maxes.append(float(grp_df["combined_score"].max()))
+    import numpy as _np
+
+    grp_rbs_mean = float(_np.mean(rbs_maxes)) if rbs_maxes else 0.0
+    grp_rbs_std = float(_np.std(rbs_maxes)) if rbs_maxes else 0.0
+    genome_context = {
+        "genome_gc": genome_gc,
+        "genome_mean_rbs_max": grp_rbs_mean,
+        "genome_cv_rbs_max": grp_rbs_std / max(abs(grp_rbs_mean), 0.1),
+        "genome_mean_combined": float(_np.mean(combined_maxes)) if combined_maxes else 0.0,
+    }
+    logger.info(
+        "[%s] Genome context: gc=%.1f%%  mean_rbs_max=%.2f  cv_rbs=%.2f",
+        genome_id,
+        genome_gc * 100,
+        grp_rbs_mean,
+        genome_context["genome_cv_rbs_max"],
+    )
+
     # Step 8: LGB group filter (optional)
     if lgb is not None:
         pre = len(groups)
@@ -137,6 +169,7 @@ def predict_genome(
             genome_id=genome_id,
             weights=START_SELECTION_WEIGHTS,
             threshold=lgb_threshold,
+            genome_context=genome_context,
         )
         logger.info("[%s] LGB filter: %d → %d groups", genome_id, pre, len(groups))
 
