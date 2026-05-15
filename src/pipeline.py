@@ -19,7 +19,7 @@ from .config import (
     START_SELECTION_WEIGHTS,
 )
 from .data_management import load_genome_sequence
-from .ml_models import HybridGeneFilter, OrfGroupClassifier
+from .ml_models import HybridGeneFilter, OrfGroupClassifier, StartSelectionClassifier
 from .traditional_methods import (
     build_all_scoring_models,
     create_intergenic_set,
@@ -42,24 +42,29 @@ _MODELS_DIR = Path(__file__).parent.parent / "models"
 
 _lgb_cache: Optional[OrfGroupClassifier] = None
 _hf_cache: Optional[HybridGeneFilter] = None
+_ss_cache: Optional[StartSelectionClassifier] = None
 
 
 def load_models(
     lgb_path: Optional[str] = None,
     hf_path: Optional[str] = None,
-) -> tuple[Optional[OrfGroupClassifier], Optional[HybridGeneFilter]]:
-    """Load LGB and Hybrid models from disk, using module-level cache."""
-    global _lgb_cache, _hf_cache
+    ss_path: Optional[str] = None,
+) -> tuple[
+    Optional[OrfGroupClassifier], Optional[HybridGeneFilter], Optional[StartSelectionClassifier]
+]:
+    """Load LGB, Hybrid, and StartSelection models from disk, using module-level cache."""
+    global _lgb_cache, _hf_cache, _ss_cache
 
     lgb_file = Path(lgb_path) if lgb_path else _MODELS_DIR / "orf_classifier_lgb.pkl"
     hf_file = Path(hf_path) if hf_path else _MODELS_DIR / "hybrid_best_model.pkl"
+    ss_file = Path(ss_path) if ss_path else _MODELS_DIR / "start_selector.pkl"
 
-    # Raise early when an explicit path was given but the file is absent —
-    # a missing custom path is always a caller error, not a graceful skip.
     if lgb_path and not lgb_file.exists():
         raise FileNotFoundError(f"LGB model file not found: {lgb_file}")
     if hf_path and not hf_file.exists():
         raise FileNotFoundError(f"Hybrid model file not found: {hf_file}")
+    if ss_path and not ss_file.exists():
+        raise FileNotFoundError(f"StartSelection model file not found: {ss_file}")
 
     if _lgb_cache is None and lgb_file.exists():
         _lgb_cache = OrfGroupClassifier()
@@ -69,7 +74,11 @@ def load_models(
         _hf_cache = HybridGeneFilter()
         _hf_cache.load(str(hf_file))
 
-    return _lgb_cache, _hf_cache
+    if _ss_cache is None and ss_file.exists():
+        _ss_cache = StartSelectionClassifier()
+        _ss_cache.load(str(ss_file))
+
+    return _lgb_cache, _hf_cache, _ss_cache
 
 
 # ── Core pipeline ─────────────────────────────────────────────────────────────
@@ -82,6 +91,7 @@ def predict_genome(
     lgb_threshold: float = 0.07,
     hf: Optional[HybridGeneFilter] = None,
     hf_threshold: Optional[float] = None,
+    ss: Optional[StartSelectionClassifier] = None,
     min_orf_length: int = 100,
 ) -> Union[pd.DataFrame, List[Dict]]:
     """
@@ -94,7 +104,7 @@ def predict_genome(
       6. First filter (remove clearly non-coding ORFs)
       7. Group nested ORFs by shared stop codon
       8. LGB group filter (optional — removes groups unlikely to contain a gene)
-      9. Select best start codon per group
+      9. Select best start codon per group (with pairwise classifier if ss is provided)
       10. Second filter
       11. HybridGeneFilter final filter (optional)
 
@@ -105,6 +115,8 @@ def predict_genome(
         lgb_threshold: LGB group-filter probability threshold (default: 0.07).
         hf:            Pre-loaded HybridGeneFilter. Pass None to skip.
         hf_threshold:  HybridGeneFilter threshold; uses model default if None.
+        ss:            Pre-loaded StartSelectionClassifier. Pass None to use
+                       the baseline weighted-sum start selection.
         min_orf_length: Minimum ORF length in bp (default: 100).
 
     Returns:
@@ -141,7 +153,16 @@ def predict_genome(
         logger.info("[%s] LGB filter: %d → %d groups", genome_id, pre, len(groups))
 
     # Step 9: Select best start codon
-    top = select_best_starts(groups, START_SELECTION_WEIGHTS)
+    if ss is not None:
+        top = ss.select_best_starts(groups, sequence, models, START_SELECTION_WEIGHTS)
+        logger.info(
+            "[%s] Start selection: pairwise classifier (contest_t=%.2f, flip_t=%.2f)",
+            genome_id,
+            ss.contest_t,
+            ss.flip_t,
+        )
+    else:
+        top = select_best_starts(groups, START_SELECTION_WEIGHTS)
 
     # Step 10: Second filter
     final = filter_candidates(top, **SECOND_FILTER_THRESHOLD)
@@ -170,6 +191,7 @@ def predict_genome_from_file(
     lgb_threshold: float = 0.07,
     hf: Optional[HybridGeneFilter] = None,
     hf_threshold: Optional[float] = None,
+    ss: Optional[StartSelectionClassifier] = None,
     min_orf_length: int = 100,
 ) -> Union[pd.DataFrame, List[Dict]]:
     """
@@ -195,6 +217,7 @@ def predict_genome_from_file(
         lgb_threshold=lgb_threshold,
         hf=hf,
         hf_threshold=hf_threshold,
+        ss=ss,
         min_orf_length=min_orf_length,
     )
 

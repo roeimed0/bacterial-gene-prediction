@@ -25,6 +25,7 @@ import io
 import json
 import os
 import sys
+import time
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -35,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.comparative_analysis import compare_orfs_to_reference
 from src.config import GENOME_CATALOG, TEST_GENOMES
 from src.data_management import get_data_dir
-from src.ml_models import HybridGeneFilter, OrfGroupClassifier
+from src.ml_models import HybridGeneFilter, OrfGroupClassifier, StartSelectionClassifier
 from src.pipeline import predict_genome_from_file
 
 MODELS_DIR = Path(__file__).parent.parent.parent / "models"
@@ -67,20 +68,30 @@ def _model_hash(path: Path) -> str:
     return h.hexdigest()[:10]
 
 
-def load_models(lgb_path: str = None, hf_path: str = None):
+def load_models(lgb_path: str = None, hf_path: str = None, ss_path: str = None):
     lgb = OrfGroupClassifier()
     lgb.load(lgb_path or str(MODELS_DIR / "orf_classifier_lgb.pkl"))
     hf = HybridGeneFilter()
     with contextlib.redirect_stdout(io.StringIO()):
         hf.load(hf_path or str(MODELS_DIR / "hybrid_best_model.pkl"))
-    return lgb, hf
+    ss = None
+    ss_file = Path(ss_path) if ss_path else MODELS_DIR / "start_selector.pkl"
+    if ss_file.exists():
+        ss = StartSelectionClassifier()
+        ss.load(str(ss_file))
+    return lgb, hf, ss
 
 
 # ── Pipeline ──────────────────────────────────────────────────────────────────
 
 
 def run_genome(
-    accession: str, lgb: OrfGroupClassifier, hf: HybridGeneFilter, lgb_t: float, hf_t: float
+    accession: str,
+    lgb: OrfGroupClassifier,
+    hf: HybridGeneFilter,
+    lgb_t: float,
+    hf_t: float,
+    ss: StartSelectionClassifier = None,
 ) -> dict:
     fasta = os.path.join(DATA_DIR, f"{accession}.fasta")
     if not os.path.exists(fasta):
@@ -94,6 +105,7 @@ def run_genome(
             lgb_threshold=lgb_t,
             hf=hf,
             hf_threshold=hf_t,
+            ss=ss,
         )
 
     with contextlib.redirect_stdout(io.StringIO()):
@@ -132,6 +144,10 @@ parser.add_argument(
 )
 parser.add_argument(
     "--hf-path", help="Override Hybrid model path (default: models/hybrid_best_model.pkl)"
+)
+parser.add_argument(
+    "--start-selector",
+    help="Override start selector model path (default: models/start_selector.pkl)",
 )
 parser.add_argument(
     "--lgb-threshold", type=float, default=None, help="Override LGB threshold (default: 0.07)"
@@ -200,7 +216,7 @@ print(SEP)
 
 _lgb_path = args.lgb_path or str(MODELS_DIR / "orf_classifier_lgb.pkl")
 _hf_path = args.hf_path or str(MODELS_DIR / "hybrid_best_model.pkl")
-lgb, hf = load_models(_lgb_path, _hf_path)
+lgb, hf, ss = load_models(_lgb_path, _hf_path, ss_path=args.start_selector)
 _thresh = _load_thresholds()
 _lgb_stem = Path(_lgb_path).stem
 _hf_stem = Path(_hf_path).stem
@@ -211,26 +227,36 @@ print(f"LGB threshold: {lgb_t}  |  Hybrid threshold: {hf_t}")
 print(f"LGB model: {_lgb_path}  [{_model_hash(Path(_lgb_path))}]")
 print(f"Hybrid model: {_hf_path}  [{_model_hash(Path(_hf_path))}]\n")
 
-print(f"  {'Accession':<16} {'Group':<18} {'F1':>7} {'Sens':>7} {'Prec':>7}")
-print(f"  {'-'*16} {'-'*18} {'-'*7} {'-'*7} {'-'*7}")
+print(f"  {'Accession':<16} {'Group':<18} {'F1':>7} {'Sens':>7} {'Prec':>7} {'Time':>7}")
+print(f"  {'-'*16} {'-'*18} {'-'*7} {'-'*7} {'-'*7} {'-'*7}")
 
 results = []
 group_data = defaultdict(list)
+_bench_start = time.perf_counter()
 
 for info in genomes:
     acc = info["accession"]
     group = info.get("group", "Unknown")
     print(f"  {acc}...", end=" ", flush=True)
-    r = run_genome(acc, lgb, hf, lgb_t, hf_t)
+    _t0 = time.perf_counter()
+    r = run_genome(acc, lgb, hf, lgb_t, hf_t, ss=ss)
+    _elapsed = time.perf_counter() - _t0
     if r is None:
         print("SKIP")
         continue
     f1 = r["f1_pct"]
     sens = r["sensitivity_pct"]
     prec = r["precision_pct"]
-    print(f"\r  {acc:<16} {group:<18} {f1:>7.2f} {sens:>7.2f} {prec:>7.2f}")
+    print(f"\r  {acc:<16} {group:<18} {f1:>7.2f} {sens:>7.2f} {prec:>7.2f} {_elapsed:>6.1f}s")
     results.append(
-        {"accession": acc, "group": group, "f1": f1, "sensitivity": sens, "precision": prec}
+        {
+            "accession": acc,
+            "group": group,
+            "f1": f1,
+            "sensitivity": sens,
+            "precision": prec,
+            "runtime_s": round(_elapsed, 2),
+        }
     )
     group_data[group].append((f1, sens, prec))
 
@@ -251,9 +277,11 @@ all_f1 = [r["f1"] for r in results]
 all_s = [r["sensitivity"] for r in results]
 all_p = [r["precision"] for r in results]
 overall = {"f1": mean(all_f1), "sensitivity": mean(all_s), "precision": mean(all_p)}
+_total_elapsed = time.perf_counter() - _bench_start
 print(
     f"\n  {'OVERALL':<22} {overall['f1']:>7.2f}"
     f" {overall['sensitivity']:>7.2f} {overall['precision']:>7.2f}  {len(results)}"
+    f"   total: {_total_elapsed:.1f}s"
 )
 
 # Compare vs previous run
@@ -304,6 +332,7 @@ if args.save:
             },
         },
         "n_genomes": len(results),
+        "runtime_s": round(_total_elapsed, 1),
         "overall": overall,
         "by_group": {
             g: {

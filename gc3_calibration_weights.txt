@@ -1,253 +1,0 @@
-
-================================================================================
-COLLECTING DATA — 20 genomes  (16 train / 4 val)
-================================================================================
-  [train] NC_012207.1... Groups NC_012207.1:   0%|          | 0/7300 [00:00<?, ?it/s]Groups NC_012207.1:   6%|5         | 409/7300 [00:00<00:01, 4078.06it/s]Groups NC_012207.1:  11%|#1        | 817/7300 [00:00<00:02, 2608.57it/s]Groups NC_012207.1:  17%|#7        | 1244/7300 [00:00<00:01, 3178.97it/s]Groups NC_012207.1:  23%|##2       | 1666/7300 [00:00<00:01, 3509.57it/s]Groups NC_012207.1:  28%|##7       | 2043/7300 [00:00<00:01, 2706.75it/s]Groups NC_012207.1:  33%|###3      | 2419/7300 [00:00<00:01, 2976.98it/s]Groups NC_012207.1:  39%|###8      | 2822/7300 [00:00<00:01, 3256.56it/s]Groups NC_012207.1:  44%|####4     | 3216/7300 [00:01<00:01, 2568.04it/s]Groups NC_012207.1:  48%|####8     | 3521/7300 [00:01<00:01, 2669.68it/s]Groups NC_012207.1:  53%|#####2    | 3855/7300 [00:01<00:01, 2823.76it/s]Groups NC_012207.1:  58%|#####8    | 4255/7300 [00:01<00:00, 3118.59it/s]Groups NC_012207.1:  63%|######3   | 4619/7300 [00:01<00:00, 3248.26it/s]Groups NC_012207.1:  68%|######7   | 4962/7300 [00:01<00:00, 2423.75it/s]Groups NC_012207.1:  73%|#######3  | 5365/7300 [00:01<00:00, 2780.63it/s]Groups NC_012207.1:  79%|#######9  | 5772/7300 [00:01<00:00, 3089.44it/s]Groups NC_012207.1:  85%|########4 | 6194/7300 [00:02<00:00, 3377.01it/s]Groups NC_012207.1:  91%|######### | 6612/7300 [00:02<00:00, 3588.28it/s]Groups NC_012207.1:  96%|#########6| 7036/7300 [00:02<00:00, 3767.66it/s]Groups NC_012207.1: 100%|##########| 7300/7300 [00:02<00:00, 2895.05it/s]
-C:\Users\User\anaconda3\envs\gene_prediction\lib\site-packages\sklearn\utils\validation.py:2739: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
-  warnings.warn(
-Loaded: NC_012207.1 Mycobacterium tuberculosis variant bovis BCG str. Tokyo 172, complete sequence
-Genome size: 4,371,711 bp
-2567 multi-start groups
-  [train] NC_008570.1... Groups NC_008570.1:   0%|          | 0/7515 [00:00<?, ?it/s]Groups NC_008570.1:   6%|5         | 450/7515 [00:00<00:01, 4437.57it/s]Groups NC_008570.1:  12%|#1        | 894/7515 [00:00<00:02, 2889.39it/s]Groups NC_008570.1:  18%|#7        | 1347/7515 [00:00<00:01, 3466.34it/s]Groups NC_008570.1:  23%|##2       | 1728/7515 [00:00<00:02, 2772.89it/s]Groups NC_008570.1:  29%|##8       | 2171/7515 [00:00<00:01, 3213.40it/s]Groups NC_008570.1:  35%|###5      | 2635/7515 [00:00<00:01, 3595.30it/s]Groups NC_008570.1:  41%|####      | 3054/7515 [00:01<00:01, 2816.31it/s]Groups NC_008570.1:  47%|####6     | 3504/7515 [00:01<00:01, 3205.89it/s]Groups NC_008570.1:  53%|#####2    | 3952/7515 [00:01<00:01, 3518.68it/s]Groups NC_008570.1:  59%|#####8    | 4402/7515 [00:01<00:00, 3770.89it/s]Groups NC_008570.1:  64%|######4   | 4810/7515 [00:01<00:00, 2830.02it/s]Groups NC_008570.1:  70%|######9   | 5259/7515 [00:01<00:00, 3197.71it/s]Groups NC_008570.1:  76%|#######5  | 5698/7515 [00:01<00:00, 3482.56it/s]Groups NC_008570.1:  82%|########1 | 6148/7515 [00:01<00:00, 3730.98it/s]Groups NC_008570.1:  88%|########7 | 6593/7515 [00:01<00:00, 3921.41it/s]Groups NC_008570.1:  93%|#########3| 7012/7515 [00:02<00:00, 2739.40it/s]Groups NC_008570.1:  99%|#########9| 7458/7515 [00:02<00:00, 3099.13it/s]Groups NC_008570.1: 100%|##########| 7515/7515 [00:02<00:00, 3244.27it/s]
-C:\Users\User\anaconda3\envs\gene_prediction\lib\site-packages\sklearn\utils\validation.py:2739: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
-  warnings.warn(
-Loaded: NC_008570.1 Aeromonas hydrophila subsp. hydrophila ATCC 7966, complete sequence
-Genome size: 4,744,448 bp
-3123 multi-start groups
-  [train] NC_015875.1... Groups NC_015875.1:   0%|          | 0/2250 [00:00<?, ?it/s]Groups NC_015875.1:  20%|#9        | 445/2250 [00:00<00:00, 4440.57it/s]Groups NC_015875.1:  40%|###9      | 890/2250 [00:00<00:00, 4421.34it/s]Groups NC_015875.1:  60%|#####9    | 1349/2250 [00:00<00:00, 4482.62it/s]Groups NC_015875.1:  80%|#######9  | 1798/2250 [00:00<00:00, 3405.99it/s]Groups NC_015875.1: 100%|##########| 2250/2250 [00:00<00:00, 3881.28it/s]
-C:\Users\User\anaconda3\envs\gene_prediction\lib\site-packages\sklearn\utils\validation.py:2739: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
-  warnings.warn(
-Loaded: NC_015875.1 Streptococcus pseudopneumoniae IS7493, complete sequence
-Genome size: 2,190,731 bp
-1726 multi-start groups
-  [train] NC_009975.1... Groups NC_009975.1:   0%|          | 0/2214 [00:00<?, ?it/s]Groups NC_009975.1:  17%|#7        | 384/2214 [00:00<00:00, 2232.12it/s]Groups NC_009975.1:  38%|###7      | 831/2214 [00:00<00:00, 3244.37it/s]Groups NC_009975.1:  54%|#####3    | 1186/2214 [00:00<00:00, 2607.83it/s]Groups NC_009975.1:  74%|#######4  | 1640/2214 [00:00<00:00, 3193.01it/s]Groups NC_009975.1:  94%|#########4| 2085/2214 [00:00<00:00, 3561.23it/s]Groups NC_009975.1: 100%|##########| 2214/2214 [00:00<00:00, 2869.12it/s]
-C:\Users\User\anaconda3\envs\gene_prediction\lib\site-packages\sklearn\utils\validation.py:2739: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
-  warnings.warn(
-Loaded: NC_009975.1 Methanococcus maripaludis C6, complete sequence
-Genome size: 1,744,193 bp
-1614 multi-start groups
-  [train] NC_016111.1... Groups NC_016111.1:   0%|          | 0/11727 [00:00<?, ?it/s]Groups NC_016111.1:   4%|3         | 451/11727 [00:00<00:02, 4500.12it/s]Groups NC_016111.1:   8%|7         | 909/11727 [00:00<00:02, 4540.26it/s]Groups NC_016111.1:  12%|#1        | 1364/11727 [00:00<00:03, 2873.22it/s]Groups NC_016111.1:  15%|#5        | 1795/11727 [00:00<00:03, 3289.25it/s]Groups NC_016111.1:  19%|#8        | 2209/11727 [00:00<00:02, 3533.68it/s]Groups NC_016111.1:  22%|##2       | 2597/11727 [00:00<00:03, 2665.27it/s]Groups NC_016111.1:  26%|##5       | 3039/11727 [00:00<00:02, 3071.05it/s]Groups NC_016111.1:  29%|##9       | 3415/11727 [00:01<00:02, 3243.36it/s]Groups NC_016111.1:  33%|###2      | 3862/11727 [00:01<00:02, 3555.34it/s]Groups NC_016111.1:  36%|###6      | 4249/11727 [00:01<00:02, 2539.83it/s]Groups NC_016111.1:  40%|###9      | 4670/11727 [00:01<00:02, 2896.35it/s]Groups NC_016111.1:  44%|####3     | 5121/11727 [00:01<00:02, 3273.57it/s]Groups NC_016111.1:  47%|####7     | 5568/11727 [00:01<00:01, 3559.91it/s]Groups NC_016111.1:  51%|#####1    | 6014/11727 [00:01<00:01, 3782.27it/s]Groups NC_016111.1:  55%|#####4    | 6424/11727 [00:02<00:02, 2630.59it/s]Groups NC_016111.1:  59%|#####8    | 6871/11727 [00:02<00:01, 3012.82it/s]Groups NC_016111.1:  63%|######2   | 7334/11727 [00:02<00:01, 3377.63it/s]Groups NC_016111.1:  66%|######6   | 7791/11727 [00:02<00:01, 3668.26it/s]Groups NC_016111.1:  70%|#######   | 8252/11727 [00:02<00:00, 3901.59it/s]Groups NC_016111.1:  74%|#######4  | 8715/11727 [00:02<00:00, 4088.92it/s]Groups NC_016111.1:  78%|#######8  | 9151/11727 [00:02<00:00, 2586.25it/s]Groups NC_016111.1:  82%|########1 | 9596/11727 [00:03<00:00, 2954.12it/s]Groups NC_016111.1:  86%|########5 | 10050/11727 [00:03<00:00, 3302.53it/s]Groups NC_016111.1:  90%|########9 | 10505/11727 [00:03<00:00, 3600.48it/s]Groups NC_016111.1:  93%|#########3| 10921/11727 [00:03<00:00, 3737.57it/s]Groups NC_016111.1:  97%|#########6| 11361/11727 [00:03<00:00, 3913.79it/s]Groups NC_016111.1: 100%|##########| 11727/11727 [00:03<00:00, 3357.67it/s]
-C:\Users\User\anaconda3\envs\gene_prediction\lib\site-packages\sklearn\utils\validation.py:2739: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
-  warnings.warn(
-Loaded: NC_016111.1 Streptantibioticus cattleyicolor NRRL 8057 = DSM 46488, complete sequence
-Genome size: 6,283,062 bp
-3900 multi-start groups
-  [train] NC_017673.1... Groups NC_017673.1:   0%|          | 0/2622 [00:00<?, ?it/s]Groups NC_017673.1:   5%|5         | 137/2622 [00:00<00:01, 1369.04it/s]Groups NC_017673.1:  23%|##3       | 611/2622 [00:00<00:00, 3331.31it/s]Groups NC_017673.1:  36%|###6      | 944/2622 [00:00<00:00, 2736.60it/s]Groups NC_017673.1:  53%|#####3    | 1399/2622 [00:00<00:00, 3358.83it/s]Groups NC_017673.1:  67%|######6   | 1749/2622 [00:00<00:00, 2835.60it/s]Groups NC_017673.1:  85%|########4 | 2222/2622 [00:00<00:00, 3360.29it/s]Groups NC_017673.1: 100%|##########| 2622/2622 [00:00<00:00, 3294.14it/s]
-C:\Users\User\anaconda3\envs\gene_prediction\lib\site-packages\sklearn\utils\validation.py:2739: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
-  warnings.warn(
-Loaded: NC_017673.1 Staphylococcus aureus subsp. aureus 71193, complete sequence
-Genome size: 2,715,000 bp
-2143 multi-start groups
-  [train] NC_013407.1... Groups NC_013407.1:   0%|          | 0/1856 [00:00<?, ?it/s]Groups NC_013407.1:   9%|8         | 167/1856 [00:00<00:01, 1521.87it/s]Groups NC_013407.1:  33%|###2      | 606/1856 [00:00<00:00, 3136.02it/s]Groups NC_013407.1:  50%|####9     | 926/1856 [00:00<00:00, 2531.08it/s]Groups NC_013407.1:  72%|#######1  | 1335/1856 [00:00<00:00, 3044.27it/s]Groups NC_013407.1:  91%|#########1| 1695/1856 [00:00<00:00, 2542.44it/s]Groups NC_013407.1: 100%|##########| 1856/1856 [00:00<00:00, 2703.16it/s]
-C:\Users\User\anaconda3\envs\gene_prediction\lib\site-packages\sklearn\utils\validation.py:2739: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
-  warnings.warn(
-Loaded: NC_013407.1 Methanocaldococcus vulcanius M7, complete sequence
-Genome size: 1,746,329 bp
-1518 multi-start groups
-  [train] NC_012759.1... Groups NC_012759.1:   0%|          | 0/6929 [00:00<?, ?it/s]Groups NC_012759.1:   6%|6         | 430/6929 [00:00<00:01, 4241.60it/s]Groups NC_012759.1:  13%|#2        | 872/6929 [00:00<00:02, 2744.45it/s]Groups NC_012759.1:  19%|#8        | 1309/6929 [00:00<00:01, 3290.44it/s]Groups NC_012759.1:  26%|##5       | 1769/6929 [00:00<00:01, 3721.67it/s]Groups NC_012759.1:  31%|###1      | 2170/6929 [00:00<00:01, 2857.09it/s]Groups NC_012759.1:  38%|###7      | 2604/6929 [00:00<00:01, 3232.16it/s]Groups NC_012759.1:  44%|####4     | 3060/6929 [00:00<00:01, 3584.15it/s]Groups NC_012759.1:  50%|####9     | 3453/6929 [00:01<00:01, 2718.25it/s]Groups NC_012759.1:  56%|#####6    | 3890/6929 [00:01<00:00, 3080.37it/s]Groups NC_012759.1:  63%|######2   | 4359/6929 [00:01<00:00, 3468.74it/s]Groups NC_012759.1:  69%|######8   | 4770/6929 [00:01<00:00, 3633.67it/s]Groups NC_012759.1:  75%|#######4  | 5167/6929 [00:01<00:00, 2754.08it/s]Groups NC_012759.1:  81%|########1 | 5635/6929 [00:01<00:00, 3176.85it/s]Groups NC_012759.1:  88%|########7 | 6071/6929 [00:01<00:00, 3450.94it/s]Groups NC_012759.1:  94%|#########4| 6519/6929 [00:01<00:00, 3706.89it/s]Groups NC_012759.1: 100%|##########| 6929/6929 [00:02<00:00, 3357.93it/s]
-C:\Users\User\anaconda3\envs\gene_prediction\lib\site-packages\sklearn\utils\validation.py:2739: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
-  warnings.warn(
-Loaded: NC_012759.1 Escherichia coli BW2952, complete sequence
-Genome size: 4,578,159 bp
-3631 multi-start groups
-  [train] NC_008701.1... Groups NC_008701.1:   0%|          | 0/2488 [00:00<?, ?it/s]Groups NC_008701.1:  17%|#6        | 417/2488 [00:00<00:00, 2497.94it/s]Groups NC_008701.1:  34%|###4      | 857/2488 [00:00<00:00, 3373.43it/s]Groups NC_008701.1:  49%|####8     | 1219/2488 [00:00<00:00, 2760.23it/s]Groups NC_008701.1:  67%|######7   | 1676/2488 [00:00<00:00, 3311.20it/s]Groups NC_008701.1:  86%|########5 | 2138/2488 [00:00<00:00, 3696.77it/s]Groups NC_008701.1: 100%|##########| 2488/2488 [00:00<00:00, 3064.83it/s]
-C:\Users\User\anaconda3\envs\gene_prediction\lib\site-packages\sklearn\utils\validation.py:2739: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
-  warnings.warn(
-Loaded: NC_008701.1 Pyrobaculum islandicum DSM 4184, complete sequence
-Genome size: 1,826,402 bp
-1535 multi-start groups
-  [train] NC_013235.1... Groups NC_013235.1:   0%|          | 0/10725 [00:00<?, ?it/s]Groups NC_013235.1:   4%|3         | 413/10725 [00:00<00:02, 4120.70it/s]Groups NC_013235.1:   8%|7         | 826/10725 [00:00<00:02, 3969.84it/s]Groups NC_013235.1:  11%|#1        | 1224/10725 [00:00<00:03, 2599.13it/s]Groups NC_013235.1:  16%|#5        | 1669/10725 [00:00<00:02, 3139.67it/s]Groups NC_013235.1:  20%|#9        | 2127/10725 [00:00<00:02, 3562.84it/s]Groups NC_013235.1:  23%|##3       | 2520/10725 [00:00<00:03, 2641.29it/s]Groups NC_013235.1:  27%|##7       | 2945/10725 [00:00<00:02, 3015.23it/s]Groups NC_013235.1:  32%|###1      | 3393/10725 [00:01<00:02, 3370.39it/s]Groups NC_013235.1:  36%|###5      | 3833/10725 [00:01<00:01, 3634.61it/s]Groups NC_013235.1:  39%|###9      | 4232/10725 [00:01<00:02, 2707.21it/s]Groups NC_013235.1:  44%|####3     | 4681/10725 [00:01<00:01, 3093.79it/s]Groups NC_013235.1:  48%|####7     | 5138/10725 [00:01<00:01, 3443.58it/s]Groups NC_013235.1:  52%|#####2    | 5589/10725 [00:01<00:01, 3714.80it/s]Groups NC_013235.1:  56%|#####6    | 6033/10725 [00:01<00:01, 3898.59it/s]Groups NC_013235.1:  60%|######    | 6452/10725 [00:02<00:01, 2762.44it/s]Groups NC_013235.1:  64%|######4   | 6905/10725 [00:02<00:01, 3132.76it/s]Groups NC_013235.1:  69%|######8   | 7381/10725 [00:02<00:00, 3512.56it/s]Groups NC_013235.1:  73%|#######3  | 7846/10725 [00:02<00:00, 3786.27it/s]Groups NC_013235.1:  77%|#######7  | 8308/10725 [00:02<00:00, 3996.89it/s]Groups NC_013235.1:  81%|########1 | 8740/10725 [00:02<00:00, 2499.93it/s]Groups NC_013235.1:  86%|########5 | 9187/10725 [00:02<00:00, 2870.70it/s]Groups NC_013235.1:  90%|########9 | 9620/10725 [00:02<00:00, 3178.54it/s]Groups NC_013235.1:  94%|#########3| 10051/10725 [00:03<00:00, 3443.99it/s]Groups NC_013235.1:  98%|#########7| 10483/10725 [00:03<00:00, 3659.15it/s]Groups NC_013235.1: 100%|##########| 10725/10725 [00:03<00:00, 3298.08it/s]
-C:\Users\User\anaconda3\envs\gene_prediction\lib\site-packages\sklearn\utils\validation.py:2739: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
-  warnings.warn(
-Loaded: NC_013235.1 Nakamurella multipartita DSM 44233, complete sequence
-Genome size: 6,060,298 bp
-4102 multi-start groups
-  [train] NC_000854.2... Groups NC_000854.2:   0%|          | 0/2380 [00:00<?, ?it/s]Groups NC_000854.2:  19%|#9        | 456/2380 [00:00<00:00, 4524.82it/s]Groups NC_000854.2:  38%|###8      | 909/2380 [00:00<00:00, 3143.02it/s]Groups NC_000854.2:  58%|#####7    | 1374/2380 [00:00<00:00, 3694.51it/s]Groups NC_000854.2:  74%|#######4  | 1770/2380 [00:00<00:00, 2893.60it/s]Groups NC_000854.2:  95%|#########4| 2254/2380 [00:00<00:00, 3421.21it/s]Groups NC_000854.2: 100%|##########| 2380/2380 [00:00<00:00, 3436.80it/s]
-C:\Users\User\anaconda3\envs\gene_prediction\lib\site-packages\sklearn\utils\validation.py:2739: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
-  warnings.warn(
-Loaded: NC_000854.2 Aeropyrum pernix K1, complete sequence
-Genome size: 1,669,696 bp
-1311 multi-start groups
-  [train] NC_016047.1... Groups NC_016047.1:   0%|          | 0/5195 [00:00<?, ?it/s]Groups NC_016047.1:   2%|1         | 84/5195 [00:00<00:06, 754.79it/s]Groups NC_016047.1:  10%|#         | 542/5195 [00:00<00:01, 2885.48it/s]Groups NC_016047.1:  17%|#7        | 892/5195 [00:00<00:01, 2354.35it/s]Groups NC_016047.1:  26%|##5       | 1337/5195 [00:00<00:01, 3013.70it/s]Groups NC_016047.1:  35%|###4      | 1800/5195 [00:00<00:00, 3520.20it/s]Groups NC_016047.1:  42%|####1     | 2176/5195 [00:00<00:01, 2849.60it/s]Groups NC_016047.1:  50%|#####     | 2621/5195 [00:00<00:00, 3261.99it/s]Groups NC_016047.1:  59%|#####9    | 3080/5195 [00:00<00:00, 3609.68it/s]Groups NC_016047.1:  67%|######6   | 3469/5195 [00:01<00:00, 2855.76it/s]Groups NC_016047.1:  75%|#######5  | 3911/5195 [00:01<00:00, 3218.19it/s]Groups NC_016047.1:  84%|########4 | 4366/5195 [00:01<00:00, 3541.99it/s]Groups NC_016047.1:  93%|#########2| 4827/5195 [00:01<00:00, 3816.49it/s]Groups NC_016047.1: 100%|##########| 5195/5195 [00:01<00:00, 3056.47it/s]
-C:\Users\User\anaconda3\envs\gene_prediction\lib\site-packages\sklearn\utils\validation.py:2739: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
-  warnings.warn(
-Loaded: NC_016047.1 Bacillus spizizenii TU-B-10, complete sequence
-Genome size: 4,207,222 bp
-3551 multi-start groups
-  [train] NC_016051.1... Groups NC_016051.1:   0%|          | 0/3544 [00:00<?, ?it/s]Groups NC_016051.1:  13%|#3        | 478/3544 [00:00<00:00, 4770.73it/s]Groups NC_016051.1:  27%|##6       | 956/3544 [00:00<00:00, 3169.26it/s]Groups NC_016051.1:  40%|####      | 1429/3544 [00:00<00:00, 3712.93it/s]Groups NC_016051.1:  52%|#####1    | 1832/3544 [00:00<00:00, 2968.50it/s]Groups NC_016051.1:  65%|######5   | 2316/3544 [00:00<00:00, 3469.17it/s]Groups NC_016051.1:  79%|#######9  | 2810/3544 [00:00<00:00, 3879.98it/s]Groups NC_016051.1:  91%|#########1| 3232/3544 [00:00<00:00, 3010.76it/s]Groups NC_016051.1: 100%|##########| 3544/3544 [00:01<00:00, 3364.86it/s]
-C:\Users\User\anaconda3\envs\gene_prediction\lib\site-packages\sklearn\utils\validation.py:2739: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
-  warnings.warn(
-Loaded: NC_016051.1 Thermococcus sp. AM4, complete sequence
-Genome size: 2,086,428 bp
-1987 multi-start groups
-  [train] NC_007503.1... Groups NC_007503.1:   0%|          | 0/2513 [00:00<?, ?it/s]Groups NC_007503.1:  10%|#         | 255/2513 [00:00<00:01, 1861.18it/s]Groups NC_007503.1:  28%|##8       | 711/2513 [00:00<00:00, 3234.00it/s]Groups NC_007503.1:  42%|####2     | 1056/2513 [00:00<00:00, 2580.28it/s]Groups NC_007503.1:  60%|#####9    | 1507/2513 [00:00<00:00, 3191.62it/s]Groups NC_007503.1:  75%|#######4  | 1873/2513 [00:00<00:00, 2601.22it/s]Groups NC_007503.1:  92%|#########2| 2314/2513 [00:00<00:00, 3065.70it/s]Groups NC_007503.1: 100%|##########| 2513/2513 [00:00<00:00, 2983.07it/s]
-C:\Users\User\anaconda3\envs\gene_prediction\lib\site-packages\sklearn\utils\validation.py:2739: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
-  warnings.warn(
-Loaded: NC_007503.1 Carboxydothermus hydrogenoformans Z-2901, complete sequence
-Genome size: 2,401,520 bp
-2142 multi-start groups
-  [train] NC_020291.1... Groups NC_020291.1:   0%|          | 0/5899 [00:00<?, ?it/s]Groups NC_020291.1:   8%|8         | 472/5899 [00:00<00:01, 4713.40it/s]Groups NC_020291.1:  16%|#6        | 944/5899 [00:00<00:01, 2974.22it/s]Groups NC_020291.1:  24%|##4       | 1418/5899 [00:00<00:01, 3572.79it/s]Groups NC_020291.1:  31%|###       | 1814/5899 [00:00<00:01, 2868.83it/s]Groups NC_020291.1:  39%|###8      | 2274/5899 [00:00<00:01, 3331.21it/s]Groups NC_020291.1:  46%|####6     | 2737/5899 [00:00<00:00, 3689.39it/s]Groups NC_020291.1:  53%|#####3    | 3140/5899 [00:00<00:00, 2930.99it/s]Groups NC_020291.1:  61%|######1   | 3608/5899 [00:01<00:00, 3343.04it/s]Groups NC_020291.1:  69%|######8   | 4065/5899 [00:01<00:00, 3646.64it/s]Groups NC_020291.1:  76%|#######5  | 4466/5899 [00:01<00:00, 2808.65it/s]Groups NC_020291.1:  84%|########3 | 4932/5899 [00:01<00:00, 3209.24it/s]Groups NC_020291.1:  91%|#########1| 5379/5899 [00:01<00:00, 3510.97it/s]Groups NC_020291.1:  99%|#########8| 5831/5899 [00:01<00:00, 3766.53it/s]Groups NC_020291.1: 100%|##########| 5899/5899 [00:01<00:00, 3401.60it/s]
-C:\Users\User\anaconda3\envs\gene_prediction\lib\site-packages\sklearn\utils\validation.py:2739: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
-  warnings.warn(
-Loaded: NC_020291.1 Clostridium saccharoperbutylacetonicum N1-4(HMT), complete sequence
-Genome size: 6,530,257 bp
-4955 multi-start groups
-  [train] NC_018524.1... Groups NC_018524.1:   0%|          | 0/11377 [00:00<?, ?it/s]Groups NC_018524.1:   1%|          | 80/11377 [00:00<00:20, 557.66it/s]Groups NC_018524.1:   5%|4         | 562/11377 [00:00<00:04, 2680.18it/s]Groups NC_018524.1:   9%|9         | 1035/11377 [00:00<00:02, 3531.78it/s]Groups NC_018524.1:  12%|#2        | 1417/11377 [00:00<00:03, 2580.97it/s]Groups NC_018524.1:  16%|#6        | 1874/11377 [00:00<00:03, 3125.09it/s]Groups NC_018524.1:  20%|##        | 2319/11377 [00:00<00:02, 3494.85it/s]Groups NC_018524.1:  24%|##3       | 2707/11377 [00:00<00:03, 2654.45it/s]Groups NC_018524.1:  28%|##7       | 3175/11377 [00:01<00:02, 3122.08it/s]Groups NC_018524.1:  32%|###2      | 3644/11377 [00:01<00:02, 3506.72it/s]Groups NC_018524.1:  36%|###6      | 4116/11377 [00:01<00:01, 3810.87it/s]Groups NC_018524.1:  40%|###9      | 4534/11377 [00:01<00:02, 2751.99it/s]Groups NC_018524.1:  44%|####3     | 4997/11377 [00:01<00:02, 3151.77it/s]Groups NC_018524.1:  48%|####8     | 5469/11377 [00:01<00:01, 3512.52it/s]Groups NC_018524.1:  52%|#####2    | 5931/11377 [00:01<00:01, 3784.04it/s]Groups NC_018524.1:  56%|#####6    | 6392/11377 [00:01<00:01, 3995.18it/s]Groups NC_018524.1:  60%|#####9    | 6825/11377 [00:02<00:01, 2649.34it/s]Groups NC_018524.1:  64%|######3   | 7265/11377 [00:02<00:01, 3001.00it/s]Groups NC_018524.1:  68%|######7   | 7700/11377 [00:02<00:01, 3301.48it/s]Groups NC_018524.1:  72%|#######1  | 8145/11377 [00:02<00:00, 3578.81it/s]Groups NC_018524.1:  75%|#######5  | 8583/11377 [00:02<00:00, 3779.94it/s]Groups NC_018524.1:  79%|#######9  | 9023/11377 [00:02<00:00, 3939.96it/s]Groups NC_018524.1:  83%|########3 | 9446/11377 [00:03<00:00, 2520.50it/s]Groups NC_018524.1:  87%|########7 | 9906/11377 [00:03<00:00, 2932.77it/s]Groups NC_018524.1:  91%|#########1| 10373/11377 [00:03<00:00, 3309.56it/s]Groups NC_018524.1:  95%|#########5| 10840/11377 [00:03<00:00, 3628.00it/s]Groups NC_018524.1:  99%|#########9| 11303/11377 [00:03<00:00, 3869.53it/s]Groups NC_018524.1: 100%|##########| 11377/11377 [00:03<00:00, 3275.75it/s]
-C:\Users\User\anaconda3\envs\gene_prediction\lib\site-packages\sklearn\utils\validation.py:2739: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
-  warnings.warn(
-Loaded: NC_018524.1 Nocardiopsis alba ATCC BAA-2165, complete sequence
-Genome size: 5,848,211 bp
-3963 multi-start groups
-  [val] NC_020133.1... Groups NC_020133.1:   0%|          | 0/10587 [00:00<?, ?it/s]Groups NC_020133.1:   4%|4         | 469/10587 [00:00<00:02, 4681.77it/s]Groups NC_020133.1:   9%|8         | 938/10587 [00:00<00:03, 2792.52it/s]Groups NC_020133.1:  13%|#3        | 1413/10587 [00:00<00:02, 3444.66it/s]Groups NC_020133.1:  18%|#7        | 1890/10587 [00:00<00:02, 3865.76it/s]Groups NC_020133.1:  22%|##1       | 2315/10587 [00:00<00:02, 2863.03it/s]Groups NC_020133.1:  26%|##5       | 2740/10587 [00:00<00:02, 3198.91it/s]Groups NC_020133.1:  30%|###       | 3185/10587 [00:00<00:02, 3520.19it/s]Groups NC_020133.1:  34%|###4      | 3622/10587 [00:01<00:01, 3743.06it/s]Groups NC_020133.1:  38%|###8      | 4029/10587 [00:01<00:02, 2641.89it/s]Groups NC_020133.1:  42%|####1     | 4429/10587 [00:01<00:02, 2927.46it/s]Groups NC_020133.1:  46%|####5     | 4861/10587 [00:01<00:01, 3248.01it/s]Groups NC_020133.1:  50%|####9     | 5282/10587 [00:01<00:01, 3476.07it/s]Groups NC_020133.1:  54%|#####4    | 5726/10587 [00:01<00:01, 3719.31it/s]Groups NC_020133.1:  58%|#####7    | 6129/10587 [00:02<00:01, 2496.43it/s]Groups NC_020133.1:  62%|######1   | 6543/10587 [00:02<00:01, 2826.69it/s]Groups NC_020133.1:  66%|######5   | 6976/10587 [00:02<00:01, 3160.50it/s]Groups NC_020133.1:  70%|######9   | 7398/10587 [00:02<00:00, 3415.86it/s]Groups NC_020133.1:  74%|#######3  | 7807/10587 [00:02<00:00, 3580.37it/s]Groups NC_020133.1:  77%|#######7  | 8200/10587 [00:02<00:00, 3612.94it/s]Groups NC_020133.1:  81%|########1 | 8586/10587 [00:02<00:00, 2234.78it/s]Groups NC_020133.1:  85%|########4 | 8994/10587 [00:02<00:00, 2583.63it/s]Groups NC_020133.1:  89%|########8 | 9376/10587 [00:03<00:00, 2847.00it/s]Groups NC_020133.1:  93%|#########2| 9799/10587 [00:03<00:00, 3169.96it/s]Groups NC_020133.1:  97%|#########6| 10228/10587 [00:03<00:00, 3438.12it/s]Groups NC_020133.1: 100%|##########| 10587/10587 [00:03<00:00, 3173.09it/s]
-C:\Users\User\anaconda3\envs\gene_prediction\lib\site-packages\sklearn\utils\validation.py:2739: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
-  warnings.warn(
-Loaded: NC_020133.1 Mycobacterium liflandii 128FXT, complete sequence
-Genome size: 6,208,955 bp
-3217 multi-start groups
-  [val] NC_009664.1... Groups NC_009664.1:   0%|          | 0/10742 [00:00<?, ?it/s]Groups NC_009664.1:   0%|          | 24/10742 [00:00<01:01, 174.14it/s]Groups NC_009664.1:   4%|3         | 409/10742 [00:00<00:05, 2044.63it/s]Groups NC_009664.1:   8%|7         | 806/10742 [00:00<00:03, 2850.00it/s]Groups NC_009664.1:  10%|#         | 1114/10742 [00:00<00:04, 2096.54it/s]Groups NC_009664.1:  14%|#4        | 1535/10742 [00:00<00:03, 2675.99it/s]Groups NC_009664.1:  18%|#8        | 1945/10742 [00:00<00:02, 3066.49it/s]Groups NC_009664.1:  22%|##1       | 2360/10742 [00:00<00:02, 3370.61it/s]Groups NC_009664.1:  25%|##5       | 2724/10742 [00:01<00:03, 2487.17it/s]Groups NC_009664.1:  29%|##9       | 3154/10742 [00:01<00:02, 2903.22it/s]Groups NC_009664.1:  33%|###3      | 3574/10742 [00:01<00:02, 3222.84it/s]Groups NC_009664.1:  37%|###7      | 3992/10742 [00:01<00:01, 3468.20it/s]Groups NC_009664.1:  41%|####      | 4372/10742 [00:01<00:02, 2530.08it/s]Groups NC_009664.1:  45%|####4     | 4801/10742 [00:01<00:02, 2902.11it/s]Groups NC_009664.1:  49%|####8     | 5242/10742 [00:01<00:01, 3245.62it/s]Groups NC_009664.1:  53%|#####2    | 5665/10742 [00:01<00:01, 3479.03it/s]Groups NC_009664.1:  57%|#####6    | 6096/10742 [00:02<00:01, 3684.98it/s]Groups NC_009664.1:  60%|######    | 6494/10742 [00:02<00:01, 2460.01it/s]Groups NC_009664.1:  64%|######4   | 6924/10742 [00:02<00:01, 2831.81it/s]Groups NC_009664.1:  69%|######8   | 7364/10742 [00:02<00:01, 3179.93it/s]Groups NC_009664.1:  73%|#######2  | 7819/10742 [00:02<00:00, 3500.59it/s]Groups NC_009664.1:  77%|#######6  | 8244/10742 [00:02<00:00, 3691.18it/s]Groups NC_009664.1:  81%|########  | 8684/10742 [00:02<00:00, 3873.36it/s]Groups NC_009664.1:  85%|########4 | 9100/10742 [00:03<00:00, 2418.43it/s]Groups NC_009664.1:  89%|########8 | 9520/10742 [00:03<00:00, 2763.85it/s]Groups NC_009664.1:  93%|#########2| 9950/10742 [00:03<00:00, 3089.32it/s]Groups NC_009664.1:  97%|#########6| 10390/10742 [00:03<00:00, 3396.66it/s]Groups NC_009664.1: 100%|##########| 10742/10742 [00:03<00:00, 3028.26it/s]
-C:\Users\User\anaconda3\envs\gene_prediction\lib\site-packages\sklearn\utils\validation.py:2739: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
-  warnings.warn(
-Loaded: NC_009664.1 Kineococcus radiotolerans SRS30216, complete genome
-Genome size: 4,761,183 bp
-3874 multi-start groups
-  [val] NC_010498.1... Groups NC_010498.1:   0%|          | 0/7524 [00:00<?, ?it/s]Groups NC_010498.1:   6%|5         | 417/7524 [00:00<00:01, 4158.23it/s]Groups NC_010498.1:  11%|#1        | 833/7524 [00:00<00:02, 2555.32it/s]Groups NC_010498.1:  17%|#6        | 1261/7524 [00:00<00:01, 3134.01it/s]Groups NC_010498.1:  21%|##1       | 1613/7524 [00:00<00:02, 2407.28it/s]Groups NC_010498.1:  27%|##7       | 2040/7524 [00:00<00:01, 2882.92it/s]Groups NC_010498.1:  33%|###2      | 2461/7524 [00:00<00:01, 3234.67it/s]Groups NC_010498.1:  38%|###7      | 2823/7524 [00:01<00:01, 2477.78it/s]Groups NC_010498.1:  43%|####3     | 3244/7524 [00:01<00:01, 2863.05it/s]Groups NC_010498.1:  49%|####8     | 3665/7524 [00:01<00:01, 3190.69it/s]Groups NC_010498.1:  54%|#####4    | 4096/7524 [00:01<00:00, 3471.98it/s]Groups NC_010498.1:  60%|#####9    | 4478/7524 [00:01<00:01, 2370.31it/s]Groups NC_010498.1:  65%|######4   | 4879/7524 [00:01<00:00, 2699.72it/s]Groups NC_010498.1:  70%|#######   | 5267/7524 [00:01<00:00, 2956.68it/s]Groups NC_010498.1:  75%|#######5  | 5666/7524 [00:01<00:00, 3200.45it/s]Groups NC_010498.1:  81%|########  | 6075/7524 [00:02<00:00, 3428.88it/s]Groups NC_010498.1:  86%|########5 | 6452/7524 [00:02<00:00, 2351.36it/s]Groups NC_010498.1:  91%|#########1| 6853/7524 [00:02<00:00, 2685.18it/s]Groups NC_010498.1:  97%|#########6| 7270/7524 [00:02<00:00, 3009.95it/s]Groups NC_010498.1: 100%|##########| 7524/7524 [00:02<00:00, 2911.33it/s]
-C:\Users\User\anaconda3\envs\gene_prediction\lib\site-packages\sklearn\utils\validation.py:2739: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
-  warnings.warn(
-Loaded: NC_010498.1 Escherichia coli SMS-3-5, complete sequence
-Genome size: 5,068,389 bp
-4044 multi-start groups
-  [val] NC_009073.1... Groups NC_009073.1:   0%|          | 0/2850 [00:00<?, ?it/s]Groups NC_009073.1:  15%|#4        | 425/2850 [00:00<00:00, 4206.41it/s]Groups NC_009073.1:  30%|##9       | 846/2850 [00:00<00:00, 2531.80it/s]Groups NC_009073.1:  45%|####4     | 1279/2850 [00:00<00:00, 3125.90it/s]Groups NC_009073.1:  58%|#####8    | 1664/2850 [00:00<00:00, 2515.81it/s]Groups NC_009073.1:  73%|#######3  | 2081/2850 [00:00<00:00, 2939.61it/s]Groups NC_009073.1:  86%|########6 | 2462/2850 [00:00<00:00, 3160.68it/s]Groups NC_009073.1:  99%|#########8| 2811/2850 [00:01<00:00, 2408.68it/s]Groups NC_009073.1: 100%|##########| 2850/2850 [00:01<00:00, 2697.55it/s]
-C:\Users\User\anaconda3\envs\gene_prediction\lib\site-packages\sklearn\utils\validation.py:2739: UserWarning: X does not have valid feature names, but LGBMClassifier was fitted with feature names
-  warnings.warn(
-Loaded: NC_009073.1 Pyrobaculum calidifontis JCM 11548, complete sequence
-Genome size: 2,009,313 bp
-1732 multi-start groups
-
-  Train: 43,768 multi-start groups
-  Val:   12,867 multi-start groups
-  Pre-computing buckets... done  (166 size buckets, 43,768 groups)
-
-  Baseline accuracy — train: 0.8390  val: 0.7815
-
-================================================================================
-OPTIMISING (8 starting points, L-BFGS-B, vectorised)
-================================================================================
-
-================================================================================
-RESULTS
-================================================================================
-
-  Feature       Current   Optimised    Change
-  -------       -------   ---------    ------
-  codon          4.8562      5.3006  +9.2%
-  imm            1.0107      0.7164  -29.1%
-  rbs            0.6383      0.8973  +40.6%
-  length         7.4367      7.4367  +0.0%
-  start          0.2755      0.4084  +48.2%
-  gc3            1.0000      2.6563  +165.6%
-
-  Selection accuracy (train):  0.8390  ->  0.8318  (-0.0072)
-  Selection accuracy (val):    0.7815  ->  0.7637  (-0.0179)
-  Bootstrap 95% CI on val delta:  [-0.0217, -0.0135]
-
-  Verdict: REGRESSION — do not adopt
-
-================================================================================
-COORDINATE SENSITIVITY (val accuracy — how much does each weight matter?)
-================================================================================
-
-  Factors tested: 0.25x  0.5x  0.75x  0.9x  [1.0x current]  1.1x  1.25x  1.5x  2.0x  4.0x
-
-  codon (current=4.8562):
-      x0.25   w= 1.2141  acc=0.7181
-      x0.50   w= 2.4281  acc=0.7439
-      x0.75   w= 3.6421  acc=0.7699
-      x0.90   w= 4.3706  acc=0.7782
-      x1.00   w= 4.8562  acc=0.7815 <-- current
-      x1.10   w= 5.3418  acc=0.7807
-      x1.25   w= 6.0703  acc=0.7805
-      x1.50   w= 7.2843  acc=0.7687
-      x2.00   w= 9.7124  acc=0.7341
-      x4.00   w=19.4248  acc=0.5480
-
-  imm (current=1.0107):
-      x0.25   w= 0.2527  acc=0.7786
-      x0.50   w= 0.5053  acc=0.7802
-      x0.75   w= 0.7580  acc=0.7817
-      x0.90   w= 0.9096  acc=0.7816
-      x1.00   w= 1.0107  acc=0.7815 <-- current
-      x1.10   w= 1.1118  acc=0.7804
-      x1.25   w= 1.2634  acc=0.7791
-      x1.50   w= 1.5160  acc=0.7797
-      x2.00   w= 2.0214  acc=0.7782
-      x4.00   w= 4.0428  acc=0.7547
-    --> best at x0.75 (0.7580), acc=0.7817 vs baseline 0.7815
-
-  rbs (current=0.6383):
-      x0.25   w= 0.1596  acc=0.7703
-      x0.50   w= 0.3191  acc=0.7797
-      x0.75   w= 0.4787  acc=0.7798
-      x0.90   w= 0.5745  acc=0.7819
-      x1.00   w= 0.6383  acc=0.7815 <-- current
-      x1.10   w= 0.7021  acc=0.7799
-      x1.25   w= 0.7979  acc=0.7769
-      x1.50   w= 0.9574  acc=0.7717
-      x2.00   w= 1.2766  acc=0.7543
-      x4.00   w= 2.5532  acc=0.7018
-    --> best at x0.9 (0.5745), acc=0.7819 vs baseline 0.7815
-
-  length (current=7.4367):
-      x0.25   w= 1.8592  acc=0.5856
-      x0.50   w= 3.7184  acc=0.7128
-      x0.75   w= 5.5775  acc=0.7626
-      x0.90   w= 6.6930  acc=0.7784
-      x1.00   w= 7.4367  acc=0.7815 <-- current
-      x1.10   w= 8.1804  acc=0.7785
-      x1.25   w= 9.2959  acc=0.7687
-      x1.50   w=11.1550  acc=0.7475
-      x2.00   w=14.8734  acc=0.7103
-      x4.00   w=29.7468  acc=0.6461
-
-  start (current=0.2755):
-      x0.25   w= 0.0689  acc=0.7595
-      x0.50   w= 0.1378  acc=0.7755
-      x0.75   w= 0.2066  acc=0.7818
-      x0.90   w= 0.2480  acc=0.7814
-      x1.00   w= 0.2755  acc=0.7815 <-- current
-      x1.10   w= 0.3031  acc=0.7794
-      x1.25   w= 0.3444  acc=0.7767
-      x1.50   w= 0.4133  acc=0.7727
-      x2.00   w= 0.5510  acc=0.7628
-      x4.00   w= 1.1020  acc=0.7233
-    --> best at x0.75 (0.2066), acc=0.7818 vs baseline 0.7815
-
-  gc3 (current=1.0000):
-      x0.25   w= 0.2500  acc=0.7724
-      x0.50   w= 0.5000  acc=0.7757
-      x0.75   w= 0.7500  acc=0.7798
-      x0.90   w= 0.9000  acc=0.7811
-      x1.00   w= 1.0000  acc=0.7815 <-- current
-      x1.10   w= 1.1000  acc=0.7809
-      x1.25   w= 1.2500  acc=0.7820
-      x1.50   w= 1.5000  acc=0.7817
-      x2.00   w= 2.0000  acc=0.7802
-      x4.00   w= 4.0000  acc=0.7602
-    --> best at x1.25 (1.2500), acc=0.7820 vs baseline 0.7815
-
-  Coordinate-search suggestion (val acc=0.7828 vs baseline 0.7815):
-    codon      4.8562  ->  4.8562  (unchanged)
-    imm        1.0107  ->  0.7580  (+75%)
-    rbs        0.6383  ->  0.5745  (+90%)
-    length     7.4367  ->  7.4367  (unchanged)
-    start      0.2755  ->  0.2066  (+75%)
-    gc3        1.0000  ->  1.2500  (+125%)
-
-  Report saved -> C:\Users\User\Desktop\bacterial-gene-prediction\models\calibration_report.json
-
-================================================================================
-NEXT STEPS
-================================================================================
-
-Current weights are already well-calibrated for this pipeline.
-Proceed directly to HybridGeneFilter retraining (issue #112).
-================================================================================
