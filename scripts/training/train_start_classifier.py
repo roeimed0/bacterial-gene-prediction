@@ -29,14 +29,12 @@ import matplotlib
 
 matplotlib.use("Agg")
 import lightgbm as lgb_sk
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize_scalar
 from scipy.special import expit
 from scipy.special import logit as sp_logit
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import ParameterGrid
@@ -943,7 +941,7 @@ def lopo_cv(make_clf, calibrate=False):
 
 
 # ── Step 1: LGB hyperparameter search ────────────────────────────────────────
-print(f"\n=== LGB HYPERPARAMETER SEARCH (LOPO-CV) ===")
+print("\n=== LGB HYPERPARAMETER SEARCH (LOPO-CV) ===")
 print(f"  Naive baseline: {naive_base:.1f}%")
 print(f"  Searching {len(LGB_PARAM_GRID)} configurations...")
 
@@ -977,7 +975,7 @@ print(f"  Best LGB acc:    {best_lgb_acc:.1f}%  (t={best_lgb_t})")
 
 
 # ── Step 2: Compare uncalibrated vs calibrated best LGB ──────────────────────
-print(f"\n=== CALIBRATION COMPARISON ===")
+print("\n=== CALIBRATION COMPARISON ===")
 print(f"  {'Config':<28}  {'AUROC':>7}", end="")
 for t in FLIP_THRESHOLDS:
     print(f"  {f't={t}':>8}", end="")
@@ -1335,5 +1333,5 @@ model_bundle = {
 model_path = Path(_args.out_model)
 with open(model_path, "wb") as f:
     pickle.dump(model_bundle, f)
-print(f"Saved: start_classifier_results.csv")
+print("Saved: start_classifier_results.csv")
 print(f"Saved: {model_path}")

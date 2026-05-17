@@ -175,7 +175,7 @@ if not args.skip_start_classifier:
         f"  and re-run benchmark_start_classifier.py before deciding to promote."
     )
 else:
-    print(f"\n  Start classifier skipped (--skip-start-classifier).")
+    print("\n  Start classifier skipped (--skip-start-classifier).")
 
 # 8. Promote
 print(f"\n{SEP}\nCheck benchmark output above.\n{SEP}")

@@ -10,9 +10,6 @@ import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-# Accepts only safe NCBI-style accession characters; blocks path traversal.
-_VALID_GENOME_ID = re.compile(r"^[A-Za-z0-9._-]+$")
-
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -39,6 +36,9 @@ from api.models import (  # noqa: E402
     ValidationRequest,
     ValidationResponse,
 )
+
+# Accepts only safe NCBI-style accession characters; blocks path traversal.
+_VALID_GENOME_ID = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 @asynccontextmanager

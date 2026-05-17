@@ -26,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.comparative_analysis import compare_orfs_to_reference
 from src.config import FIRST_FILTER_THRESHOLD, START_SELECTION_WEIGHTS, TEST_GENOMES
-from src.data_management import get_data_dir, get_gff_path, load_genome_sequence
+from src.data_management import get_data_dir, load_genome_sequence
 from src.ml_models import HybridGeneFilter, OrfGroupClassifier
 from src.traditional_methods import (
     build_all_scoring_models,
@@ -570,4 +570,4 @@ print(
     f"{df['old_f1'].mean():>6.3f}   {df['new_f1'].mean():>6.3f}  "
     f"{df['d_f1'].mean():>+6.3f}"
 )
-print(f"\nSaved: benchmark_start_classifier.csv")
+print("\nSaved: benchmark_start_classifier.csv")
