@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.ml_models import HybridGeneFilter, OrfGroupClassifier
+from src.ml_models import HybridGeneFilter, OrfGroupClassifier, StartSelectionClassifier
 
 # ---------------------------------------------------------------------------
 # Expected constants (must stay in sync with models/feature_names.pkl and
@@ -406,6 +406,353 @@ class TestOrfGroupClassifierTrain:
         expected_spw = n_neg / n_pos
         actual_spw = clf.model.get_params()["scale_pos_weight"]
         assert actual_spw == pytest.approx(expected_spw, rel=1e-6)
+
+
+# ===========================================================================
+# StartSelectionClassifier
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Shared constants and helpers
+# ---------------------------------------------------------------------------
+
+_SS_FEATURES = [
+    "d_baseline",
+    "d_rbs",
+    "d_start",
+    "d_codon",
+    "d_imm",
+    "d_length",
+    "gap",
+    "score_range",
+    "rel_gap",
+    "n_orfs",
+    "gc_pct",
+]
+_WEIGHTS = {"codon": 4.8562, "imm": 1.0107, "rbs": 0.6383, "length": 7.4367, "start": 0.2755}
+_GENOME = "ATGCATGCAT" * 500  # 5000 bp synthetic genome, no real biology needed
+
+
+def _make_ss(prob_keep=0.8, contest_t=1.0, flip_t=0.80, temp_T=None):
+    """Build a StartSelectionClassifier with attributes set directly (no pickle needed)."""
+    from sklearn.preprocessing import StandardScaler
+
+    scaler = StandardScaler()
+    scaler.fit(np.zeros((2, len(_SS_FEATURES))))
+
+    clf = MagicMock()
+    clf.predict_proba = MagicMock(return_value=np.array([[1 - prob_keep, prob_keep]]))
+
+    ss = StartSelectionClassifier()
+    ss.clf = clf
+    ss.scaler = scaler
+    ss.features = list(_SS_FEATURES)
+    ss.contest_t = contest_t
+    ss.flip_t = flip_t
+    ss.calibrated = False
+    ss.temperature_T = temp_T
+    return ss
+
+
+def _picklable_bundle(contest_t=1.0, flip_t=0.80, temp_T=None):
+    """Return a pickle-safe bundle using a real tiny LightGBM model."""
+    import lightgbm as lgb
+    from sklearn.preprocessing import StandardScaler
+
+    X = np.random.default_rng(0).standard_normal((40, len(_SS_FEATURES)))
+    y = np.array([0, 1] * 20)
+    clf = lgb.LGBMClassifier(n_estimators=5, verbose=-1, n_jobs=1)
+    clf.fit(X, y)
+
+    scaler = StandardScaler()
+    scaler.fit(X)
+
+    return {
+        "clf": clf,
+        "scaler": scaler,
+        "features": list(_SS_FEATURES),
+        "contest_t": contest_t,
+        "flip_t": flip_t,
+        "calibrated": False,
+        "temperature_T": temp_T,
+    }
+
+
+def _load_ss(tmp_path, **kwargs):
+    """Persist a picklable bundle and load it into a StartSelectionClassifier."""
+    import pickle
+
+    bundle = _picklable_bundle(**kwargs)
+    path = str(tmp_path / "ss_test.pkl")
+    with open(path, "wb") as f:
+        pickle.dump(bundle, f)
+    ss = StartSelectionClassifier()
+    ss.load(path)
+    return ss
+
+
+def _orf(genome_start, genome_end, strand="forward", **overrides):
+    """Build a minimal ORF dict with all fields needed by select_best_starts()."""
+    base = {
+        "genome_start": genome_start,
+        "genome_end": genome_end,
+        "start": genome_start,
+        "end": genome_end,
+        "strand": strand,
+        "length": genome_end - genome_start,
+        "sequence": _GENOME[genome_start - 1 : genome_end],
+        "start_codon": "ATG",
+        "codon_score_norm": 0.5,
+        "imm_score_norm": 0.4,
+        "rbs_score_norm": 0.6,
+        "length_score_norm": 0.5,
+        "start_score_norm": 0.6,
+    }
+    base.update(overrides)
+    return base
+
+
+def _mock_models():
+    """Minimal scoring_models dict; real scoring functions patched out in callers."""
+    return {
+        "codon_model": {},
+        "background_codon_model": {},
+        "coding_imm": {},
+        "noncoding_imm": {},
+        "max_order": 2,
+    }
+
+
+def _run_ss(ss, groups):
+    """Call select_best_starts with scoring helpers patched to return 0.0."""
+    with (
+        patch.object(ss, "_ext_codon_score", return_value=0.0),
+        patch.object(ss, "_post_start_score", return_value=0.0),
+        patch.object(ss, "_upstream_imm", return_value=0.0),
+    ):
+        return ss.select_best_starts(groups, _GENOME, _mock_models(), _WEIGHTS)
+
+
+# ---------------------------------------------------------------------------
+# Persistence
+# ---------------------------------------------------------------------------
+
+
+class TestStartSelectionClassifierPersistence:
+
+    def test_load_save_roundtrip_preserves_thresholds(self, tmp_path):
+        """load() → save() → load() must preserve contest_t, flip_t, features, calibrated."""
+        ss1 = _load_ss(tmp_path, contest_t=0.5, flip_t=0.75)
+        path2 = str(tmp_path / "ss_rt.pkl")
+        ss1.save(path2)
+
+        ss2 = StartSelectionClassifier()
+        ss2.load(path2)
+
+        assert ss2.contest_t == pytest.approx(0.5)
+        assert ss2.flip_t == pytest.approx(0.75)
+        assert ss2.features == ss1.features
+        assert ss2.calibrated is False
+
+    def test_load_sets_temperature_T_when_present(self, tmp_path):
+        """load() populates temperature_T when the bundle includes it."""
+        ss = _load_ss(tmp_path, temp_T=1.5)
+        assert ss.temperature_T == pytest.approx(1.5)
+
+    def test_load_temperature_T_defaults_to_none(self, tmp_path):
+        """load() sets temperature_T=None when the bundle omits the key."""
+        ss = _load_ss(tmp_path, temp_T=None)
+        assert ss.temperature_T is None
+
+
+# ---------------------------------------------------------------------------
+# select_best_starts — guard rails
+# ---------------------------------------------------------------------------
+
+
+class TestStartSelectionClassifierGuards:
+
+    def test_raises_runtime_error_if_not_loaded(self):
+        """select_best_starts() raises RuntimeError before load() is called."""
+        ss = StartSelectionClassifier()
+        with pytest.raises(RuntimeError, match="not loaded"):
+            ss.select_best_starts({}, _GENOME, _mock_models(), _WEIGHTS)
+
+    def test_empty_groups_returns_empty_dataframe(self):
+        """select_best_starts() with an empty groups dict returns an empty DataFrame."""
+        ss = _make_ss()
+        result = ss.select_best_starts({}, _GENOME, _mock_models(), _WEIGHTS)
+        assert isinstance(result, pd.DataFrame)
+        assert len(result) == 0
+
+
+# ---------------------------------------------------------------------------
+# select_best_starts — contest logic
+# ---------------------------------------------------------------------------
+
+
+class TestStartSelectionClassifierContest:
+
+    def test_returns_one_row_per_non_empty_group(self):
+        """select_best_starts() yields exactly one winner per group."""
+        ss = _make_ss(prob_keep=0.9, contest_t=10.0)
+        groups = {
+            "g1": pd.DataFrame([_orf(100, 400)]),
+            "g2": pd.DataFrame([_orf(500, 800), _orf(550, 800)]),
+        }
+        result = _run_ss(ss, groups)
+        assert len(result) == 2
+
+    def test_no_flip_when_gap_exceeds_contest_threshold(self):
+        """Classifier is never called when baseline gap >= contest_t."""
+        ss = _make_ss(prob_keep=0.1, contest_t=1.0)
+        # manufacture a large gap: high codon+length for orf1, zero for orf2
+        orf1 = _orf(100, 700, codon_score_norm=1.0, length_score_norm=1.0)
+        orf2 = _orf(200, 700, codon_score_norm=0.0, length_score_norm=0.0)
+        groups = {"g1": pd.DataFrame([orf1, orf2])}
+
+        _run_ss(ss, groups)
+
+        ss.clf.predict_proba.assert_not_called()
+
+    def test_keeps_top1_when_classifier_confident_to_keep(self):
+        """prob_keep=0.9 > (1 - flip_t=0.80) → top-1 is retained."""
+        ss = _make_ss(prob_keep=0.9, contest_t=100.0, flip_t=0.80)
+        orf1 = _orf(100, 400, codon_score_norm=0.51)
+        orf2 = _orf(150, 400, codon_score_norm=0.50)
+        groups = {"g1": pd.DataFrame([orf1, orf2])}
+
+        result = _run_ss(ss, groups)
+
+        assert result.iloc[0]["genome_start"] == 100
+
+    def test_flips_to_top2_when_classifier_confident_to_flip(self):
+        """prob_keep=0.1 < (1 - flip_t=0.80) = 0.20 → top-2 wins."""
+        ss = _make_ss(prob_keep=0.1, contest_t=100.0, flip_t=0.80)
+        orf1 = _orf(100, 400, codon_score_norm=0.51)
+        orf2 = _orf(150, 400, codon_score_norm=0.50)
+        groups = {"g1": pd.DataFrame([orf1, orf2])}
+
+        result = _run_ss(ss, groups)
+
+        assert result.iloc[0]["genome_start"] == 150
+
+    def test_no_flip_when_uncertain(self):
+        """prob_keep=0.5 is between flip boundaries → keep top-1."""
+        ss = _make_ss(prob_keep=0.5, contest_t=100.0, flip_t=0.80)
+        orf1 = _orf(100, 400, codon_score_norm=0.51)
+        orf2 = _orf(150, 400, codon_score_norm=0.50)
+        groups = {"g1": pd.DataFrame([orf1, orf2])}
+
+        result = _run_ss(ss, groups)
+
+        assert result.iloc[0]["genome_start"] == 100
+
+    def test_singleton_group_skips_classifier(self):
+        """A single-ORF group is uncontested — classifier must not be invoked."""
+        ss = _make_ss(prob_keep=0.05, contest_t=100.0)
+        groups = {"g1": pd.DataFrame([_orf(100, 400)])}
+
+        _run_ss(ss, groups)
+
+        ss.clf.predict_proba.assert_not_called()
+
+    def test_temperature_scaling_path_does_not_crash(self):
+        """When temperature_T is set, the scaled probability path runs without error."""
+        ss = _make_ss(prob_keep=0.9, contest_t=100.0, temp_T=2.0)
+        orf1 = _orf(100, 400, codon_score_norm=0.51)
+        orf2 = _orf(150, 400, codon_score_norm=0.50)
+        groups = {"g1": pd.DataFrame([orf1, orf2])}
+
+        result = _run_ss(ss, groups)
+
+        assert len(result) == 1  # ran to completion; temperature branch exercised
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+class TestStartSelectionClassifierInternals:
+
+    def test_baseline_score_single_component(self):
+        """_baseline_score with only codon_score_norm=1 equals the codon weight."""
+        ss = StartSelectionClassifier()
+        row = pd.Series(
+            {
+                "codon_score_norm": 1.0,
+                "imm_score_norm": 0.0,
+                "rbs_score_norm": 0.0,
+                "length_score_norm": 0.0,
+                "start_score_norm": 0.0,
+            }
+        )
+        assert ss._baseline_score(row, _WEIGHTS) == pytest.approx(_WEIGHTS["codon"])
+
+    def test_baseline_score_all_ones_equals_sum_of_weights(self):
+        """_baseline_score with all components=1 equals the sum of all weights."""
+        ss = StartSelectionClassifier()
+        row = pd.Series(
+            {k + "_score_norm": 1.0 for k in ("codon", "imm", "rbs", "length", "start")}
+        )
+        assert ss._baseline_score(row, _WEIGHTS) == pytest.approx(sum(_WEIGHTS.values()))
+
+    def test_get_upstream_forward_strand_length(self):
+        """_get_upstream returns at most `window` characters on the forward strand."""
+        ss = StartSelectionClassifier()
+        orf = {"genome_start": 100, "genome_end": 400, "strand": "forward"}
+        up = ss._get_upstream(_GENOME, orf, window=25)
+        assert len(up) <= 25
+
+    def test_get_upstream_reverse_strand_does_not_crash(self):
+        """_get_upstream handles reverse-strand ORFs without IndexError."""
+        ss = StartSelectionClassifier()
+        orf = {"genome_start": 100, "genome_end": 400, "strand": "reverse"}
+        up = ss._get_upstream(_GENOME, orf, window=25)
+        assert isinstance(up, str)
+        assert len(up) <= 25
+
+    def test_f4_spacer_positive_for_sd_in_range(self):
+        """_f4_spacer > 0 when an SD motif sits 4–12 bp upstream of the start."""
+        ss = StartSelectionClassifier()
+        # "AGGAG" then 7-bp spacer → spacer distance = 7 (in range 4–12)
+        upstream = "AGGAG" + "N" * 7
+        assert ss._f4_spacer(upstream) > 0.0
+
+    def test_f4_spacer_zero_for_no_sd_motif(self):
+        """_f4_spacer returns 0.0 when no SD motif is present."""
+        ss = StartSelectionClassifier()
+        assert ss._f4_spacer("T" * 20) == 0.0
+
+    def test_f5_gc_bias_in_range(self):
+        """_f5_gc_bias returns a value in [0, 1] for a valid upstream sequence."""
+        ss = StartSelectionClassifier()
+        val = ss._f5_gc_bias("ATGATGATGATGATGATG")
+        assert 0.0 <= val <= 1.0
+
+    def test_f5_gc_bias_short_sequence_returns_zero(self):
+        """_f5_gc_bias returns 0.0 for sequences shorter than 9 bp."""
+        ss = StartSelectionClassifier()
+        assert ss._f5_gc_bias("ATG") == 0.0
+
+    def test_build_pwm_correct_shape(self):
+        """_build_pwm returns ndarray of shape (window, 4)."""
+        ss = StartSelectionClassifier()
+        seqs = ["ATGCATGCATGCATGCATGC"] * 10
+        pwm = ss._build_pwm(seqs, 20)
+        assert pwm.shape == (20, 4)
+
+    def test_score_pwm_returns_zero_for_none(self):
+        """_score_pwm returns 0.0 when pwm is None (too few training sequences)."""
+        ss = StartSelectionClassifier()
+        assert ss._score_pwm("ATGATGATGATGATGATGATG", None) == 0.0
+
+    def test_score_pwm_returns_zero_when_upstream_too_short(self):
+        """_score_pwm returns 0.0 when upstream is shorter than PWM window."""
+        ss = StartSelectionClassifier()
+        pwm = np.zeros((20, 4))
+        assert ss._score_pwm("ATG", pwm) == 0.0
 
 
 class TestOrfGroupClassifierCalibrateThreshold:

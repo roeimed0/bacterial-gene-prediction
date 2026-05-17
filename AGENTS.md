@@ -161,6 +161,30 @@ Rules:
 
 ---
 
+## Script Organization
+
+All scripts must be placed in the correct subdirectory of `scripts/`. No loose scripts at the `scripts/` root.
+
+| Type | Directory |
+|------|-----------|
+| Model training | `scripts/training/` |
+| Benchmarking / evaluation | `scripts/evaluation/` |
+| Temporary / experimental | `scripts/experiments/` |
+
+**Experimental scripts** in `scripts/experiments/` must begin with this standard header:
+
+```python
+# EXPERIMENT: <one-line description of what this tests>
+# STATUS: <active | concluded | superseded>
+# RESULT: <one-line finding, or "pending">
+```
+
+Delete experimental scripts once their result is captured in `experiments/log.json` or project memory. Do not let them accumulate.
+
+**Large data files** (>10 MB) belong in `lgb_attribution_results/` and must not be committed to git. Add new patterns to `.gitignore` if needed.
+
+---
+
 ## Repository Layout
 
 ```
@@ -177,13 +201,18 @@ api/                        # FastAPI REST backend
   main.py                   # 10+ prediction and validation endpoints
   models.py                 # Pydantic request/response schemas
 scripts/                    # Standalone utility scripts (not importable)
-  benchmark.py              # Run benchmark on TEST_GENOMES, save to experiments/log.json
-  predict_batch.py          # Batch prediction over multiple FASTA files
-  train_lgb.py              # Train OrfGroupClassifier (LightGBM)
-  train_hybrid.py           # Train HybridGeneFilter
-  manage_lgb.py             # LGB model management and evaluation
-  calibrate_start_weights.py# Calibrate START_SELECTION_WEIGHTS
-  compare_lgb_models.py     # Compare LGB model versions
+  training/                 # Model training scripts
+    train_lgb.py            # Train OrfGroupClassifier (LightGBM)
+    train_hybrid.py         # Train HybridGeneFilter
+    train_start_classifier.py # Train pairwise start-selection classifier
+    calibrate_start_weights.py# Calibrate START_SELECTION_WEIGHTS
+    predict_batch.py        # Batch prediction over multiple FASTA files
+  evaluation/               # Benchmark and evaluation scripts
+    benchmark.py            # Full pipeline benchmark on TEST_GENOMES → experiments/log.json
+    benchmark_start_classifier.py # Start-selection classifier benchmark
+    manage_lgb.py           # LGB model management and evaluation
+    compare_lgb_models.py   # Compare LGB model versions
+  experiments/              # Temporary experiment scripts (see Script Organization rules)
 gene-prediction-frontend/   # React 19 + Vite + Tailwind web UI
 models/                     # Trained ML model artifacts (.pkl)
 notebooks/                  # Research notebooks (not production)

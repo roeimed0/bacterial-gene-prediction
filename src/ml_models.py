@@ -15,7 +15,7 @@ from Bio.SeqUtils.ProtParam import ProteinAnalysis
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["OrfGroupClassifier", "HybridGeneFilter"]
+__all__ = ["OrfGroupClassifier", "HybridGeneFilter", "StartSelectionClassifier"]
 
 """
 Machine learning classifier for ORF groups.
@@ -1120,3 +1120,463 @@ if __name__ == "__main__":
             print("[!] Model not found, skipping ML...")
     except Exception as e:
         print(f"[!] ML error: {e}, skipping...")
+
+
+# =============================================================================
+# START SELECTION CLASSIFIER
+# =============================================================================
+
+
+class StartSelectionClassifier:
+    """
+    Two-stage pairwise classifier for start codon selection.
+
+    When the baseline weighted-sum score gap between the top-1 and top-2
+    candidate ORFs in a group is below `contest_t`, a LightGBM classifier
+    re-evaluates the pair using pairwise feature differences plus group-level
+    context to decide whether to keep or flip to the second-best candidate.
+    The model only flips when it is highly confident (prob < 1 - flip_t).
+
+    Usage:
+        ss = StartSelectionClassifier()
+        ss.load("models/start_selector.pkl")
+        selected_df = ss.select_best_starts(
+            groups, genome_seq, scoring_models, lgb_probs, weights
+        )
+    """
+
+    # Anti-SD: 3' tail of 16S rRNA (5'->3', RNA; E. coli consensus)
+    _ANTI_SD = "GAUCACCUCCUUA"
+    _RC_TABLE = str.maketrans("ACGT", "TGCA")
+    _SD_MOTIFS = ["AAGGAGG", "AAGGAG", "AGGAG", "GGAGG", "GAGG", "AAGG", "AGGA"]
+    _STOPS = {"TAA", "TAG", "TGA"}
+    _BASES = "ACGT"
+    _PAIRS = {"A": "U", "U": "A", "G": "C", "C": "G"}
+    _WOBBLE = {("G", "U"), ("U", "G")}
+
+    def __init__(self):
+        self.clf = None
+        self.scaler = None
+        self.features: List[str] = []
+        self.contest_t: float = 1.0
+        self.flip_t: float = 0.80
+        self.calibrated: bool = False
+        self.temperature_T: Optional[float] = None
+
+    # ── Persistence ───────────────────────────────────────────────────────────
+
+    def load(self, path: str) -> None:
+        import pickle
+
+        with open(path, "rb") as f:
+            bundle = pickle.load(f)
+        self.clf = bundle["clf"]
+        self.scaler = bundle["scaler"]
+        self.features = bundle["features"]
+        self.contest_t = bundle.get("contest_t", 1.0)
+        self.flip_t = bundle.get("flip_t", 0.80)
+        self.calibrated = bundle.get("calibrated", False)
+        self.temperature_T = bundle.get("temperature_T", None)
+        logger.info(
+            "StartSelectionClassifier loaded from %s  "
+            "(contest_t=%.2f, flip_t=%.2f, calibrated=%s, temp_T=%s)",
+            path,
+            self.contest_t,
+            self.flip_t,
+            self.calibrated,
+            f"{self.temperature_T:.4f}" if self.temperature_T else "None",
+        )
+
+    def save(self, path: str) -> None:
+        import pickle
+
+        bundle = {
+            "clf": self.clf,
+            "scaler": self.scaler,
+            "features": self.features,
+            "contest_t": self.contest_t,
+            "flip_t": self.flip_t,
+            "calibrated": self.calibrated,
+        }
+        with open(path, "wb") as f:
+            pickle.dump(bundle, f)
+        logger.info("StartSelectionClassifier saved to %s", path)
+
+    # ── Public API ────────────────────────────────────────────────────────────
+
+    def select_best_starts(
+        self,
+        groups: Dict,
+        genome_seq: str,
+        scoring_models: Dict,
+        weights: Dict,
+    ) -> pd.DataFrame:
+        """
+        Select best start codon per group using two-stage scoring.
+
+        Stage 1 (all groups): existing weighted-sum baseline score.
+        Stage 2 (contested only, gap < contest_t): pairwise LGB classifier.
+
+        Groups are expected to already be LGB-filtered (only real-gene candidates).
+        Per-genome context (RBS PWM, start context PWM, length prior) is built
+        from singleton groups in the passed set.
+
+        Args:
+            groups:         Dict of {group_id: DataFrame} from organize_nested_orfs
+                            after LGB filtering.
+            genome_seq:     Full genome DNA sequence string.
+            scoring_models: Dict from build_all_scoring_models (codon/IMM models).
+            weights:        START_SELECTION_WEIGHTS dict.
+
+        Returns:
+            DataFrame with one row per group (best start selected).
+        """
+        if self.clf is None:
+            raise RuntimeError("Model not loaded. Call load() first.")
+
+        # Build per-genome context from singleton groups (already LGB-kept)
+        rbs_pwm = self._build_rbs_pwm(groups, genome_seq)
+        ctx_pwm = self._build_ctx_pwm(groups, genome_seq)
+        len_mean, len_std = self._build_len_prior(groups)
+        gc_pct = (genome_seq.count("G") + genome_seq.count("C")) / max(len(genome_seq), 1)
+
+        selected = []
+        for i, (gid, grp_df) in enumerate(groups.items()):
+            if isinstance(grp_df, list):
+                grp_df = pd.DataFrame(grp_df)
+            if len(grp_df) == 0:
+                continue
+
+            grp_df = grp_df.copy()
+            grp_df["_base"] = grp_df.apply(lambda r: self._baseline_score(r, weights), axis=1)
+            sorted_idx = grp_df["_base"].sort_values(ascending=False).index
+            t1 = grp_df.loc[sorted_idx[0]]
+            gap = (
+                float(t1["_base"]) - float(grp_df.loc[sorted_idx[1], "_base"])
+                if len(sorted_idx) > 1
+                else 999.0
+            )
+
+            winner_idx = sorted_idx[0]
+
+            if gap < self.contest_t and len(sorted_idx) >= 2:
+                t2 = grp_df.loc[sorted_idx[1]]
+                fv = self._compute_features(
+                    t1,
+                    t2,
+                    grp_df,
+                    genome_seq,
+                    scoring_models,
+                    rbs_pwm,
+                    ctx_pwm,
+                    len_mean,
+                    len_std,
+                    gc_pct,
+                    gap,
+                )
+                X = self.scaler.transform(np.array([[fv.get(c, 0.0) for c in self.features]]))
+                prob_keep = float(self.clf.predict_proba(X)[0, 1])
+                if self.temperature_T is not None:
+                    from scipy.special import expit
+                    from scipy.special import logit as sp_logit
+
+                    prob_keep = float(
+                        expit(sp_logit(np.clip(prob_keep, 1e-7, 1 - 1e-7)) / self.temperature_T)
+                    )
+                if prob_keep < (1.0 - self.flip_t):
+                    winner_idx = sorted_idx[1]
+
+            selected.append(grp_df.loc[winner_idx])
+
+        return pd.DataFrame(selected).reset_index(drop=True) if selected else pd.DataFrame()
+
+    # ── Private: per-genome context builders ─────────────────────────────────
+
+    def _build_rbs_pwm(self, groups, seq, window=20, min_seqs=50):
+        """Build RBS PWM from singleton groups (already LGB-filtered)."""
+        seqs = []
+        for gid, gdf in groups.items():
+            if isinstance(gdf, list):
+                gdf = pd.DataFrame(gdf)
+            if len(gdf) != 1:
+                continue
+            up = self._get_upstream(seq, gdf.iloc[0].to_dict(), window)
+            if len(up) >= window:
+                seqs.append(up[-window:])
+        return self._build_pwm(seqs, window) if len(seqs) >= min_seqs else None
+
+    def _build_ctx_pwm(self, groups, seq, window=13, min_seqs=50):
+        """Build start-context PWM from singleton groups (already LGB-filtered)."""
+        seqs = []
+        for gid, gdf in groups.items():
+            if isinstance(gdf, list):
+                gdf = pd.DataFrame(gdf)
+            if len(gdf) != 1:
+                continue
+            row = gdf.iloc[0]
+            strand = row.get("strand", "forward")
+            gs = int(row.get("genome_start", row.get("start", 0)))
+            ge = int(row.get("genome_end", row.get("end", 0)))
+            if gs > ge:
+                gs, ge = ge, gs
+            if strand == "forward":
+                if gs - 11 < 0:
+                    continue
+                ctx = seq[gs - 11 : gs + 3].upper()
+            else:
+                if ge + 11 > len(seq):
+                    continue
+                ctx = seq[ge - 2 : ge + 11].upper().translate(self._RC_TABLE)[::-1]
+            if len(ctx) == window:
+                seqs.append(ctx)
+        return self._build_pwm(seqs, window) if len(seqs) >= min_seqs else None
+
+    def _build_len_prior(self, groups) -> Tuple[float, float]:
+        """Build gene-length prior from singleton groups (already LGB-filtered)."""
+        ls = []
+        for gid, gdf in groups.items():
+            if isinstance(gdf, list):
+                gdf = pd.DataFrame(gdf)
+            if len(gdf) != 1:
+                continue
+            ls.append(float(gdf.iloc[0].get("length", 0)))
+        return (float(np.mean(ls)), float(np.std(ls))) if len(ls) >= 10 else (800.0, 400.0)
+
+    def _build_pwm(self, seqs: List[str], window: int) -> np.ndarray:
+        bi = {b: i for i, b in enumerate(self._BASES)}
+        cnt = np.ones((window, 4))
+        for s in seqs:
+            for p, b in enumerate(s):
+                if b in bi:
+                    cnt[p, bi[b]] += 1
+        freq = cnt / cnt.sum(axis=1, keepdims=True)
+        return np.log(freq / 0.25)
+
+    # ── Private: feature computation ─────────────────────────────────────────
+
+    @staticmethod
+    def _baseline_score(row, weights: Dict) -> float:
+        return (
+            row.get("codon_score_norm", 0) * weights["codon"]
+            + row.get("imm_score_norm", 0) * weights["imm"]
+            + row.get("rbs_score_norm", 0) * weights["rbs"]
+            + row.get("length_score_norm", 0) * weights["length"]
+            + row.get("start_score_norm", 0) * weights["start"]
+        )
+
+    def _get_upstream(self, seq: str, orf: dict, window: int = 25) -> str:
+        strand = orf.get("strand", "forward")
+        gs = int(orf.get("genome_start", orf.get("start", 0)))
+        ge = int(orf.get("genome_end", orf.get("end", 0)))
+        if gs > ge:
+            gs, ge = ge, gs
+        if strand == "forward":
+            return seq[max(0, gs - window - 1) : gs - 1].upper()
+        raw = seq[ge : min(len(seq), ge + window)].upper()
+        return raw.translate(self._RC_TABLE)[::-1]
+
+    def _score_pwm(self, upstream: str, pwm) -> float:
+        if pwm is None or len(upstream) < pwm.shape[0]:
+            return 0.0
+        bi = {b: i for i, b in enumerate(self._BASES)}
+        return sum(pwm[p, bi[b]] for p, b in enumerate(upstream[-pwm.shape[0] :]) if b in bi)
+
+    def _f4_spacer(self, upstream: str) -> float:
+        best = 0.0
+        for motif in self._SD_MOTIFS:
+            idx = upstream.rfind(motif)
+            if idx < 0:
+                continue
+            spacer = len(upstream) - (idx + len(motif))
+            if 4 <= spacer <= 12:
+                best = max(best, len(motif) / 7.0)
+        return best
+
+    def _f5_gc_bias(self, upstream: str) -> float:
+        if len(upstream) < 9:
+            return 0.0
+        gc1 = gc2 = gc3 = n = 0
+        for i in range(0, len(upstream) - 2, 3):
+            gc1 += upstream[i] in "GC"
+            gc2 += upstream[i + 1] in "GC"
+            gc3 += upstream[i + 2] in "GC"
+            n += 1
+        if n == 0:
+            return 0.0
+        r1, r2, r3 = gc1 / n, gc2 / n, gc3 / n
+        return abs(r3 - (r1 + r2) / 2)
+
+    def _anti_sd_score(self, upstream: str) -> float:
+        mrna = upstream.upper().replace("T", "U")
+        n = len(self._ANTI_SD)
+        best = 0.0
+        for i in range(len(mrna) - n + 1):
+            spacer = len(mrna) - (i + n)
+            if not (4 <= spacer <= 14):
+                continue
+            sc = sum(
+                (
+                    1.0
+                    if self._PAIRS.get(ab) == mrna[i + n - 1 - j]
+                    else (
+                        0.5
+                        if (ab, mrna[i + n - 1 - j]) in self._WOBBLE
+                        or (mrna[i + n - 1 - j], ab) in self._WOBBLE
+                        else 0.0
+                    )
+                )
+                for j, ab in enumerate(self._ANTI_SD)
+            )
+            best = max(best, sc / n)
+        return best
+
+    def _ext_codon_score(self, t1: dict, t2: dict, seq: str, models: Dict) -> float:
+        from .traditional_methods import score_codon_bias_ratio
+
+        gs1 = int(t1.get("genome_start", t1.get("start", 0)))
+        gs2 = int(t2.get("genome_start", t2.get("start", 0)))
+        ge1 = int(t1.get("genome_end", t1.get("end", 0)))
+        strand = t1.get("strand", "forward")
+        if gs1 > ge1:
+            gs1, ge1 = ge1, gs1
+        lo, hi = min(gs1, gs2), max(gs1, gs2)
+        if lo == hi:
+            return 0.0
+        ext = (
+            seq[lo - 1 : hi - 1].upper()
+            if strand == "forward"
+            else seq[hi:lo].upper().translate(self._RC_TABLE)[::-1]
+        )
+        return (
+            score_codon_bias_ratio(ext, models["codon_model"], models["background_codon_model"])
+            if len(ext) >= 3
+            else 0.0
+        )
+
+    def _dist_any_stop(self, seq: str, orf: dict, max_scan: int = 300) -> int:
+        strand = orf.get("strand", "forward")
+        gs = int(orf.get("genome_start", orf.get("start", 0)))
+        ge = int(orf.get("genome_end", orf.get("end", 0)))
+        if gs > ge:
+            gs, ge = ge, gs
+        if strand == "forward":
+            region = seq[max(0, gs - max_scan - 1) : gs - 1].upper()
+        else:
+            region = seq[ge : min(len(seq), ge + max_scan)].upper().translate(self._RC_TABLE)[::-1]
+        mn = len(region)
+        for frame in range(3):
+            for j in range(frame, len(region) - 2, 3):
+                if region[j : j + 3] in self._STOPS:
+                    mn = min(mn, len(region) - j)
+        return mn
+
+    def _post_start_score(self, orf_seq: str, models: Dict, n_codons: int = 5) -> float:
+        from .traditional_methods import score_codon_bias_ratio
+
+        region = orf_seq[3 : 3 + n_codons * 3]
+        return (
+            score_codon_bias_ratio(region, models["codon_model"], models["background_codon_model"])
+            if len(region) >= 3
+            else 0.0
+        )
+
+    def _score_ctx_pwm(self, seq: str, orf: dict, pwm) -> float:
+        if pwm is None:
+            return 0.0
+        strand = orf.get("strand", "forward")
+        window = pwm.shape[0]
+        gs = int(orf.get("genome_start", orf.get("start", 0)))
+        ge = int(orf.get("genome_end", orf.get("end", 0)))
+        if gs > ge:
+            gs, ge = ge, gs
+        if strand == "forward":
+            if gs - 11 < 0:
+                return 0.0
+            ctx = seq[gs - 11 : gs + 3].upper()
+        else:
+            if ge + 11 > len(seq):
+                return 0.0
+            ctx = seq[ge - 2 : ge + 11].upper().translate(self._RC_TABLE)[::-1]
+        if len(ctx) != window:
+            return 0.0
+        bi = {b: i for i, b in enumerate(self._BASES)}
+        return sum(pwm[p, bi[b]] for p, b in enumerate(ctx) if b in bi)
+
+    def _upstream_imm(self, upstream: str, models: Dict) -> float:
+        from .traditional_methods import score_imm_ratio
+
+        if len(upstream) < 9:
+            return 0.0
+        return score_imm_ratio(
+            upstream, models["coding_imm"], models["noncoding_imm"], models["max_order"]
+        )
+
+    def _compute_features(
+        self, t1, t2, grp_df, seq, models, rbs_pwm, ctx_pwm, len_mean, len_std, gc_pct, gap
+    ) -> dict:
+        t1d = t1.to_dict()
+        t2d = t2.to_dict()
+        up1 = self._get_upstream(seq, t1d, 25)
+        up2 = self._get_upstream(seq, t2d, 25)
+        lengths = grp_df["length"].values
+        scores = grp_df["_base"]
+        s_range = float(scores.max() - scores.min())
+        rbs_v = grp_df.get(
+            "rbs_score_norm", pd.Series(np.zeros(len(grp_df)), index=grp_df.index)
+        ).values
+        t1l = float(t1.get("length", 0))
+        t2l = float(t2.get("length", 0))
+        t1z = (t1l - len_mean) / max(len_std, 1.0)
+        t2z = (t2l - len_mean) / max(len_std, 1.0)
+        t1s = t1.get("sequence", "")
+        t2s = t2.get("sequence", "")
+
+        return {
+            "d_baseline": gap,
+            "d_rbs": float(t1.get("rbs_score_norm", 0)) - float(t2.get("rbs_score_norm", 0)),
+            "d_start": float(t1.get("start_score_norm", 0)) - float(t2.get("start_score_norm", 0)),
+            "d_codon": float(t1.get("codon_score_norm", 0)) - float(t2.get("codon_score_norm", 0)),
+            "d_imm": float(t1.get("imm_score_norm", 0)) - float(t2.get("imm_score_norm", 0)),
+            "d_length": t1l - t2l,
+            "d_f4": self._f4_spacer(up1) - self._f4_spacer(up2),
+            "d_f5": self._f5_gc_bias(up1) - self._f5_gc_bias(up2),
+            "d_up_imm": self._upstream_imm(up1, models) - self._upstream_imm(up2, models),
+            "d_genome_rbs": self._score_pwm(up1, rbs_pwm) - self._score_pwm(up2, rbs_pwm),
+            "d_anti_sd": self._anti_sd_score(up1) - self._anti_sd_score(up2),
+            "anti_sd_top1": self._anti_sd_score(up1),
+            "anti_sd_top2": self._anti_sd_score(up2),
+            "ext_codon": self._ext_codon_score(t1d, t2d, seq, models),
+            "d_any_stop_dist": self._dist_any_stop(seq, t1d) - self._dist_any_stop(seq, t2d),
+            "any_stop_top1": self._dist_any_stop(seq, t1d),
+            "any_stop_top2": self._dist_any_stop(seq, t2d),
+            "d_len_zscore": t1z - t2z,
+            "len_zscore_top1": t1z,
+            "len_zscore_top2": t2z,
+            "d_post_start": self._post_start_score(t1s, models)
+            - self._post_start_score(t2s, models),
+            "post_start_top1": self._post_start_score(t1s, models),
+            "post_start_top2": self._post_start_score(t2s, models),
+            "d_ctx_pwm": self._score_ctx_pwm(seq, t1d, ctx_pwm)
+            - self._score_ctx_pwm(seq, t2d, ctx_pwm),
+            "ctx_pwm_top1": self._score_ctx_pwm(seq, t1d, ctx_pwm),
+            "ctx_pwm_top2": self._score_ctx_pwm(seq, t2d, ctx_pwm),
+            "gap": gap,
+            "score_range": s_range,
+            "rel_gap": gap / max(s_range, 1e-9),
+            "n_near_ties": int((scores >= float(t1["_base"]) - 0.5).sum()) - 1,
+            "n_orfs": len(grp_df),
+            "top1_len_rank": float((lengths < t1l).sum()) / max(len(lengths) - 1, 1),
+            "group_len_cv": float(np.std(lengths) / max(np.mean(lengths), 1)),
+            "frac_longer": float((lengths > t1l).sum() / max(len(lengths), 1)),
+            "grp_rbs_mean": float(rbs_v.mean()),
+            "grp_rbs_range": float(rbs_v.max() - rbs_v.min()),
+            "frac_atg": float(
+                (grp_df.get("start_codon", pd.Series(["ATG"] * len(grp_df))) == "ATG").mean()
+            ),
+            "top1_rbs_rank": float((rbs_v < float(t1.get("rbs_score_norm", 0))).sum())
+            / max(len(rbs_v) - 1, 1),
+            "gc_pct": gc_pct,
+            "both_atg": int(
+                t1.get("start_codon", "") == "ATG" and t2.get("start_codon", "") == "ATG"
+            ),
+        }

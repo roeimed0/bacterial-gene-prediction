@@ -218,6 +218,85 @@ class TestCompareOrfsToReference:
 
 
 # ---------------------------------------------------------------------------
+# Coordinate system — reverse-strand regression (issue #175)
+# ---------------------------------------------------------------------------
+
+
+class TestReverseStrandCoordinates:
+    """
+    Regression for issue #175: verify that compare_orfs_to_reference() matches
+    reverse-strand genes using genome coordinates, not strand-local coordinates.
+
+    The pipeline stores every predicted gene with genome_start < genome_end
+    regardless of strand.  The reference GFF also uses ascending coordinates.
+    A match must succeed when both use the same (genome_start, genome_end) pair,
+    even if the strand fields differ.
+    """
+
+    # GFF with two genes: one forward (100, 300) and one reverse (900, 1100).
+    _GFF_REV = (
+        "##gff-version 3\n"
+        "CHR\t.\tCDS\t100\t300\t.\t+\t0\t.\n"
+        "CHR\t.\tCDS\t900\t1100\t.\t-\t0\t.\n"
+    )
+
+    def test_reverse_strand_gene_matches_by_genome_coordinates_issue_175(self, tmp_path):
+        """
+        Regression for issue #175: a reverse-strand CDS entry in the GFF at
+        genome coordinates (900, 1100) must be matched by a prediction that
+        carries genome_start=900, genome_end=1100 regardless of the strand field.
+
+        Before this was confirmed, there was a risk that the function compared
+        strand-local coordinates (where reverse start > end) instead of genome
+        coordinates, causing reverse-strand TPs to be counted as FPs.
+        """
+        gff = tmp_path / "rev.gff"
+        gff.write_text(self._GFF_REV)
+
+        # Prediction: both genes with genome coordinates, reverse strand flagged
+        orfs = [
+            {"genome_start": 100, "genome_end": 300, "strand": "forward"},
+            {"genome_start": 900, "genome_end": 1100, "strand": "reverse"},
+        ]
+
+        with patch("src.comparative_analysis.get_gff_path", return_value=str(gff)):
+            result = compare_orfs_to_reference(orfs, "CHR")
+
+        assert result["true_positives"] == 2, (
+            "Both genes (forward and reverse) should be TPs when genome "
+            "coordinates match exactly."
+        )
+        assert result["false_positives"] == 0
+        assert result["false_negatives"] == 0
+        assert result["sensitivity"] == pytest.approx(1.0)
+        assert result["precision"] == pytest.approx(1.0)
+
+    def test_reverse_strand_gene_wrong_coordinates_counts_as_fp_fn_issue_175(self, tmp_path):
+        """
+        A prediction that uses strand-local coordinates for the reverse gene
+        (start=1100, end=900 — swapped) must NOT match the reference, proving
+        the coordinate system is genome-based, not strand-local.
+        """
+        gff = tmp_path / "rev.gff"
+        gff.write_text(self._GFF_REV)
+
+        # Deliberate wrong: use strand-local order (larger coord first)
+        orfs = [
+            {"genome_start": 100, "genome_end": 300, "strand": "forward"},
+            {"start": 1100, "end": 900, "strand": "reverse"},  # swapped — wrong
+        ]
+
+        with patch("src.comparative_analysis.get_gff_path", return_value=str(gff)):
+            result = compare_orfs_to_reference(orfs, "CHR")
+
+        # The forward gene is a TP; the reversed-coordinate prediction must not
+        # match the reference (900, 1100), so it is a FP and the ref is a FN.
+        assert result["true_positives"] == 1
+        assert result["false_positives"] == 1
+        assert result["false_negatives"] == 1
+
+
+# ---------------------------------------------------------------------------
 # compare_orfs_to_reference — fuzzy coordinate matching (issue #99)
 # ---------------------------------------------------------------------------
 

@@ -3,6 +3,7 @@ FastAPI wrapper for Bacterial Gene Prediction
 """
 
 import os
+import re
 import sys
 import tempfile
 import traceback
@@ -36,6 +37,9 @@ from api.models import (  # noqa: E402
     ValidationResponse,
 )
 
+# Accepts only safe NCBI-style accession characters; blocks path traversal.
+_VALID_GENOME_ID = re.compile(r"^[A-Za-z0-9._-]+$")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -49,7 +53,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Bacterial Gene Predictor API",
     description="Hybrid gene prediction combining traditional bioinformatics with ML",
-    version="1.1.0",
+    version="1.2.0",
     lifespan=lifespan,
 )
 
@@ -78,7 +82,7 @@ async def root():
     """Root endpoint"""
     return {
         "message": "Bacterial Gene Predictor API",
-        "version": "1.0.0",
+        "version": "1.2.0",
         "endpoints": {
             "health": "/health",
             "predict": "/predict (POST)",
@@ -390,6 +394,16 @@ async def validate_predictions(request: ValidationRequest):
 
     Only works for NCBI genomes with available reference annotations
     """
+    if not request.genome_id or not _VALID_GENOME_ID.match(request.genome_id):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid genome ID '{request.genome_id}'. "
+                "Expected an NCBI accession such as NC_000913.3 "
+                "(letters, digits, underscores, hyphens, and dots only)."
+            ),
+        )
+
     try:
         from src.validation import validate_from_results_directory
 
