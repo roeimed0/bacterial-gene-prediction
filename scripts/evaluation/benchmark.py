@@ -316,8 +316,14 @@ if args.compare:
         if regressions:
             print("\n  Regressions (>0.05pp drop):")
             for r in regressions:
-                delta = r["f1"] - prev_by_acc[r["accession"]]["f1"]
-                print(f"    {r['accession']:<16} {delta:+.2f}pp F1")
+                prev_r = prev_by_acc[r["accession"]]
+                df1 = r["f1"] - prev_r["f1"]
+                ds = r.get("sensitivity", 0) - prev_r.get("sensitivity", 0)
+                dp = r.get("precision", 0) - prev_r.get("precision", 0)
+                print(
+                    f"    {r['accession']:<16} "
+                    f"F1 {df1:+.2f}pp  Sens {ds:+.2f}pp  Prec {dp:+.2f}pp"
+                )
         else:
             print("  No regressions.")
     else:

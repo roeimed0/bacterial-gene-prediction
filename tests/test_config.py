@@ -75,8 +75,13 @@ class TestTestGenomes:
     def test_no_duplicates(self):
         assert len(TEST_GENOMES) == len(set(TEST_GENOMES))
 
-    def test_disjoint_from_genome_catalog(self):
-        """TEST_GENOMES must never overlap with GENOME_CATALOG (the training pool)."""
+    def test_disjoint_from_genome_catalog_issue_179(self):
+        """
+        Leakage guard for issue #179: no accession in TEST_GENOMES may appear in
+        GENOME_CATALOG. TEST_GENOMES is the held-out evaluation set; if any entry
+        leaked into the training pool, benchmark results would be optimistic.
+        config.py enforces this by design — this test is the CI assertion.
+        """
         cat_accs = {g["accession"] for g in GENOME_CATALOG}
         overlap = set(TEST_GENOMES) & cat_accs
         assert (
