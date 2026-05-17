@@ -173,9 +173,33 @@ class TestValidate:
         r = await ac.post("/validate", json={})
         assert r.status_code == 422
 
-    async def test_nonexistent_genome_returns_404_or_500(self, ac):
+    async def test_nonexistent_genome_returns_404(self, ac):
         r = await ac.post("/validate", json={"genome_id": "NC_NONEXISTENT_FAKE"})
-        assert r.status_code in (404, 500)
+        assert r.status_code == 404
+
+    async def test_empty_genome_id_returns_400_issue_174(self, ac):
+        """
+        Regression for issue #174: /validate accepted empty genome_id and
+        returned a confusing 500 from a downstream FileNotFoundError.
+        After the fix it must return 400 with an actionable message.
+        """
+        r = await ac.post("/validate", json={"genome_id": ""})
+        assert r.status_code == 400
+        assert "genome ID" in r.json()["detail"]
+
+    async def test_genome_id_with_path_separator_returns_400_issue_174(self, ac):
+        """
+        Regression for issue #174: genome_id containing '/' could cause
+        path-traversal; must be rejected with 400 before hitting the filesystem.
+        """
+        r = await ac.post("/validate", json={"genome_id": "../etc/passwd"})
+        assert r.status_code == 400
+        assert "genome ID" in r.json()["detail"]
+
+    async def test_genome_id_with_spaces_returns_400_issue_174(self, ac):
+        """Spaces in genome_id are not valid NCBI accession characters → 400."""
+        r = await ac.post("/validate", json={"genome_id": "NC 000913.3"})
+        assert r.status_code == 400
 
 
 # ---------------------------------------------------------------------------

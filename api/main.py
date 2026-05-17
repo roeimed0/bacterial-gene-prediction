@@ -3,11 +3,15 @@ FastAPI wrapper for Bacterial Gene Prediction
 """
 
 import os
+import re
 import sys
 import tempfile
 import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+# Accepts only safe NCBI-style accession characters; blocks path traversal.
+_VALID_GENOME_ID = re.compile(r"^[A-Za-z0-9._-]+$")
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -390,6 +394,16 @@ async def validate_predictions(request: ValidationRequest):
 
     Only works for NCBI genomes with available reference annotations
     """
+    if not request.genome_id or not _VALID_GENOME_ID.match(request.genome_id):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Invalid genome ID '{request.genome_id}'. "
+                "Expected an NCBI accession such as NC_000913.3 "
+                "(letters, digits, underscores, hyphens, and dots only)."
+            ),
+        )
+
     try:
         from src.validation import validate_from_results_directory
 

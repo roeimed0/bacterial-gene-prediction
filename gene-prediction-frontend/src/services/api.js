@@ -14,9 +14,9 @@ export const api = {
   async predictGenes(sequence, options = {}) {
     const {
       useGroupML = true,
-      groupThreshold = 0.1,
+      groupThreshold = 0.07,
       useFinalML = true,
-      finalThreshold = 0.12
+      finalThreshold = 0.25
     } = options;
 
     const response = await fetch(`${API_BASE_URL}/predict`, {
@@ -45,9 +45,9 @@ export const api = {
   async predictFromFile(file, options = {}) {
     const {
       useGroupML = true,
-      groupThreshold = 0.1,
+      groupThreshold = 0.07,
       useFinalML = true,
-      finalThreshold = 0.12
+      finalThreshold = 0.25
     } = options;
 
     const formData = new FormData();
@@ -74,9 +74,9 @@ export const api = {
   async predictFromNcbi(accession, email, options = {}) {
     const {
       useGroupML = true,
-      groupThreshold = 0.1,
+      groupThreshold = 0.07,
       useFinalML = true,
-      finalThreshold = 0.12
+      finalThreshold = 0.25
     } = options;
 
     const response = await fetch(`${API_BASE_URL}/predict/ncbi`, {
