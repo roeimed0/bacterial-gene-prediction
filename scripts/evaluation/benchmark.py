@@ -135,6 +135,11 @@ parser = argparse.ArgumentParser(description="Benchmark pipeline on TEST_GENOMES
 parser.add_argument(
     "--save", metavar="DESC", help="Save results to experiment log with this description"
 )
+parser.add_argument(
+    "--auto-save",
+    action="store_true",
+    help="Auto-generate description from model hashes + timestamp and save (no manual --save needed)",
+)
 parser.add_argument("--compare", action="store_true", help="Show delta vs previous logged run")
 parser.add_argument("--set-baseline", action="store_true", help="Mark this run as the new baseline")
 parser.add_argument("--group", help="Run only this taxonomy group")
@@ -159,6 +164,12 @@ parser.add_argument(
     help="Override Hybrid threshold (default: model's saved value)",
 )
 args = parser.parse_args()
+
+# Resolve --auto-save: generate description from model hashes + timestamp.
+if args.auto_save and not args.save:
+    _lgb_h = _model_hash(Path(args.lgb_path or str(MODELS_DIR / "orf_classifier_lgb.pkl")))
+    _hf_h = _model_hash(Path(args.hf_path or str(MODELS_DIR / "hybrid_best_model.pkl")))
+    args.save = f"auto {datetime.now().strftime('%Y-%m-%d %H:%M')} lgb={_lgb_h} hf={_hf_h}"
 
 # Taxonomy group mapping for the clean holdout genomes.
 # These accessions are intentionally absent from GENOME_CATALOG (training pool),

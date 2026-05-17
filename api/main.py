@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Bacterial Gene Predictor API",
     description="Hybrid gene prediction combining traditional bioinformatics with ML",
-    version="1.1.0",
+    version="1.2.0",
     lifespan=lifespan,
 )
 
@@ -82,7 +82,7 @@ async def root():
     """Root endpoint"""
     return {
         "message": "Bacterial Gene Predictor API",
-        "version": "1.0.0",
+        "version": "1.2.0",
         "endpoints": {
             "health": "/health",
             "predict": "/predict (POST)",

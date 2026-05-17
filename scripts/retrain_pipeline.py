@@ -147,6 +147,10 @@ bm_cmd = [
     "--compare",
 ]
 run(bm_cmd, "Benchmark new pipeline")
+print(
+    "  TIP: run benchmark.py --auto-save at any time to log a run "
+    "without a manual --save description."
+)
 
 # 6. Train Start Classifier
 if not args.skip_start_classifier:
