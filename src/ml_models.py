@@ -83,7 +83,11 @@ class OrfGroupClassifier:
         return -np.sum(p * np.log(p) / np.log(base))
 
     def extract_group_features(
-        self, groups: Dict[str, List[Dict]], genome_id: str, weights: Dict = None
+        self,
+        groups: Dict[str, List[Dict]],
+        genome_id: str,
+        weights: Dict = None,
+        genome_gc: float = 0.5,
     ) -> pd.DataFrame:
         """
         Extract features from ORF groups for prediction.
@@ -206,6 +210,11 @@ class OrfGroupClassifier:
                 "length_ratio_max_min": float(lengths.max() / max(lengths.min(), 1.0)),
                 "frac_top_combined": (combined >= 0.95 * max_combined).sum() / n,
                 "frac_top_start_select": (ss >= 0.95 * max_ss).sum() / n,
+                # Gated GC signal — only non-zero for high-GC genomes (gc >= 0.55).
+                # Raw genome_gc is ambiguous (model can't distinguish noise from signal).
+                # max(0, gc - 0.55) is 0 for all low/moderate-GC genomes so the model
+                # sees a constant and learns to ignore it; grows linearly for high-GC.
+                "genome_gc_high": float(max(0.0, genome_gc - 0.55)),
             }
 
             rows.append(group_features)
@@ -218,6 +227,7 @@ class OrfGroupClassifier:
         genome_id: str = "unknown",
         weights: Dict = None,
         threshold: float = 0.07,
+        genome_gc: float = 0.5,
     ) -> tuple:
         """
         Predict which groups contain real genes.
@@ -236,7 +246,7 @@ class OrfGroupClassifier:
             - group_ids: List of group IDs in same order
         """
         # Extract features
-        df = self.extract_group_features(groups, genome_id, weights)
+        df = self.extract_group_features(groups, genome_id, weights, genome_gc=genome_gc)
 
         # Resolve feature column order.
         # Models trained on numpy arrays get generic names ("Column_0" …).
@@ -363,6 +373,7 @@ class OrfGroupClassifier:
         genome_id: str = "unknown",
         weights: Dict = None,
         threshold: float = 0.07,
+        genome_gc: float = 0.5,
     ) -> Dict[str, List[Dict]]:
         """
         Filter groups, keeping only those predicted to contain real genes.
@@ -371,7 +382,7 @@ class OrfGroupClassifier:
         """
         # Get predictions
         predictions, probabilities, group_ids = self.predict_groups(
-            groups, genome_id, weights, threshold
+            groups, genome_id, weights, threshold, genome_gc=genome_gc
         )
 
         # Create set of kept group IDs (those above threshold)

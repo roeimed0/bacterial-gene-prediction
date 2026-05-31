@@ -24,7 +24,7 @@ from src.ml_models import HybridGeneFilter, OrfGroupClassifier, StartSelectionCl
 # HybridGeneFilter.feature_names — see role_ml_engineer.md for the full list)
 # ---------------------------------------------------------------------------
 
-EXPECTED_LGB_FEATURE_COUNT = 26  # 31 - 7 removed + 2 added (#123, #125)
+EXPECTED_LGB_FEATURE_COUNT = 34  # full feature set after ML2 retrain + genome_gc_high (#182)
 EXPECTED_HYBRID_FEATURE_COUNT = 26  # 25 - 2 removed + 3 added (#124, #126, #127)
 
 

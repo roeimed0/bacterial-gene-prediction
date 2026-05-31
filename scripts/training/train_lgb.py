@@ -105,6 +105,7 @@ def run_pipeline(accession: str):
     if not genome:
         return None
     seq = genome["sequence"]
+    genome_gc = (seq.count("G") + seq.count("C")) / max(len(seq), 1)
 
     with contextlib.redirect_stdout(io.StringIO()):
         orfs = find_orfs_candidates(seq, min_length=100)
@@ -115,7 +116,7 @@ def run_pipeline(accession: str):
         filtered = filter_candidates(scored, **FIRST_FILTER_THRESHOLD)
         groups = organize_nested_orfs(filtered)
 
-    return groups
+    return groups, genome_gc
 
 
 # ── Train/val split ───────────────────────────────────────────────────────────
@@ -150,10 +151,11 @@ def collect_features(accessions: list, clf: OrfGroupClassifier, desc: str):
     all_X, all_y = [], []
     for i, acc in enumerate(accessions, 1):
         print(f"  [{i:>3}/{len(accessions)}] {acc}...", end=" ", flush=True)
-        groups = run_pipeline(acc)
-        if groups is None:
+        result = run_pipeline(acc)
+        if result is None:
             print("SKIP (missing data)")
             continue
+        groups, genome_gc = result
 
         ref_set = _load_ref_set(acc)
         if not ref_set:
@@ -161,7 +163,9 @@ def collect_features(accessions: list, clf: OrfGroupClassifier, desc: str):
             continue
 
         y = label_groups(groups, ref_set)
-        feat_df = clf.extract_group_features(groups, acc, weights=START_SELECTION_WEIGHTS)
+        feat_df = clf.extract_group_features(
+            groups, acc, weights=START_SELECTION_WEIGHTS, genome_gc=genome_gc
+        )
         feat_df = feat_df.drop(columns=["group_id"], errors="ignore")
 
         n_pos = int(y.sum())
