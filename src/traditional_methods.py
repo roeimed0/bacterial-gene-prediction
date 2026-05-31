@@ -1106,6 +1106,196 @@ def merge_intervals(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:
     return merged
 
 
+def _gc_position_bias(seq: str) -> Tuple[float, float, float, float]:
+    """
+    Compute GC fraction at each codon position (GC1, GC2, GC3) and |GC3 - GC12|.
+
+    Real genes under translational selection have GC3 != (GC1+GC2)/2.
+    Spurious ORFs in intergenic space have GC1 ~= GC2 ~= GC3 ~= genome_GC.
+
+    Args:
+        seq: ORF nucleotide sequence (length divisible by 3).
+
+    Returns:
+        (gc1, gc2, gc3, abs_bias) where abs_bias = |GC3 - (GC1+GC2)/2|.
+        Returns (0, 0, 0, 0) for sequences shorter than 9 bp.
+    """
+    if len(seq) < 9:
+        return 0.0, 0.0, 0.0, 0.0
+    n = len(seq) // 3
+    gc1 = sum(1 for i in range(0, n * 3, 3) if seq[i] in "GCgc") / n
+    gc2 = sum(1 for i in range(1, n * 3, 3) if seq[i] in "GCgc") / n
+    gc3 = sum(1 for i in range(2, n * 3, 3) if seq[i] in "GCgc") / n
+    gc12 = (gc1 + gc2) / 2.0
+    return gc1, gc2, gc3, abs(gc3 - gc12)
+
+
+def filter_training_by_codon_position_bias(
+    orfs: List[Dict],
+    genome_gc: float,
+    min_bias: float = 0.05,
+) -> List[Dict]:
+    """
+    Pre-filter candidate training ORFs by codon-position GC bias.
+
+    Keeps only ORFs where |GC3 - GC12| >= min_bias. Real coding sequences
+    have translational selection that creates systematic GC asymmetry across
+    codon positions. Spurious ORFs in non-coding space lack this signal.
+
+    This filter is applied BEFORE Glimmer/Flexible selection so both methods
+    receive a higher-quality candidate pool. It requires no trained model —
+    only the ORF sequence and genome GC%.
+
+    Args:
+        orfs:      List of ORF dicts, each must have a "sequence" field.
+        genome_gc: Genome-wide GC fraction (computed from raw sequence).
+        min_bias:  Minimum |GC3 - GC12| required. Default 0.05 (5%).
+                   Typical values for real genes: 0.05–0.25 depending on organism.
+
+    Returns:
+        Filtered list retaining ORFs with codon position bias >= min_bias.
+    """
+    kept = []
+    for orf in orfs:
+        seq = orf.get("sequence", "")
+        if not seq:
+            kept.append(orf)  # keep if no sequence available
+            continue
+        _, _, _, bias = _gc_position_bias(seq)
+        if bias >= min_bias:
+            kept.append(orf)
+    return kept
+
+
+def _effective_num_codons(seq: str) -> float:
+    """
+    Simplified Effective Number of Codons (Nc proxy). Lower = more biased = more likely coding.
+
+    Pseudogenes evolve neutrally → codon usage approaches uniform → high Nc.
+    Real genes under translational selection → biased usage → low Nc.
+
+    Args:
+        seq: ORF nucleotide sequence.
+
+    Returns:
+        Nc proxy value. Typical range: 1 (maximally biased) to 61 (uniform).
+    """
+    if len(seq) < 9:
+        return 61.0
+    codons = [seq[i : i + 3] for i in range(0, len(seq) - 2, 3) if len(seq[i : i + 3]) == 3]
+    family_counts: Dict[str, Dict[str, int]] = {}
+    for c in codons:
+        key = c[:2]
+        family_counts.setdefault(key, {})
+        family_counts[key][c] = family_counts[key].get(c, 0) + 1
+    nc_sum = 0.0
+    n_fam = 0
+    for fam, cnt in family_counts.items():
+        n = sum(cnt.values())
+        if n < 2:
+            continue
+        chi2 = sum((v / n) ** 2 for v in cnt.values())
+        if chi2 > 0:
+            nc_sum += 1.0 / chi2
+            n_fam += 1
+    return nc_sum / max(n_fam, 1)
+
+
+def filter_training_adaptive(
+    orfs: List[Dict],
+    genome_gc: float,
+    gc_floor: float = 0.55,
+    contamination_frac: float = 0.15,
+    contamination_bias_cutoff: float = 0.05,
+    gc_adaptive: bool = True,
+    abs_bias_min: float = 0.12,
+    nc_max: float = 3.5,
+    len_rescue: int = 3000,
+) -> List[Dict]:
+    """
+    Adaptive multi-feature pseudogene filter for training set quality improvement.
+
+    Activates only when:
+    1. genome_gc >= gc_floor  (codon bias signal reliable for high-GC genomes;
+       thermophiles excluded since their real genes also have low codon bias)
+    2. Fraction of training ORFs with |GC3-GC12| < contamination_bias_cutoff
+       exceeds contamination_frac  (> 15% of ORFs in the "pseudogene zone"
+       indicates heavy contamination — clean sets have < 5% there)
+
+    When active, keeps an ORF if:
+      (abs_bias >= abs_bias_min AND nc <= nc_max)  OR  (length >= len_rescue)
+
+    The OR-with-length rule rescues genuine long genes that happen to have
+    weak codon bias (e.g., horizontally transferred genes), preventing
+    excessive TP loss.
+
+    Args:
+        orfs:                      Training ORFs from create_training_set().
+        genome_gc:                 Genome GC fraction (0-1), computed de novo.
+        gc_floor:                  Minimum genome GC to attempt filtering.
+        contamination_frac:        Fraction of ORFs with abs_bias below
+                                   contamination_bias_cutoff to trigger filter.
+        contamination_bias_cutoff: abs_bias below which an ORF counts toward
+                                   the contamination fraction.
+        gc_adaptive:               If True, scale abs_bias_min with genome_gc:
+                                   effective_min = max(0.05, (genome_gc-0.45)*0.6).
+                                   Gentler for moderate-GC genomes (e.g. M. leprae
+                                   at 57.8% GC gets ~0.077 instead of 0.12).
+        abs_bias_min:              Fixed |GC3-GC12| threshold (used when
+                                   gc_adaptive=False).
+        nc_max:                    Maximum Nc to keep (codon diversity gate).
+        len_rescue:                ORFs longer than this are always kept.
+
+    Returns:
+        Filtered list. Returns the input unchanged when not activated.
+    """
+    if genome_gc < gc_floor or not orfs:
+        return orfs
+
+    # Estimate contamination: fraction of ORFs in the "pseudogene zone".
+    # Clean training sets have ~2-12% below 0.05; contaminated ones have 15-23%.
+    biases = []
+    for orf in orfs:
+        seq = orf.get("sequence", "")
+        if seq:
+            _, _, _, bias = _gc_position_bias(seq)
+            biases.append(bias)
+
+    if not biases:
+        return orfs
+
+    frac_low = sum(1 for b in biases if b < contamination_bias_cutoff) / len(biases)
+    if frac_low < contamination_frac:
+        return orfs  # not contaminated enough to filter
+
+    # GC-adaptive threshold: lower GC genomes get a gentler filter because
+    # translational selection creates weaker codon-position asymmetry at 57-60% GC.
+    # At 57.8% GC (M. leprae): effective_min ≈ 0.077
+    # At 67.7% GC (B. pertussis): effective_min ≈ 0.136
+    # At 70.7% GC (S. avermitilis): effective_min ≈ 0.154
+    if gc_adaptive:
+        effective_bias_min = max(0.05, (genome_gc - 0.45) * 0.6)
+    else:
+        effective_bias_min = abs_bias_min
+
+    kept = []
+    for orf in orfs:
+        length = float(orf.get("length", 0))
+        if length >= len_rescue:
+            kept.append(orf)
+            continue
+        seq = orf.get("sequence", "")
+        if not seq:
+            kept.append(orf)
+            continue
+        _, _, _, abs_bias = _gc_position_bias(seq)
+        nc = _effective_num_codons(seq)
+        if abs_bias >= effective_bias_min and nc <= nc_max:
+            kept.append(orf)
+
+    return kept
+
+
 def create_training_set(
     sequence: Optional[str] = None,
     all_orfs: Optional[List[Dict]] = None,
@@ -1113,6 +1303,7 @@ def create_training_set(
     cached_data: Optional[Dict] = None,
     glimmer_max_size: int = 2000,
     flexible_target_size: int = 2000,
+    min_codon_position_bias: float = 0.0,
 ) -> List[Dict]:
     """
     Create training set by intersecting Glimmer and Flexible selections.
@@ -1128,6 +1319,9 @@ def create_training_set(
         cached_data: Precomputed data (for cached mode)
         glimmer_max_size: Max training set size for Glimmer
         flexible_target_size: Target size for flexible selection
+        min_codon_position_bias: If > 0, pre-filter candidates by |GC3 - GC12|
+            before Glimmer/Flexible selection. Real genes have codon-position
+            GC asymmetry; spurious ORFs do not. Default 0.0 (disabled).
 
     Returns:
         List of training ORFs (intersection of both methods)
@@ -1151,7 +1345,23 @@ def create_training_set(
     if isinstance(all_orfs, pd.DataFrame):
         orfs_list = all_orfs[all_orfs["length"] >= 100].to_dict("records")
     else:
-        orfs_list = all_orfs
+        orfs_list = list(all_orfs)
+
+    # Optional: pre-filter by codon-position GC bias before Glimmer/Flexible.
+    # Keeps only ORFs where |GC3 - GC12| >= threshold — real genes have this
+    # asymmetry; spurious non-coding ORFs have GC3 ~= GC12 ~= genome_GC.
+    if min_codon_position_bias > 0.0 and sequence:
+        genome_gc = (sequence.count("G") + sequence.count("C")) / max(len(sequence), 1)
+        n_before = len(orfs_list)
+        orfs_list = filter_training_by_codon_position_bias(
+            orfs_list, genome_gc, min_bias=min_codon_position_bias
+        )
+        logger.debug(
+            "Codon-position bias filter (min=%.2f): %d → %d candidates",
+            min_codon_position_bias,
+            n_before,
+            len(orfs_list),
+        )
 
     glimmer_set = select_training_glimmer(
         orfs_list, min_length=300, max_training_size=glimmer_max_size
