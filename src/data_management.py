@@ -161,9 +161,19 @@ def load_reference_genes_from_gff(gff_path: str) -> Set[Tuple[int, int]]:
         # GFF columns: seqid, source, type, start, end, score, strand, phase, attributes
         # We want columns 2 (type), 3 (start), 4 (end)
 
-        # Filter for CDS features (protein-coding sequences)
+        # Filter for CDS features (protein-coding sequences).
+        # Exclude pseudogene CDS entries (NCBI marks them with "pseudo=true"
+        # or "pseudogene" in the attributes column).  Pseudogenes are not
+        # functional genes and should not be counted as missed predictions.
         if (ref[2] == "CDS").sum() > 0:
-            ref_genes = ref[ref[2] == "CDS"][[3, 4]].copy()
+            cds_rows = ref[ref[2] == "CDS"]
+            if 8 in cds_rows.columns:
+                is_pseudo = cds_rows[8].str.contains("pseudo=true|pseudogene", case=False, na=False)
+                n_pseudo = int(is_pseudo.sum())
+                cds_rows = cds_rows[~is_pseudo]
+                if n_pseudo > 0:
+                    print(f"  Excluded {n_pseudo} pseudogene CDS entries")
+            ref_genes = cds_rows[[3, 4]].copy()
             print("  Using CDS features")
         elif (ref[2] == "gene").sum() > 0:
             ref_genes = ref[ref[2] == "gene"][[3, 4]].copy()
