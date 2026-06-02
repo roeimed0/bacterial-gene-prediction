@@ -274,12 +274,127 @@ try:
 
         return scores
 
+    @_numba.njit(cache=True)
+    def _score_imm_batch(
+        flat_seq: np.ndarray,
+        offsets: np.ndarray,
+        lengths: np.ndarray,
+        coding_t: np.ndarray,
+        noncoding_t: np.ndarray,
+        max_order: int,
+        log_epsilon: float,
+    ) -> np.ndarray:
+        """Batch IMM scoring with O(n) rolling k-mer instead of O(n×max_order) rebuild.
+
+        flat_seq : int32 concatenation of all ORF sequences (A=0 C=1 G=2 T=3 other=4)
+        offsets  : int64 start position of each ORF in flat_seq
+        lengths  : int32 length of each ORF
+        Returns float64 array of per-ORF IMM log-likelihood ratios.
+        Numerically identical to calling _score_imm_numba per ORF.
+
+        Rolling k-mer maintenance (full-order positions only):
+            kmer_new = kmer_old × 4 + nuc - oldest_nuc × 4^(max_order+1)
+        so each position costs O(1) instead of O(max_order) kmer rebuild.
+        """
+        n_orfs = len(offsets)
+        scores = np.empty(n_orfs, np.float64)
+        L_full = max_order + 1
+
+        # Precompute 4^(max_order+1) — used to drop the oldest digit
+        power = np.int64(1)
+        for _ in range(L_full):
+            power *= np.int64(4)
+
+        # Precompute table offsets: tbl_offsets[L] = (4^L - 1) / 3  for L = 1..L_full
+        tbl_offsets = np.empty(L_full + 1, np.int64)
+        v = np.int64(1)
+        for _L in range(1, L_full + 1):
+            v *= np.int64(4)
+            tbl_offsets[_L] = (v - 1) // 3
+
+        for orf_i in range(n_orfs):
+            orf_start = offsets[orf_i]
+            n = lengths[orf_i]
+            if n < 3:
+                scores[orf_i] = 0.0
+                continue
+
+            c_total = 0.0
+            nc_total = 0.0
+            kmer = np.int64(0)
+            valid_run = 0  # consecutive valid nucleotides ending at current position
+
+            for i in range(n):
+                nuc = flat_seq[orf_start + i]
+                if nuc >= 4:
+                    # Invalid nucleotide: reset k-mer state
+                    kmer = np.int64(0)
+                    valid_run = 0
+                    c_total += log_epsilon
+                    nc_total += log_epsilon
+                else:
+                    kmer = kmer * np.int64(4) + np.int64(nuc)
+                    valid_run += 1
+
+                    if valid_run > L_full:
+                        # Rolling: drop the oldest nucleotide from the left end.
+                        # oldest is guaranteed valid because valid_run > L_full implies
+                        # all L_full+1 positions ending here are valid.
+                        oldest = flat_seq[orf_start + i - max_order - 1]
+                        kmer -= np.int64(oldest) * power
+
+                    # L_needed: context length the original uses for this position
+                    L_needed = L_full if i >= max_order else i + 1
+
+                    if valid_run >= L_needed:
+                        # All context positions are valid; look up in the table.
+                        idx = tbl_offsets[L_needed] + kmer
+                        c_total += coding_t[i % 3, idx]
+                        nc_total += noncoding_t[i % 3, idx]
+                    else:
+                        # Context window contains an invalid nucleotide
+                        c_total += log_epsilon
+                        nc_total += log_epsilon
+
+            scores[orf_i] = (c_total - nc_total) / n
+        return scores
+
+    @_numba.njit(cache=True)
+    def _score_codon_bias_batch(
+        flat_seq: np.ndarray,
+        offsets: np.ndarray,
+        lengths: np.ndarray,
+        log_ratio_table: np.ndarray,
+    ) -> np.ndarray:
+        """Batch codon-bias scoring over variable-length sequences in a flat array.
+
+        Numerically identical to calling _score_codon_bias_numba per ORF.
+        """
+        n_orfs = len(offsets)
+        scores = np.empty(n_orfs, np.float64)
+        for orf_i in range(n_orfs):
+            orf_start = offsets[orf_i]
+            n = lengths[orf_i]
+            score = 0.0
+            count = 0
+            for i in range(0, n - 2, 3):
+                a = flat_seq[orf_start + i]
+                b = flat_seq[orf_start + i + 1]
+                c = flat_seq[orf_start + i + 2]
+                if a < 4 and b < 4 and c < 4:
+                    score += log_ratio_table[a * 16 + b * 4 + c]
+                    count += 1
+            scores[orf_i] = 0.0 if count == 0 else score / count
+        return scores
+
     _NUMBA_AVAILABLE = True
 
 except ImportError:
     _NUMBA_AVAILABLE = False
     _score_imm_numba = None
     _score_codon_bias_numba = None
+    _score_imm_batch = None
+    _score_codon_bias_batch = None
 
 from Bio.Seq import Seq  # noqa: E402
 
@@ -1201,6 +1316,33 @@ def _effective_num_codons(seq: str) -> float:
     return nc_sum / max(n_fam, 1)
 
 
+def compute_sd_prevalence(sequence: str, training_orfs: List[Dict], n_sample: int = 200) -> float:
+    """
+    Fraction of training ORFs with a detectable Shine-Dalgarno motif in the
+    [-20, -4] upstream window.  Sampled from the first n_sample ORFs for speed.
+
+    Returns a value in [0, 1].  0.5 is used as a neutral default when no
+    training ORFs are available.  Genomes with low SD prevalence (<0.35) tend
+    to have weaker RBS signals, so rbs_max / rbs_dominance are less discriminative.
+    """
+    _SD_PATTERNS = ("AGGAGG", "AGGAG", "AGGA", "GAGG", "AAGG", "AGGG")
+    sample = list(training_orfs)[:n_sample]
+    hits = 0
+    for orf in sample:
+        start = orf.get("genome_start", orf.get("start", 0))
+        strand = orf.get("strand", "forward")
+        if strand == "forward":
+            window = sequence[max(0, start - 20) : max(0, start - 4)]
+        else:
+            end = orf.get("genome_end", orf.get("end", 0))
+            raw = sequence[end + 4 : min(len(sequence), end + 20)]
+            window = raw.translate(str.maketrans("ATGCatgc", "TACGtacg"))[::-1]
+        if any(pat in window.upper() for pat in _SD_PATTERNS):
+            hits += 1
+    n = min(len(sample), n_sample)
+    return hits / n if n > 0 else 0.5
+
+
 def filter_training_adaptive(
     orfs: List[Dict],
     genome_gc: float,
@@ -1908,8 +2050,10 @@ def build_all_scoring_models(
     if _NUMBA_AVAILABLE:
         logger.info("  Building Numba codon table and warming up JIT...")
         codon_log_ratio_table = build_codon_log_ratio_table(codon_model, background_codon_model)
-        # Warm up both JIT functions so first scoring call has no compile latency
+        # Warm up all JIT functions so first scoring call has no compile latency
         _warmup = np.array([0, 1, 2, 3, 0, 1, 2], dtype=np.int32)
+        _warmup_off = np.array([0], dtype=np.int64)
+        _warmup_len = np.array([7], dtype=np.int32)
         _score_imm_numba(
             _warmup,
             numba_coding_table,
@@ -1918,6 +2062,16 @@ def build_all_scoring_models(
             _LOG_EPSILON,
         )
         _score_codon_bias_numba(_warmup, codon_log_ratio_table)
+        _score_imm_batch(
+            _warmup,
+            _warmup_off,
+            _warmup_len,
+            numba_coding_table,
+            numba_noncoding_table,
+            estimated_order,
+            _LOG_EPSILON,
+        )
+        _score_codon_bias_batch(_warmup, _warmup_off, _warmup_len, codon_log_ratio_table)
         _score_rbs_batch(np.zeros((1, 20), dtype=np.int32))
 
     logger.info(f"✓ All models built in {time.time() - start_time:.1f}s")
@@ -2015,19 +2169,31 @@ def score_all_orfs(
 
     sequences = all_orfs["sequence"].values
     n = len(sequences)
-    codon_scores = np.empty(n, dtype=np.float64)
-    imm_scores = np.empty(n, dtype=np.float64)
 
-    for i, seq in enumerate(sequences):
-        if i % 25000 == 0 and i > 0:
-            logger.info("  %s...", f"{i:,}")
-        if use_numba:
-            arr = _seq_to_int_fast(seq)
-            codon_scores[i] = float(_score_codon_bias_numba(arr, codon_ratio_tbl))
-            imm_scores[i] = float(
-                _score_imm_numba(arr, numba_coding, numba_noncoding, max_order, _LOG_EPSILON)
-            )
-        else:
+    if use_numba:
+        # Batch path: encode all sequences at once and call each JIT function once.
+        # Eliminates N Python→Numba dispatch calls (was 3 × N per genome).
+        flat_bytes = "".join(sequences).encode("ascii")
+        flat_int = _ASCII_TO_INT[np.frombuffer(flat_bytes, dtype=np.uint8)]
+        seq_lens = np.array([len(s) for s in sequences], dtype=np.int32)
+        offsets = np.empty(n, dtype=np.int64)
+        offsets[0] = 0
+        if n > 1:
+            np.cumsum(seq_lens[:-1], out=offsets[1:])
+        codon_scores = _score_codon_bias_batch(flat_int, offsets, seq_lens, codon_ratio_tbl)
+        imm_scores = _score_imm_batch(
+            flat_int,
+            offsets,
+            seq_lens,
+            numba_coding,
+            numba_noncoding,
+            max_order,
+            _LOG_EPSILON,
+        )
+    else:
+        codon_scores = np.empty(n, dtype=np.float64)
+        imm_scores = np.empty(n, dtype=np.float64)
+        for i, seq in enumerate(sequences):
             codon_scores[i] = score_codon_bias_ratio(seq, codon_model, bg_codon_model)
             imm_scores[i] = _score_imm_numpy(seq, numba_coding, numba_noncoding, max_order)
 
