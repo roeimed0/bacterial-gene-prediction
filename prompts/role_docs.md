@@ -175,7 +175,7 @@ flowchart TD
     C & D --> E[Traditional Scoring\nCodon bias · IMM · Length · RBS · Start codon]
     E --> F[Initial Filter\nThreshold-based]
     F --> G[ORF Grouping\nResolve overlaps by stop codon]
-    G -->|optional| H[LightGBM Filter\n31 features · trained on 27 genomes]
+    G -->|optional| H[LightGBM Filter\n26 features · trained on 27 genomes]
     G --> I
     H --> I[Start Site Selection\nWeighted scoring]
     I --> J[Second Traditional Filter]

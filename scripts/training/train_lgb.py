@@ -30,6 +30,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+_PASS2_PERCENTILE = 50  # keep top-50% of training ORFs by combined score
+_MIN_TRAINING_P2 = 150  # never shrink below this
+
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.config import FIRST_FILTER_THRESHOLD, GENOME_CATALOG, START_SELECTION_WEIGHTS
@@ -287,25 +290,33 @@ def main() -> None:
             new_feats = clf.feature_names or list(X_test.columns)
             missing_old = [f for f in old_feats if f not in X_test.columns]
             if missing_old:
-                print(f"  WARNING: old model expects features not in test set: {missing_old}")
+                print(f"  WARNING: old model has generic column names (trained on numpy array).")
+                print(f"  Skipping old-vs-new comparison — run benchmark.py to compare.")
+                old_can_compare = False
             else:
+                old_can_compare = True
                 X_test_old = X_test[old_feats]
                 evaluate(old_clf, X_test_old, y_test, "current model (t=0.10)", threshold=0.10)
 
             X_test_new = X_test[new_feats] if new_feats else X_test
-
-            # Threshold sweep: find the point where new model matches old recall
-            from sklearn.metrics import f1_score, precision_score, recall_score
-
-            old_probs = np.asarray(
-                old_clf.model.predict_proba(X_test[old_feats].values, num_threads=1)
-            )[:, 1]
-            old_recall_at_010 = recall_score(y_test, old_probs >= 0.10, zero_division=0)
-
             new_probs = np.asarray(clf.model.predict_proba(X_test_new.values, num_threads=1))[:, 1]
-            print(
-                f"\n  Threshold sweep on new model (old recall target = {old_recall_at_010:.4f}):"
-            )
+
+            if old_can_compare:
+                # Threshold sweep: find the point where new model matches old recall
+                from sklearn.metrics import f1_score, precision_score, recall_score
+
+                old_probs = np.asarray(
+                    old_clf.model.predict_proba(X_test_old.values, num_threads=1)
+                )[:, 1]
+                old_recall_at_010 = recall_score(y_test, old_probs >= 0.10, zero_division=0)
+                print(
+                    f"\n  Threshold sweep on new model (old recall target = {old_recall_at_010:.4f}):"
+                )
+            else:
+                from sklearn.metrics import f1_score, precision_score, recall_score
+
+                print("\n  Threshold sweep on new model:")
+
             print(f"  {'t':>6}  {'F1':>7}  {'Prec':>7}  {'Recall':>8}")
             print(f"  {'---':>6}  {'---':>7}  {'---':>7}  {'------':>8}")
             for t in [0.03, 0.05, 0.07, 0.10, 0.15, 0.20, best_threshold]:
@@ -313,8 +324,7 @@ def main() -> None:
                 f1 = f1_score(y_test, preds, zero_division=0)
                 prec = precision_score(y_test, preds, zero_division=0)
                 rec = recall_score(y_test, preds, zero_division=0)
-                marker = " <-- matches old recall" if abs(rec - old_recall_at_010) < 0.005 else ""
-                print(f"  {t:>6.3f}  {f1:>7.4f}  {prec:>7.4f}  {rec:>8.4f}{marker}")
+                print(f"  {t:>6.3f}  {f1:>7.4f}  {prec:>7.4f}  {rec:>8.4f}")
         else:
             print("  (No existing model found — skipping comparison)")
 

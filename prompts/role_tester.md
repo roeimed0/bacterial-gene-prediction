@@ -135,8 +135,20 @@ tests/
   - CNN branch accepts variable-length sequences up to the model's max input length
 
 - Feature extraction functions
-  - 31 features are extracted per ORF group (verify count matches `models/feature_names.pkl`)
+  - 26 features are extracted per ORF group (verify count matches `models/feature_names.pkl`)
   - Feature extraction does not crash on a single-ORF group (edge case)
+
+- `StartSelectionClassifier` ✅ **23 tests added (2026-05-16)**
+  - `load()` / `save()` round-trip preserves contest_t, flip_t, features, temperature_T
+  - `select_best_starts()` raises RuntimeError before `load()` is called
+  - Empty groups dict returns empty DataFrame
+  - Gap >= contest_t → classifier never called (baseline wins)
+  - prob_keep > flip_t → top-1 retained
+  - prob_keep < (1 - flip_t) → top-2 wins (flip)
+  - prob_keep in (1-flip_t, flip_t) → top-1 kept (uncertain)
+  - Singleton group → classifier skipped
+  - temperature_T set → scaled probability path runs without crash
+  - Internal helpers: `_baseline_score`, `_get_upstream`, `_f4_spacer`, `_f5_gc_bias`, `_build_pwm`, `_score_pwm`
 
 ### `tests/test_api.py`
 

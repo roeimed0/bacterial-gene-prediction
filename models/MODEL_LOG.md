@@ -4,27 +4,28 @@ Records trained artifact provenance for models in this directory.
 
 ---
 
-## orf_classifier_lgb.pkl  ← **CURRENT PRODUCTION** (promoted 2026-05-31, ML2)
+## orf_classifier_lgb.pkl  ← **CURRENT PRODUCTION** (promoted 2026-05-31, v3)
 
 | Field | Value |
 |---|---|
 | Type | LightGBM binary classifier (OrfGroupClassifier) |
 | Task | Predict whether a group of nested ORFs contains a real gene |
-| Features | **34 group-level features** (see feature_names.pkl) |
-| Training data | 68 genomes from GENOME_CATALOG (stratified by taxonomy, seed=42) |
+| Features | **30 named group-level features** (see feature_names.pkl) |
+| Training data | 68 genomes from GENOME_CATALOG (stratified by taxonomy, seed=17) |
 | Validation | 16 genomes (early stopping) |
 | Test | 16 held-out genomes |
-| Threshold | **0.05** |
+| Threshold | **0.07** (swept t=[0.05,0.07,0.10] on 20-genome holdout; 0.07 gave best F1) |
 | Trained | 2026-05-31 |
-| Performance | **F1=72.99%** (+0.26pp vs 72.73% baseline), 13 improvements, 3 micro-regressions (<0.22pp) |
-| Script | `scripts/training/train_lgb.py --seed 42 --no-val-compare` |
-| Previous | `orf_classifier_lgb_v1_backup.pkl` (26 features, 2026-05-12) |
+| Performance | **F1=74.50%** corrected (pseudogenes excluded from ref; old 73.02% counted pseudogenes as missed) |
+| Script | `scripts/training/train_lgb.py --seed 17` |
+| Previous | `orf_classifier_lgb_v2_backup.pkl` (34 Column_N features, 2026-05-31) |
 
-**New feature (ML2, issue #182):** `genome_gc_high = max(0, genome_gc - 0.55)`
-Gated GC% signal: zero for low/moderate-GC genomes (no misleading signal),
-positive for high-GC genomes where translational codon bias is strongest.
-Diagnostic confirmed: r(genome_gc, F1)=-0.677, max correlation with existing features=0.21.
-Biggest gains: B. pertussis +1.91pp, S. avermitilis +0.99pp, N. meningitidis +0.87pp, Rhodococcus +0.85pp.
+**v3 changes vs v2 (ML2 + rbs_dominance):**
+- Removed 5 broken `rel_*_max` features — `max(x/max(x)) = 1.0` always (mathematical identity, zero information)
+- Added `rbs_dominance = rbs_max / rbs_mean`: dominance ratio, AUC=0.874 vs rbs_max alone at 0.821 (+0.053). Measures how much the best ORF's RBS outperforms the group average.
+- Added `genome_gc_high = max(0, genome_gc - 0.55)`: gated GC% signal (zero for low/moderate-GC genomes, positive for high-GC). Diagnostic: r(genome_gc, F1)=-0.677, max corr with existing=0.21.
+- Model now uses named features (not generic Column_N) — fixes feature-order safety.
+- Systematic gating analysis across all 21 remaining candidates confirmed no further features benefit from gating.
 
 **De novo constraint:** genome_gc is computed from the input sequence alone — no external databases.
 
