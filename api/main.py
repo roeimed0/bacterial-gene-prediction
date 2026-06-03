@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+from api.models import _HF_DEFAULT, _LGB_DEFAULT  # noqa: E402
 from src.pipeline import load_models, predict_genome_from_file  # noqa: E402
 
 # Module-level model cache — populated once at startup by the lifespan handler
@@ -200,9 +201,9 @@ async def predict_genes(request: PredictionRequest):
 async def predict_genes_from_file(
     file: UploadFile = File(...),
     use_group_ml: bool = True,
-    group_threshold: float = 0.07,
+    group_threshold: float = _LGB_DEFAULT,
     use_final_ml: bool = True,
-    final_threshold: float = 0.25,
+    final_threshold: float = _HF_DEFAULT,
 ):
     """
     Predict genes from an uploaded FASTA file

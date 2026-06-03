@@ -2,9 +2,22 @@
 API Models - Request and Response schemas
 """
 
+import json
+from pathlib import Path
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
+
+# Load calibrated thresholds so API defaults always match production models.
+# Falls back to safe values if thresholds.json is absent (e.g. test environments).
+_thresholds: dict = {}
+_thr_path = Path(__file__).parent.parent / "models" / "thresholds.json"
+if _thr_path.exists():
+    with open(_thr_path) as _f:
+        _thresholds = json.load(_f)
+
+_LGB_DEFAULT: float = _thresholds.get("orf_classifier_lgb", {}).get("threshold", 0.07)
+_HF_DEFAULT: float = _thresholds.get("hybrid_best_model", {}).get("threshold", 0.471)
 
 
 class PredictionRequest(BaseModel):
@@ -15,9 +28,13 @@ class PredictionRequest(BaseModel):
         None, description="Optional filename for output (without extension)"
     )
     use_group_ml: bool = Field(True, description="Use ML for group filtering")
-    group_threshold: float = Field(0.07, description="ML group filtering threshold")
+    group_threshold: float = Field(
+        _LGB_DEFAULT, description="LGB group-filter threshold (calibrated from thresholds.json)"
+    )
     use_final_ml: bool = Field(True, description="Use final hybrid ML filtration")
-    final_threshold: float = Field(0.25, description="Final ML filtration threshold")
+    final_threshold: float = Field(
+        _HF_DEFAULT, description="Hybrid filter threshold (calibrated from thresholds.json)"
+    )
 
 
 class NcbiPredictionRequest(BaseModel):
@@ -26,9 +43,13 @@ class NcbiPredictionRequest(BaseModel):
     accession: str = Field(..., description="NCBI accession number (e.g., NC_000913.3)")
     email: str = Field(..., description="Email address (required by NCBI)")
     use_group_ml: bool = Field(True, description="Use ML for group filtering")
-    group_threshold: float = Field(0.07, description="ML group filtering threshold")
+    group_threshold: float = Field(
+        _LGB_DEFAULT, description="LGB group-filter threshold (calibrated from thresholds.json)"
+    )
     use_final_ml: bool = Field(True, description="Use final hybrid ML filtration")
-    final_threshold: float = Field(0.25, description="Final ML filtration threshold")
+    final_threshold: float = Field(
+        _HF_DEFAULT, description="Hybrid filter threshold (calibrated from thresholds.json)"
+    )
 
 
 class GenePrediction(BaseModel):

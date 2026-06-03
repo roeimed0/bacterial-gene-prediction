@@ -123,11 +123,13 @@ if not args.skip_hybrid:
         hf_cmd2 += ["--target-prec", str(args.target_prec)]
     with open(hf_sweep_out, "w") as f:
         subprocess.run(hf_cmd2, cwd=REPO, stdout=f, stderr=subprocess.STDOUT)
-    hf_t = read_threshold(hf_sweep_out) or 0.25
+    hf_t = read_threshold(hf_sweep_out) or load_thresholds().get("hybrid_best_model", {}).get(
+        "threshold", 0.471
+    )
     print(f"  Hybrid recommended threshold: {hf_t}")
 else:
     hf_v2 = MODELS / "hybrid_best_model.pkl"
-    hf_t = load_thresholds().get("hybrid_best_model", {}).get("threshold", 0.25)
+    hf_t = load_thresholds().get("hybrid_best_model", {}).get("threshold", 0.471)
     print(f"\n  Hybrid skipped — using production model (t={hf_t})")
 
 # 5. Benchmark
@@ -164,15 +166,15 @@ if not args.skip_start_classifier:
     ]
     run(ss_cmd, "Train Start Classifier (step 6)")
 
-    # 7. Benchmark Start Classifier
+    # 7. Benchmark Start Classifier (uses newly trained model, not production)
     run(
-        [PYTHON, str(SCRIPTS / "evaluation" / "benchmark_start_classifier.py")],
+        [
+            PYTHON,
+            str(SCRIPTS / "evaluation" / "benchmark_start_classifier.py"),
+            "--model",
+            str(ss_retrain),
+        ],
         "Benchmark Start Classifier (step 7)",
-    )
-    print(
-        f"\n  NOTE: benchmark_start_classifier.py used production start_selector.pkl.\n"
-        f"  To test the new model, manually: copy {ss_retrain.name} → start_selector.pkl\n"
-        f"  and re-run benchmark_start_classifier.py before deciding to promote."
     )
 else:
     print("\n  Start classifier skipped (--skip-start-classifier).")
