@@ -33,8 +33,9 @@ REQUIRED_KEYS = {"id", "accession", "name", "group"}
 
 
 class TestGenomeCatalogIntegrity:
-    def test_catalog_has_100_entries(self):
-        assert len(GENOME_CATALOG) == 100
+    def test_catalog_has_expected_entries(self):
+        # 99 unique genomes (duplicate Nakamurella NC_013235.1 removed)
+        assert len(GENOME_CATALOG) == 99
 
     def test_every_entry_has_required_keys(self):
         for genome in GENOME_CATALOG:
@@ -45,9 +46,15 @@ class TestGenomeCatalogIntegrity:
         ids = [g["id"] for g in GENOME_CATALOG]
         assert len(ids) == len(set(ids)), "Duplicate IDs in GENOME_CATALOG"
 
-    def test_ids_run_1_to_100(self):
+    def test_ids_are_sequential_from_1(self):
         ids = sorted(g["id"] for g in GENOME_CATALOG)
-        assert ids == list(range(1, 101))
+        assert ids == list(
+            range(1, len(GENOME_CATALOG) + 1)
+        ), f"IDs must be sequential 1..{len(GENOME_CATALOG)}"
+
+    def test_accessions_are_unique(self):
+        accessions = [g["accession"] for g in GENOME_CATALOG]
+        assert len(accessions) == len(set(accessions)), "Duplicate accessions in GENOME_CATALOG"
 
     def test_all_groups_are_known(self):
         groups = {g["group"] for g in GENOME_CATALOG}
@@ -115,8 +122,8 @@ class TestGetGenomeById:
         assert get_genome_by_id(0) is None
 
     def test_all_valid_ids_return_entries(self):
-        for i in range(1, 101):
-            assert get_genome_by_id(i) is not None
+        for i in range(1, len(GENOME_CATALOG) + 1):
+            assert get_genome_by_id(i) is not None, f"ID {i} not found"
 
 
 # ---------------------------------------------------------------------------
@@ -162,7 +169,7 @@ class TestListGenomesByGroup:
 
     def test_actinobacteria_group(self):
         result = list_genomes_by_group("Actinobacteria")
-        assert len(result) == 25
+        assert len(result) == 24  # was 25; duplicate NC_013235.1 removed
         assert all(g["group"] == "Actinobacteria" for g in result)
 
     def test_archaea_group(self):
