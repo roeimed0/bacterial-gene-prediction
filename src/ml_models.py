@@ -1319,7 +1319,12 @@ class StartSelectionClassifier:
                 continue
 
             grp_df = grp_df.copy()
-            grp_df["_base"] = grp_df.apply(lambda r: self._baseline_score(r, weights), axis=1)
+            # Use pre-computed start_select_score if available (added by add_combined_scores)
+            # to avoid a slow per-row Python apply() over the weighted sum.
+            if "start_select_score" in grp_df.columns:
+                grp_df["_base"] = grp_df["start_select_score"]
+            else:
+                grp_df["_base"] = grp_df.apply(lambda r: self._baseline_score(r, weights), axis=1)
             sorted_idx = grp_df["_base"].sort_values(ascending=False).index
             t1 = grp_df.loc[sorted_idx[0]]
             gap = (
