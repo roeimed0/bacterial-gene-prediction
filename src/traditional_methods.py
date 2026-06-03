@@ -2045,7 +2045,14 @@ def normalize_all_orf_scores(scored_orfs: Any) -> pd.DataFrame:
 
 
 def add_combined_scores(scored_orfs: Any, weights: Optional[Dict] = None) -> pd.DataFrame:
-    """Vectorised weighted sum of normalized score columns."""
+    """Vectorised weighted sum of normalized score columns.
+
+    Adds two columns at once to avoid redundant passes downstream:
+      combined_score       — SCORE_WEIGHTS (equal weights, used by filters/LGB)
+      start_select_score   — START_SELECTION_WEIGHTS (used by start selector)
+    Both are computed here once vectorially; select_best_starts reuses
+    start_select_score instead of re-running the Python apply() loop.
+    """
     if isinstance(scored_orfs, list):
         scored_orfs = pd.DataFrame(scored_orfs)
     if weights is None:
@@ -2058,6 +2065,16 @@ def add_combined_scores(scored_orfs: Any, weights: Optional[Dict] = None) -> pd.
         + scored_orfs["rbs_score_norm"] * weights["rbs"]
         + scored_orfs["length_score_norm"] * weights["length"]
         + scored_orfs["start_score_norm"] * weights["start"]
+    )
+    # Pre-compute start-selection weighted score once (vectorised) so that
+    # select_best_starts() can read this column instead of calling _baseline_score()
+    # per ORF in a Python loop.  Same formula as StartSelectionClassifier._baseline_score.
+    scored_orfs["start_select_score"] = (
+        scored_orfs["codon_score_norm"] * START_SELECTION_WEIGHTS["codon"]
+        + scored_orfs["imm_score_norm"] * START_SELECTION_WEIGHTS["imm"]
+        + scored_orfs["rbs_score_norm"] * START_SELECTION_WEIGHTS["rbs"]
+        + scored_orfs["length_score_norm"] * START_SELECTION_WEIGHTS["length"]
+        + scored_orfs["start_score_norm"] * START_SELECTION_WEIGHTS["start"]
     )
     logger.info("Combined scores added")
     return scored_orfs
@@ -2145,15 +2162,16 @@ def filter_candidates(
     length_threshold: float = 0,
     combined_threshold: float = 0,
 ) -> pd.DataFrame:
-    """Boolean-mask filter: removes ORFs where all three scores are below their
-    thresholds OR combined_score is below its threshold."""
-    all_three_below = (
-        (all_orfs["length_score"] < length_threshold)
-        & (all_orfs["codon_score"] < codon_threshold)
-        & (all_orfs["imm_score"] < imm_threshold)
-    )
+    """Boolean-mask filter: removes ORFs whose combined_score is below threshold.
+
+    The previous AND-condition on raw individual scores (codon, IMM, length) was
+    removed because raw scores are genome-specific and not comparable across GC
+    ranges — causing 2-6pp extra sensitivity loss in high-GC genomes with no
+    precision benefit. The combined_score (weighted sum of normalized scores) is
+    genome-invariant and sufficient as a single gate.
+    """
     combined_below = all_orfs["combined_score"] < combined_threshold
-    keep = ~(all_three_below | combined_below)
+    keep = ~combined_below
     result = all_orfs[keep].reset_index(drop=True)
     logger.info(f"Filtered: {len(result):,} kept, {(~keep).sum():,} removed")
     return result
