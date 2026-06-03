@@ -427,3 +427,88 @@ class TestCompareResultsFileToReference:
                 result = compare_results_file_to_reference("NC_TEST")
 
         assert result["predicted_count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# TST-PSEUDO: pseudogene exclusion regression (commit 3591684)
+#
+# NCBI GFF3 marks non-functional CDS with keywords in column 8.
+# compare_orfs_to_reference() must exclude them from the reference so they
+# are never counted as missed predictions (false negatives).
+# ---------------------------------------------------------------------------
+
+
+class TestPseudogeneExclusion:
+    """
+    Regression tests for the pseudogene-exclusion fix (commit 3591684).
+
+    Before the fix, pseudogene CDS entries were counted as real reference
+    genes.  Any prediction that missed them would be a false negative,
+    inflating sensitivity loss.  The corrected baseline F1 is 74.50%
+    (was 73.02% with pseudogenes included).
+    """
+
+    _PSEUDO_MARKERS = [
+        "pseudo=true",
+        "pseudogene=unprocessed",
+        "frameshifted",
+        "internal stop",
+        "disrupted",
+        "PSEUDO=TRUE",  # case-insensitive
+        "Note=frameshifted gene",
+    ]
+
+    def _gff_with_pseudo(self, tmp_path: Path, pseudo_attr: str) -> str:
+        """GFF3 with two real CDS and one pseudogene CDS."""
+        lines = (
+            "##gff-version 3\n"
+            f"NC_T\t.\tCDS\t100\t300\t.\t+\t0\t.\n"  # real
+            f"NC_T\t.\tCDS\t500\t700\t.\t+\t0\t.\n"  # real
+            f"NC_T\t.\tCDS\t900\t1100\t.\t+\t0\t{pseudo_attr}\n"  # pseudo
+        )
+        gff = tmp_path / "test.gff"
+        gff.write_text(lines)
+        return str(gff)
+
+    @pytest.mark.parametrize("pseudo_attr", _PSEUDO_MARKERS)
+    def test_pseudogene_not_counted_as_reference(self, tmp_path, pseudo_attr):
+        """A CDS with any pseudogene marker must not appear in the reference set."""
+        gff = self._gff_with_pseudo(tmp_path, pseudo_attr)
+        # Predict only the two real genes — if pseudogene were counted,
+        # sensitivity would be 2/3 = 0.667; with correct exclusion it is 1.0.
+        real_orfs = _orfs_from_coords([(100, 300), (500, 700)])
+        with patch("src.comparative_analysis.get_gff_path", return_value=gff):
+            r = compare_orfs_to_reference(real_orfs, "NC_T")
+        assert r["true_positives"] == 2, "Both real genes should be TPs"
+        assert r["false_negatives"] == 0, "Pseudogene must not inflate FN count"
+        assert r["sensitivity"] == pytest.approx(
+            1.0
+        ), "sensitivity must be 1.0 — pseudogene excluded from denominator"
+
+    def test_real_gene_still_counted(self, tmp_path):
+        """Real (non-pseudogene) CDS are still counted as reference genes."""
+        gff = self._gff_with_pseudo(tmp_path, "pseudo=true")
+        # Predict all three positions including the pseudo-coordinate.
+        # The pseudo should be a FP (predicted but not in reference).
+        all_orfs = _orfs_from_coords([(100, 300), (500, 700), (900, 1100)])
+        with patch("src.comparative_analysis.get_gff_path", return_value=gff):
+            r = compare_orfs_to_reference(all_orfs, "NC_T")
+        assert r["true_positives"] == 2
+        assert r["false_positives"] == 1, "Pseudo-coordinate prediction is a FP"
+        assert r["false_negatives"] == 0
+        assert r["reference"] == 2, "Reference must contain only the 2 real genes"
+
+    def test_gff_without_attributes_column_unaffected(self, tmp_path):
+        """GFF3 files with no column 8 must not crash — all CDS are treated as real."""
+        lines = (
+            "##gff-version 3\n"
+            "NC_T\t.\tCDS\t100\t300\t.\t+\t0\n"  # no col 8
+            "NC_T\t.\tCDS\t500\t700\t.\t+\t0\n"
+        )
+        gff = tmp_path / "no_attr.gff"
+        gff.write_text(lines)
+        orfs = _orfs_from_coords([(100, 300), (500, 700)])
+        with patch("src.comparative_analysis.get_gff_path", return_value=gff):
+            r = compare_orfs_to_reference(orfs, "NC_T")
+        assert r["reference"] == 2
+        assert r["sensitivity"] == pytest.approx(1.0)
