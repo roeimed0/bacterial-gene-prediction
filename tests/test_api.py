@@ -82,13 +82,17 @@ class TestCatalog:
         r = await ac.get("/catalog")
         assert r.status_code == 200
 
-    async def test_total_is_100(self, ac):
-        r = await ac.get("/catalog")
-        assert r.json()["total"] == 100
+    async def test_total_matches_catalog(self, ac):
+        from src.config import GENOME_CATALOG
 
-    async def test_genomes_list_has_100_items(self, ac):
         r = await ac.get("/catalog")
-        assert len(r.json()["genomes"]) == 100
+        assert r.json()["total"] == len(GENOME_CATALOG)
+
+    async def test_genomes_list_matches_catalog(self, ac):
+        from src.config import GENOME_CATALOG
+
+        r = await ac.get("/catalog")
+        assert len(r.json()["genomes"]) == len(GENOME_CATALOG)
 
     async def test_each_genome_has_id_and_accession(self, ac):
         r = await ac.get("/catalog")
