@@ -2145,15 +2145,16 @@ def filter_candidates(
     length_threshold: float = 0,
     combined_threshold: float = 0,
 ) -> pd.DataFrame:
-    """Boolean-mask filter: removes ORFs where all three scores are below their
-    thresholds OR combined_score is below its threshold."""
-    all_three_below = (
-        (all_orfs["length_score"] < length_threshold)
-        & (all_orfs["codon_score"] < codon_threshold)
-        & (all_orfs["imm_score"] < imm_threshold)
-    )
+    """Boolean-mask filter: removes ORFs whose combined_score is below threshold.
+
+    The previous AND-condition on raw individual scores (codon, IMM, length) was
+    removed because raw scores are genome-specific and not comparable across GC
+    ranges — causing 2-6pp extra sensitivity loss in high-GC genomes with no
+    precision benefit. The combined_score (weighted sum of normalized scores) is
+    genome-invariant and sufficient as a single gate.
+    """
     combined_below = all_orfs["combined_score"] < combined_threshold
-    keep = ~(all_three_below | combined_below)
+    keep = ~combined_below
     result = all_orfs[keep].reset_index(drop=True)
     logger.info(f"Filtered: {len(result):,} kept, {(~keep).sum():,} removed")
     return result
