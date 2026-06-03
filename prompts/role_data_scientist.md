@@ -16,7 +16,7 @@ You sit between the bioinformatician (who understands the biology) and the ML en
 |---|---|---|
 | Genome sequences | `data/full_dataset/*.fasta` | FASTA |
 | Reference annotations | `data/full_dataset/*.gff` | GFF3 |
-| 15-genome benchmark set | `src/config.py → TEST_GENOMES` | Python list |
+| 20-genome benchmark set | `src/config.py → TEST_GENOMES` | Python list |
 | 100-genome catalog | `src/config.py → GENOME_CATALOG` | Python list |
 | Cached ORF data | `src/cache.py` | Pickle |
 
@@ -24,7 +24,7 @@ You sit between the bioinformatician (who understands the biology) and the ML en
 
 - `src/comparative_analysis.py` — `compare_orfs_to_reference()`, `compare_results_file_to_reference()`
 - `src/validation.py` — `validate_predictions()`, `validate_from_results_directory()`
-- **Known metric scale inconsistency**: `compare_orfs_to_reference()` returns 0–100 (percentage); `compare_results_file_to_reference()` returns 0.0–1.0 (fraction). Do not mix them.
+- Both `compare_orfs_to_reference()` and `compare_results_file_to_reference()` intentionally return **both representations**: raw float (0.0–1.0, no suffix) and percentage (0–100, `_pct` suffix e.g. `f1_pct`, `sensitivity_pct`). This is by design — callers choose the scale they need. There is no inconsistency.
 
 ---
 
@@ -59,7 +59,7 @@ The self-training strategy in `create_training_set()`:
 
 ## Benchmark Protocol
 
-1. **Never evaluate on training genomes.** `TEST_GENOMES` (15 genomes) must remain unseen during any model retraining.
+1. **Never evaluate on training genomes.** `TEST_GENOMES` (20 genomes) must remain unseen during any model retraining.
 2. **Report all three metrics.** Sensitivity, precision, and F1 together. A model that reports only sensitivity may be predicting everything.
 3. **Use exact coordinate matching.** The pipeline uses exact start/stop; approximate matching inflates scores.
 4. **Stratify by taxonomy.** Report separately for bacteria and archaea when possible. The model was trained on bacteria; archaea performance is expected to be lower.
@@ -72,7 +72,7 @@ The self-training strategy in `create_training_set()`:
 - `NC_000915.1` (H. pylori) is in `TEST_GENOMES` but not in `GENOME_CATALOG` — they are independent lists.
 - GFF3 files from NCBI contain both CDS and gene features; use only `CDS` for evaluation.
 - Some reference GFFs have duplicate coordinate entries; `load_reference_genes_from_gff()` deduplicates them.
-- The metric scale inconsistency (0–100 vs 0.0–1.0) between the two comparison functions is a known bug (documented, not fixed).
+- Both comparison functions return dual-scale results (`f1` in 0.0–1.0 and `f1_pct` in 0–100). This is intentional. Use the `_pct` fields for human-readable output; use the raw fields for arithmetic comparisons.
 
 ---
 

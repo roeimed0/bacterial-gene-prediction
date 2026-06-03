@@ -521,8 +521,19 @@ def compare_orfs_to_reference(
             "ORF data must contain 'start'/'end' or 'genome_start'/'genome_end' columns."
         )
 
-    ref = pd.read_csv(gff_path, sep="\t", comment="#", header=None)
-    ref = ref[ref[2] == "CDS"][[3, 4]].rename(columns={3: "start", 4: "end"})
+    ref_raw = pd.read_csv(gff_path, sep="\t", comment="#", header=None)
+    cds_rows = ref_raw[ref_raw[2] == "CDS"]
+    # Exclude pseudogene CDS: not functional genes, should not be counted as
+    # missed predictions.  NCBI marks them with "pseudo=true", "pseudogene",
+    # "frameshifted", "internal stop", or "disrupted" in the attributes (col 8).
+    if 8 in cds_rows.columns:
+        is_pseudo = cds_rows[8].str.contains(
+            r"pseudo=true|pseudogene|frameshifted|internal.stop|disrupted",
+            case=False,
+            na=False,
+        )
+        cds_rows = cds_rows[~is_pseudo]
+    ref = cds_rows[[3, 4]].rename(columns={3: "start", 4: "end"})
     ref = ref.drop_duplicates()
 
     fuzzy = start_tolerance > 0 or stop_tolerance > 0

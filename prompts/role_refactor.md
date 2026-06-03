@@ -137,13 +137,13 @@ bacterial-gene-prediction/
 
 | Current | Problem | Target |
 |---|---|---|
-| `src/traditional_methods.py` (1,270 lines) | 6+ responsibilities in one file | Split into `src/prediction/orf_detection.py`, `rbs_scoring.py`, `markov_models.py`, `codon_scoring.py`, `scoring.py` |
-| `src/ml_models.py` (818 lines) | Mixes feature extraction, model loading, CNN architecture | Split into `src/ml/features.py`, `group_classifier.py`, `hybrid_filter.py` |
-| `src/data_management.py` (405 lines) | Mixes FASTA I/O, GFF I/O, NCBI API calls | Split into `src/io/fasta.py`, `gff.py`, `ncbi.py` |
-| `src/comparative_analysis.py` (711 lines) | Mixes metric computation, file comparison, visualization | Split into `src/analysis/metrics.py`, `comparison.py`, `interpretation.py` |
+| `src/traditional_methods.py` (1,977 lines) | 6+ responsibilities in one file | Split into `src/prediction/orf_detection.py`, `rbs_scoring.py`, `markov_models.py`, `codon_scoring.py`, `scoring.py` |
+| `src/ml_models.py` (1,582 lines) | Mixes OrfGroupClassifier, HybridGeneFilter, StartSelectionClassifier, feature extraction | Split into `src/ml/orf_classifier.py`, `hybrid_filter.py`, `start_classifier.py`, `feature_extraction.py` |
+| `src/data_management.py` (399 lines) | Mixes FASTA I/O, GFF I/O, NCBI API calls | Split into `src/io/fasta.py`, `gff.py`, `ncbi.py` |
+| `src/comparative_analysis.py` (925 lines) | Mixes metric computation, file comparison, visualization | Split into `src/analysis/metrics.py`, `comparison.py`, `interpretation.py` |
 | `hybrid_predictor.py` (868 lines) | CLI + orchestration + menus + I/O + output formatting | Move to `cli/` directory; thin shim stays for backwards compat |
 | ~~No `src/pipeline.py`~~ **DONE** | ~~No single callable entry point~~ | `src/pipeline.py` created with `predict_genome()`, `predict_genome_from_file()`, `write_gff()` — PR #128 |
-| ~~No `scripts/` directory~~ **DONE** | ~~Utility scripts mixed with source~~ | `scripts/` exists with benchmark, predict_batch, train_lgb, train_hybrid, manage_lgb, calibrate_start_weights, compare_lgb_models |
+| ~~No `scripts/` directory~~ **DONE** | ~~Utility scripts mixed with source~~ | `scripts/training/`, `scripts/evaluation/`, `scripts/experiments/` organised per AGENTS.md |
 
 ---
 

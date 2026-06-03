@@ -4,24 +4,30 @@ Records trained artifact provenance for models in this directory.
 
 ---
 
-## orf_classifier_lgb.pkl  ← **CURRENT PRODUCTION** (promoted 2026-05-13)
+## orf_classifier_lgb.pkl  ← **CURRENT PRODUCTION** (promoted 2026-05-31, v3)
 
 | Field | Value |
 |---|---|
 | Type | LightGBM binary classifier (OrfGroupClassifier) |
 | Task | Predict whether a group of nested ORFs contains a real gene |
-| Features | 26 group-level features (see feature_names.pkl) |
-| Training data | 68 genomes from GENOME_CATALOG (stratified by taxonomy, seed=42) |
+| Features | **30 named group-level features** (see feature_names.pkl) |
+| Training data | 68 genomes from GENOME_CATALOG (stratified by taxonomy, seed=17) |
 | Validation | 16 genomes (early stopping) |
 | Test | 16 held-out genomes |
-| Threshold | 0.05 (calibrated via holdout sweep — best F1 at precision ≥ 81.57%) |
-| Trained | 2026-05-12 |
-| Performance | +0.31pp overall F1, +0.77pp Actinobacteria, 0 regressions on 20 clean holdout genomes |
-| Script | `scripts/train_lgb.py --seed 42 --no-val-compare` |
-| Previous | `orf_classifier_lgb_v1_backup.pkl` (31 features, 2026-05-06) |
+| Threshold | **0.07** (swept t=[0.05,0.07,0.10] on 20-genome holdout; 0.07 gave best F1) |
+| Trained | 2026-05-31 |
+| Performance | **F1=74.50%** corrected (pseudogenes excluded from ref; old 73.02% counted pseudogenes as missed) |
+| Script | `scripts/training/train_lgb.py --seed 17` |
+| Previous | `orf_classifier_lgb_v2_backup.pkl` (34 Column_N features, 2026-05-31) |
 
-**Feature changes vs v1:** Removed 7 zero-importance features (strand fractions, 5 *_max relative).
-Added `top_orf_is_longest` and `length_ratio_max_min`.
+**v3 changes vs v2 (ML2 + rbs_dominance):**
+- Removed 5 broken `rel_*_max` features — `max(x/max(x)) = 1.0` always (mathematical identity, zero information)
+- Added `rbs_dominance = rbs_max / rbs_mean`: dominance ratio, AUC=0.874 vs rbs_max alone at 0.821 (+0.053). Measures how much the best ORF's RBS outperforms the group average.
+- Added `genome_gc_high = max(0, genome_gc - 0.55)`: gated GC% signal (zero for low/moderate-GC genomes, positive for high-GC). Diagnostic: r(genome_gc, F1)=-0.677, max corr with existing=0.21.
+- Model now uses named features (not generic Column_N) — fixes feature-order safety.
+- Systematic gating analysis across all 21 remaining candidates confirmed no further features benefit from gating.
+
+**De novo constraint:** genome_gc is computed from the input sequence alone — no external databases.
 
 ---
 

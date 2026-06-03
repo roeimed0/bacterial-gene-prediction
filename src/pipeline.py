@@ -25,6 +25,7 @@ from .traditional_methods import (
     create_intergenic_set,
     create_training_set,
     filter_candidates,
+    filter_training_adaptive,
     find_orfs_candidates,
     organize_nested_orfs,
     score_all_orfs,
@@ -127,6 +128,23 @@ def predict_genome(
     logger.info("[%s] Finding ORF candidates...", genome_id)
     orfs = find_orfs_candidates(sequence, min_length=min_orf_length)
     training = create_training_set(sequence=sequence, all_orfs=orfs)
+
+    # Adaptive multi-feature pseudogene filter.
+    # Uses |GC3-GC12| (codon position bias) + Nc (effective codons) + length.
+    # Self-activating: only fires when the training set's own median abs_bias
+    # is low (indicating contamination with pseudogenes/IS elements).
+    genome_gc = (sequence.count("G") + sequence.count("C")) / max(len(sequence), 1)
+    n_before = len(training)
+    training = filter_training_adaptive(training, genome_gc)
+    if len(training) < n_before:
+        logger.info(
+            "[%s] Adaptive pseudogene filter (gc=%.2f): %d -> %d training ORFs",
+            genome_id,
+            genome_gc,
+            n_before,
+            len(training),
+        )
+
     intergenic = create_intergenic_set(sequence=sequence, all_orfs=orfs)
 
     # Steps 4-5: Build models + score
@@ -149,8 +167,9 @@ def predict_genome(
             genome_id=genome_id,
             weights=START_SELECTION_WEIGHTS,
             threshold=lgb_threshold,
+            genome_gc=genome_gc,
         )
-        logger.info("[%s] LGB filter: %d → %d groups", genome_id, pre, len(groups))
+        logger.info("[%s] LGB filter: %d -> %d groups", genome_id, pre, len(groups))
 
     # Step 9: Select best start codon
     if ss is not None:

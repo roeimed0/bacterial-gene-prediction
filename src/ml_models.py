@@ -83,134 +83,195 @@ class OrfGroupClassifier:
         return -np.sum(p * np.log(p) / np.log(base))
 
     def extract_group_features(
-        self, groups: Dict[str, List[Dict]], genome_id: str, weights: Dict = None
+        self,
+        groups: Dict[str, List[Dict]],
+        genome_id: str,
+        weights: Dict = None,
+        genome_gc: float = 0.5,
     ) -> pd.DataFrame:
         """
         Extract features from ORF groups for prediction.
 
         Args:
             groups: Dictionary of {group_id: [list of ORFs]}
-            genome_id: Genome identifier (for progress bar)
+            genome_id: Genome identifier
             weights: Optional weights for start selection score
 
         Returns:
             DataFrame with one row per group, columns are features
         """
-        from tqdm import tqdm
+        if not groups:
+            return pd.DataFrame()
 
-        rows = []
-        for group_id, orf_group in tqdm(
-            groups.items(), total=len(groups), desc=f"Groups {genome_id}"
-        ):
-            # Accept both DataFrame (new) and List[Dict] (legacy)
-            if isinstance(orf_group, list):
-                orf_group = pd.DataFrame(orf_group)
-            if len(orf_group) == 0:
+        # ── 1. Flatten all groups into one DataFrame ─────────────────────────
+        # Replaces the Python per-group loop: all subsequent work is vectorised
+        # pandas / numpy operating on the full pool of ORFs at once.
+        # Use integer _gid internally (group keys may be tuples or strings which
+        # pandas cannot broadcast as column scalars).
+        parts: list = []
+        gid_col: list = []  # parallel integer-gid list; avoids per-group .copy()
+        gid_map: dict = {}  # int → original group key
+        j = 0
+        for gid, gdf in groups.items():
+            if isinstance(gdf, list):
+                gdf = pd.DataFrame(gdf)
+            n = len(gdf)
+            if n == 0:
                 continue
+            parts.append(gdf)
+            gid_col.extend([j] * n)
+            gid_map[j] = gid
+            j += 1
 
-            # .values is faster than .to_numpy(float, na_value=...) for small groups
-            combined = orf_group["combined_score"].values.astype(np.float64)
-            rbs = orf_group["rbs_score"].values.astype(np.float64)
-            codon = orf_group["codon_score"].values.astype(np.float64)
-            start = orf_group["start_score"].values.astype(np.float64)
-            imm = orf_group["imm_score"].values.astype(np.float64)
-            lengths = orf_group["length"].values.astype(np.float64)
+        if not parts:
+            return pd.DataFrame()
 
-            if weights is not None:
-                cols = orf_group.columns
-                ss = (
-                    (
-                        orf_group["codon_score_norm"].values
-                        if "codon_score_norm" in cols
-                        else np.zeros(len(orf_group))
-                    ).astype(np.float64)
-                    * weights.get("codon", 0.0)
-                    + (
-                        orf_group["imm_score_norm"].values
-                        if "imm_score_norm" in cols
-                        else np.zeros(len(orf_group))
-                    ).astype(np.float64)
-                    * weights.get("imm", 0.0)
-                    + (
-                        orf_group["rbs_score_norm"].values
-                        if "rbs_score_norm" in cols
-                        else np.zeros(len(orf_group))
-                    ).astype(np.float64)
-                    * weights.get("rbs", 0.0)
-                    + (
-                        orf_group["length_score_norm"].values
-                        if "length_score_norm" in cols
-                        else np.zeros(len(orf_group))
-                    ).astype(np.float64)
-                    * weights.get("length", 0.0)
-                    + (
-                        orf_group["start_score_norm"].values
-                        if "start_score_norm" in cols
-                        else np.zeros(len(orf_group))
-                    ).astype(np.float64)
-                    * weights.get("start", 0.0)
-                )
-            else:
-                ss = np.zeros(len(orf_group))
+        flat = pd.concat(parts, ignore_index=True)
+        flat["_gid"] = gid_col  # assign after concat — no per-group copy needed
 
-            n = len(combined)
-            max_combined = combined.max()
-            max_rbs = rbs.max()
-            max_codon = codon.max()
-            max_start = start.max()
-            max_ss = ss.max()
+        # ── 2. Row-level derived columns ─────────────────────────────────────
+        # Start-select weighted score
+        if weights is not None:
+            _ss = np.zeros(len(flat), dtype=np.float64)
+            for _col, _key in [
+                ("codon_score_norm", "codon"),
+                ("imm_score_norm", "imm"),
+                ("rbs_score_norm", "rbs"),
+                ("length_score_norm", "length"),
+                ("start_score_norm", "start"),
+            ]:
+                if _col in flat.columns:
+                    _ss += flat[_col].to_numpy(dtype=np.float64) * weights.get(_key, 0.0)
+        else:
+            _ss = np.zeros(len(flat), dtype=np.float64)
 
-            # Superset: always compute ALL known features across every model
-            # generation so predict_groups() can select what it needs.
-            strands = orf_group["strand"].tolist()
-            group_features = {
-                "group_id": group_id,
-                "num_orfs": n,
-                "combined_max": max_combined,
-                "combined_mean": combined.mean(),
-                "combined_std": combined.std() if n > 1 else 0.0,
-                "combined_entropy": self._entropy_from_probs(np.maximum(combined, 0)),
-                "combined_margin_top2": (
-                    (lambda s: s[-1] - s[-2])(np.sort(combined)) if n > 1 else combined[0]
-                ),
-                "frac_top_orfs": (combined >= 0.8 * max_combined).sum() / n,
-                "rbs_max": max_rbs,
-                "rbs_mean": rbs.mean(),
-                "codon_max": max_codon,
-                "codon_mean": codon.mean(),
-                "start_max": max_start,
-                "start_mean": start.mean(),
-                "imm_max": imm.max(),
-                "imm_mean": imm.mean(),
-                "start_select_max": max_ss,
-                "start_select_mean": ss.mean(),
-                # v1 features kept for backward compat with old models
-                "strand_plus_frac": strands.count("forward") / n,
-                "strand_minus_frac": strands.count("reverse") / n,
-                "rel_combined_max": (
-                    combined / max_combined if max_combined > 0 else np.zeros(n)
-                ).max(),
-                "rel_rbs_max": (rbs / max_rbs if max_rbs > 0 else np.zeros(n)).max(),
-                "rel_codon_max": (codon / max_codon if max_codon > 0 else np.zeros(n)).max(),
-                "rel_start_max": (start / max_start if max_start > 0 else np.zeros(n)).max(),
-                "rel_start_select_max": (ss / max_ss if max_ss > 0 else np.zeros(n)).max(),
-                # Current features
-                "rel_combined_mean": (
-                    combined / max_combined if max_combined > 0 else np.zeros(n)
-                ).mean(),
-                "rel_rbs_mean": (rbs / max_rbs if max_rbs > 0 else np.zeros(n)).mean(),
-                "rel_codon_mean": (codon / max_codon if max_codon > 0 else np.zeros(n)).mean(),
-                "rel_start_mean": (start / max_start if max_start > 0 else np.zeros(n)).mean(),
-                "rel_start_select_mean": (ss / max_ss if max_ss > 0 else np.zeros(n)).mean(),
-                "top_orf_is_longest": int(combined.argmax() == lengths.argmax()),
-                "length_ratio_max_min": float(lengths.max() / max(lengths.min(), 1.0)),
-                "frac_top_combined": (combined >= 0.95 * max_combined).sum() / n,
-                "frac_top_start_select": (ss >= 0.95 * max_ss).sum() / n,
-            }
+        flat["_ss"] = _ss
+        flat["_sfwd"] = (flat["strand"] == "forward").astype(np.float64)
+        # positive-clipped combined score for entropy computation
+        flat["_pos_c"] = np.maximum(flat["combined_score"].to_numpy(dtype=np.float64), 0.0)
+        # squared combined score for population-std (ddof=0) computation
+        flat["_c2"] = flat["combined_score"].to_numpy(dtype=np.float64) ** 2
 
-            rows.append(group_features)
+        # ── 3. Per-group max/min — one agg, merged back for row-level use ────
+        gb = flat.groupby("_gid", sort=False)
+        gmax = gb.agg(
+            _cmx=("combined_score", "max"),
+            _rmx=("rbs_score", "max"),
+            _kmx=("codon_score", "max"),
+            _smx=("start_score", "max"),
+            _ssmx=("_ss", "max"),
+            _lmx=("length", "max"),
+            _lmn=("length", "min"),
+            _csum_pos=("_pos_c", "sum"),
+        ).reset_index()
+        flat = flat.merge(gmax, on="_gid", how="left")
 
-        return pd.DataFrame(rows).fillna(0.0)
+        # Extract aligned numpy arrays after merge
+        _c = flat["combined_score"].to_numpy(dtype=np.float64)
+        _r = flat["rbs_score"].to_numpy(dtype=np.float64)
+        _k = flat["codon_score"].to_numpy(dtype=np.float64)
+        _s = flat["start_score"].to_numpy(dtype=np.float64)
+        _ss_arr = flat["_ss"].to_numpy(dtype=np.float64)
+        _cmx = flat["_cmx"].to_numpy(dtype=np.float64)
+        _rmx = flat["_rmx"].to_numpy(dtype=np.float64)
+        _kmx = flat["_kmx"].to_numpy(dtype=np.float64)
+        _smx = flat["_smx"].to_numpy(dtype=np.float64)
+        _ssmx = flat["_ssmx"].to_numpy(dtype=np.float64)
+        _csum_pos = flat["_csum_pos"].to_numpy(dtype=np.float64)
+
+        # ── 4. Row-level relative, fraction and entropy features ─────────────
+        # np.where evaluates both branches; guard denominators to avoid RuntimeWarning
+        flat["_rel_c"] = np.where(_cmx > 0, _c / np.where(_cmx > 0, _cmx, 1.0), 0.0)
+        flat["_rel_r"] = np.where(_rmx > 0, _r / np.where(_rmx > 0, _rmx, 1.0), 0.0)
+        flat["_rel_k"] = np.where(_kmx > 0, _k / np.where(_kmx > 0, _kmx, 1.0), 0.0)
+        flat["_rel_s"] = np.where(_smx > 0, _s / np.where(_smx > 0, _smx, 1.0), 0.0)
+        flat["_rel_ss"] = np.where(_ssmx > 0, _ss_arr / np.where(_ssmx > 0, _ssmx, 1.0), 0.0)
+        flat["_f08c"] = (_c >= 0.8 * _cmx).astype(np.float64)
+        flat["_f95c"] = (_c >= 0.95 * _cmx).astype(np.float64)
+        flat["_f95ss"] = (_ss_arr >= 0.95 * _ssmx).astype(np.float64)
+
+        # Per-row entropy contribution: -p*log2(p) where p = pos_c / group_sum_pos_c
+        _p_c = np.where(_csum_pos > 0, flat["_pos_c"].to_numpy() / _csum_pos, 0.0)
+        flat["_h_row"] = np.where(_p_c > 0, -_p_c * np.log2(np.where(_p_c > 0, _p_c, 1.0)), 0.0)
+
+        # ── 5. Within-group ranks (for margin_top2 and top_orf_is_longest) ───
+        gb2 = flat.groupby("_gid", sort=False)
+        flat["_c_rank"] = gb2["combined_score"].rank(ascending=False, method="first")
+        flat["_l_rank"] = gb2["length"].rank(ascending=False, method="first")
+
+        # ── 6. Main aggregation (one pass) ───────────────────────────────────
+        gb3 = flat.groupby("_gid", sort=False)
+        agg = gb3.agg(
+            num_orfs=("combined_score", "count"),
+            combined_max=("combined_score", "max"),
+            combined_mean=("combined_score", "mean"),
+            _sq_mean=("_c2", "mean"),  # for population std
+            rbs_max=("rbs_score", "max"),
+            rbs_mean=("rbs_score", "mean"),
+            codon_max=("codon_score", "max"),
+            codon_mean=("codon_score", "mean"),
+            start_max=("start_score", "max"),
+            start_mean=("start_score", "mean"),
+            imm_max=("imm_score", "max"),
+            imm_mean=("imm_score", "mean"),
+            start_select_max=("_ss", "max"),
+            start_select_mean=("_ss", "mean"),
+            strand_plus_frac=("_sfwd", "mean"),
+            _lmx=("_lmx", "first"),  # same value every row in group
+            _lmn=("_lmn", "first"),
+            rel_combined_mean=("_rel_c", "mean"),
+            rel_rbs_mean=("_rel_r", "mean"),
+            rel_codon_mean=("_rel_k", "mean"),
+            rel_start_mean=("_rel_s", "mean"),
+            rel_start_select_mean=("_rel_ss", "mean"),
+            frac_top_orfs=("_f08c", "mean"),
+            frac_top_combined=("_f95c", "mean"),
+            frac_top_start_select=("_f95ss", "mean"),
+            combined_entropy=("_h_row", "sum"),
+        ).reset_index()  # _gid (integer) becomes a column
+
+        # ── 7. Rank-based features (all on integer _gid) ─────────────────────
+        # combined_margin_top2: top1 − top2 per group (top1 when n == 1)
+        _top1 = flat.loc[flat["_c_rank"] == 1, ["_gid", "combined_score"]].set_index("_gid")[
+            "combined_score"
+        ]
+        _top2 = flat.loc[flat["_c_rank"] == 2, ["_gid", "combined_score"]].set_index("_gid")[
+            "combined_score"
+        ]
+        _margin = _top1.rename("_t1").to_frame().join(_top2.rename("_t2"), how="left")
+        _margin["combined_margin_top2"] = np.where(
+            _margin["_t2"].notna(),
+            _margin["_t1"] - _margin["_t2"],
+            _margin["_t1"],  # n == 1: return the single score
+        )
+
+        # top_orf_is_longest: 1 if argmax(combined) == argmax(length)
+        _both_top = (flat["_c_rank"] == 1) & (flat["_l_rank"] == 1)
+        _top_is_longest = (
+            _both_top.groupby(flat["_gid"]).any().astype(int).rename("top_orf_is_longest")
+        )
+
+        # ── 8. Merge rank features on integer _gid, then map group_id ────────
+        agg = (
+            agg.set_index("_gid")
+            .join(_margin["combined_margin_top2"])
+            .join(_top_is_longest)
+            .reset_index()
+        )
+        # Restore original (possibly tuple) group keys
+        agg["group_id"] = agg["_gid"].map(gid_map)
+        agg = agg.drop(columns=["_gid"])
+
+        # Population std (ddof=0): sqrt(E[X²] − E[X]²)
+        agg["combined_std"] = np.sqrt(np.maximum(0.0, agg["_sq_mean"] - agg["combined_mean"] ** 2))
+        agg["strand_minus_frac"] = 1.0 - agg["strand_plus_frac"]
+        agg["rbs_dominance"] = agg["rbs_max"] / agg["rbs_mean"].clip(lower=1e-9)
+        agg["length_ratio_max_min"] = agg["_lmx"] / agg["_lmn"].clip(lower=1.0)
+        agg["genome_gc_high"] = float(max(0.0, genome_gc - 0.55))
+
+        agg = agg.drop(columns=["_sq_mean", "_lmx", "_lmn"])
+
+        return agg.fillna(0.0)
 
     def predict_groups(
         self,
@@ -218,6 +279,7 @@ class OrfGroupClassifier:
         genome_id: str = "unknown",
         weights: Dict = None,
         threshold: float = 0.07,
+        genome_gc: float = 0.5,
     ) -> tuple:
         """
         Predict which groups contain real genes.
@@ -236,7 +298,7 @@ class OrfGroupClassifier:
             - group_ids: List of group IDs in same order
         """
         # Extract features
-        df = self.extract_group_features(groups, genome_id, weights)
+        df = self.extract_group_features(groups, genome_id, weights, genome_gc=genome_gc)
 
         # Resolve feature column order.
         # Models trained on numpy arrays get generic names ("Column_0" …).
@@ -363,6 +425,7 @@ class OrfGroupClassifier:
         genome_id: str = "unknown",
         weights: Dict = None,
         threshold: float = 0.07,
+        genome_gc: float = 0.5,
     ) -> Dict[str, List[Dict]]:
         """
         Filter groups, keeping only those predicted to contain real genes.
@@ -371,7 +434,7 @@ class OrfGroupClassifier:
         """
         # Get predictions
         predictions, probabilities, group_ids = self.predict_groups(
-            groups, genome_id, weights, threshold
+            groups, genome_id, weights, threshold, genome_gc=genome_gc
         )
 
         # Create set of kept group IDs (those above threshold)
