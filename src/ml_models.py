@@ -321,8 +321,9 @@ class OrfGroupClassifier:
                 f"DataFrame. Missing: {sorted(missing)}"
             )
 
-        # Extract feature matrix in the order the model was trained on
-        X = df[model_features].values
+        # Pass a named DataFrame so LightGBM can validate feature names
+        # (avoids "X does not have valid feature names" UserWarning)
+        X = df[model_features]
 
         # Get probabilities — n_jobs=1 avoids a 1.3s loky cpu_count() call
         probabilities = np.asarray(self.model.predict_proba(X, num_threads=1))[:, 1]
@@ -396,7 +397,7 @@ class OrfGroupClassifier:
         """
         from sklearn.metrics import precision_recall_curve
 
-        probs = np.asarray(self.model.predict_proba(X_val.values, num_threads=1))[:, 1]
+        probs = np.asarray(self.model.predict_proba(X_val, num_threads=1))[:, 1]
         precision, recall, thresholds = precision_recall_curve(y_val, probs)
         f1_scores = np.where(
             (precision + recall) > 0,
@@ -1337,7 +1338,10 @@ class StartSelectionClassifier:
                     gc_pct,
                     gap,
                 )
-                X = self.scaler.transform(np.array([[fv.get(c, 0.0) for c in self.features]]))
+                X = pd.DataFrame(
+                    self.scaler.transform(np.array([[fv.get(c, 0.0) for c in self.features]])),
+                    columns=self.features,
+                )
                 prob_keep = float(self.clf.predict_proba(X)[0, 1])
                 if self.temperature_T is not None:
                     from scipy.special import expit
