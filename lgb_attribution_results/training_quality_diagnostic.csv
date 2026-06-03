@@ -1,0 +1,29 @@
+accession,label,phylum,f1_pct,n_ref_cds,min_length,n_train,tp,fp,tp_frac,fp_frac
+NC_002677.1,M. leprae,Actinobacteria,41.74,2924,300,580,384,196,0.6621,0.3379
+NC_002677.1,M. leprae,Actinobacteria,41.74,2924,250,580,384,196,0.6621,0.3379
+NC_002677.1,M. leprae,Actinobacteria,41.74,2924,200,580,384,196,0.6621,0.3379
+NC_002677.1,M. leprae,Actinobacteria,41.74,2924,150,580,384,196,0.6621,0.3379
+NC_002929.2,B. pertussis,Proteobacteria,60.06,3855,300,558,264,294,0.4731,0.5269
+NC_002929.2,B. pertussis,Proteobacteria,60.06,3855,250,558,264,294,0.4731,0.5269
+NC_002929.2,B. pertussis,Proteobacteria,60.06,3855,200,558,264,294,0.4731,0.5269
+NC_002929.2,B. pertussis,Proteobacteria,60.06,3855,150,558,264,294,0.4731,0.5269
+NC_008818.1,Hyperthermus,Archaea,60.88,1778,300,552,427,125,0.7736,0.2264
+NC_008818.1,Hyperthermus,Archaea,60.88,1778,250,491,380,111,0.7739,0.2261
+NC_008818.1,Hyperthermus,Archaea,60.88,1778,200,491,380,111,0.7739,0.2261
+NC_008818.1,Hyperthermus,Archaea,60.88,1778,150,491,380,111,0.7739,0.2261
+NC_008268.1,Rhodococcus,Actinobacteria,65.34,7216,300,521,299,222,0.5739,0.4261
+NC_008268.1,Rhodococcus,Actinobacteria,65.34,7216,250,521,299,222,0.5739,0.4261
+NC_008268.1,Rhodococcus,Actinobacteria,65.34,7216,200,521,299,222,0.5739,0.4261
+NC_008268.1,Rhodococcus,Actinobacteria,65.34,7216,150,521,299,222,0.5739,0.4261
+NC_003155.5,S. avermitilis,Actinobacteria,66.34,7854,300,486,233,253,0.4794,0.5206
+NC_003155.5,S. avermitilis,Actinobacteria,66.34,7854,250,486,233,253,0.4794,0.5206
+NC_003155.5,S. avermitilis,Actinobacteria,66.34,7854,200,486,233,253,0.4794,0.5206
+NC_003155.5,S. avermitilis,Actinobacteria,66.34,7854,150,486,233,253,0.4794,0.5206
+NC_003030.1,C. acetobutyl.,Firmicutes,88.01,3706,300,1271,1157,114,0.9103,0.0897
+NC_003030.1,C. acetobutyl.,Firmicutes,88.01,3706,250,1271,1157,114,0.9103,0.0897
+NC_003030.1,C. acetobutyl.,Firmicutes,88.01,3706,200,1271,1157,114,0.9103,0.0897
+NC_003030.1,C. acetobutyl.,Firmicutes,88.01,3706,150,1271,1157,114,0.9103,0.0897
+NC_004350.2,S. agalactiae,Firmicutes,87.08,1932,300,1103,1005,98,0.9112,0.0888
+NC_004350.2,S. agalactiae,Firmicutes,87.08,1932,250,1119,1026,93,0.9169,0.0831
+NC_004350.2,S. agalactiae,Firmicutes,87.08,1932,200,1119,1026,93,0.9169,0.0831
+NC_004350.2,S. agalactiae,Firmicutes,87.08,1932,150,1119,1026,93,0.9169,0.0831

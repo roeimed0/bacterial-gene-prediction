@@ -1,0 +1,8 @@
+feature,cross_genome_auc
+sd_prevalence (genome scalar),0.6609
+rbs_max (raw),0.8233
+rbs_dominance (raw),0.8592
+rbs_max * sd_prevalence,0.7343
+rbs_dominance * sd_prevalence,0.7532
+combined_max (raw),0.9227
+combined_max * sd_prevalence,0.9258
