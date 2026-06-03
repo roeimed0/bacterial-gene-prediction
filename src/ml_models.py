@@ -1228,6 +1228,29 @@ class StartSelectionClassifier:
         self.flip_t: float = 0.80
         self.calibrated: bool = False
         self.temperature_T: Optional[float] = None
+        self._init_anti_sd_table()
+
+    def _init_anti_sd_table(self) -> None:
+        n = len(self._ANTI_SD)
+        # score_table[window_pos, mrna_base_int]: 1.0 / 0.5 / 0.0
+        # window position p pairs with ANTI_SD[n-1-p] (antiparallel)
+        score_table = np.zeros((n, 5), dtype=np.float32)
+        for p in range(n):
+            ab = self._ANTI_SD[n - 1 - p]
+            for b_idx, b in enumerate("AUGC"):
+                if self._PAIRS.get(ab) == b:
+                    score_table[p, b_idx] = 1.0
+                elif (ab, b) in self._WOBBLE or (b, ab) in self._WOBBLE:
+                    score_table[p, b_idx] = 0.5
+        self._anti_sd_score_table = score_table
+        # A=0, U/T=1, G=2, C=3, other=4
+        bmap = np.full(256, 4, dtype=np.int8)
+        bmap[ord("A")] = bmap[ord("a")] = 0
+        bmap[ord("U")] = bmap[ord("u")] = 1
+        bmap[ord("T")] = bmap[ord("t")] = 1
+        bmap[ord("G")] = bmap[ord("g")] = 2
+        bmap[ord("C")] = bmap[ord("c")] = 3
+        self._anti_sd_base_map = bmap
 
     # ── Persistence ───────────────────────────────────────────────────────────
 
@@ -1306,54 +1329,149 @@ class StartSelectionClassifier:
         len_mean, len_std = self._build_len_prior(groups)
         gc_pct = (genome_seq.count("G") + genome_seq.count("C")) / max(len(genome_seq), 1)
 
-        # ── Pass 1: baseline scoring + collect contested pairs ───────────────
-        # Separate singletons (no contest needed) from contested groups so we
-        # can batch all classifier calls into a single predict_proba() call.
-        singleton_rows = []  # groups with 1 ORF or uncontested gap
-        contested_info = []  # (group_key, winner_idx_if_keep, alt_idx, feature_vec)
+        # ── Pass 1: baseline scoring — split singletons from contested ────────
+        singleton_rows: List = []
+        contested: List = []  # (grp_df_with_base, keep_idx, alt_idx, gap)
 
         for gid, grp_df in groups.items():
             if isinstance(grp_df, list):
                 grp_df = pd.DataFrame(grp_df)
             if len(grp_df) == 0:
                 continue
-
             grp_df = grp_df.copy()
-            # Use pre-computed start_select_score if available (added by add_combined_scores)
-            # to avoid a slow per-row Python apply() over the weighted sum.
             if "start_select_score" in grp_df.columns:
                 grp_df["_base"] = grp_df["start_select_score"]
             else:
                 grp_df["_base"] = grp_df.apply(lambda r: self._baseline_score(r, weights), axis=1)
             sorted_idx = grp_df["_base"].sort_values(ascending=False).index
-            t1 = grp_df.loc[sorted_idx[0]]
+            t1_idx = sorted_idx[0]
             gap = (
-                float(t1["_base"]) - float(grp_df.loc[sorted_idx[1], "_base"])
+                float(grp_df.loc[t1_idx, "_base"]) - float(grp_df.loc[sorted_idx[1], "_base"])
                 if len(sorted_idx) > 1
                 else 999.0
             )
-
             if gap < self.contest_t and len(sorted_idx) >= 2:
-                t2 = grp_df.loc[sorted_idx[1]]
-                fv = self._compute_features(
-                    t1,
-                    t2,
-                    grp_df,
-                    genome_seq,
-                    scoring_models,
-                    rbs_pwm,
-                    ctx_pwm,
-                    len_mean,
-                    len_std,
-                    gc_pct,
-                    gap,
-                )
-                contested_info.append((grp_df, sorted_idx[0], sorted_idx[1], fv))
+                contested.append((grp_df, t1_idx, sorted_idx[1], gap))
             else:
-                singleton_rows.append(grp_df.loc[sorted_idx[0]])
+                singleton_rows.append(grp_df.loc[t1_idx])
 
-        # ── Pass 2: batch predict_proba for all contested pairs ───────────────
-        if contested_info:
+        # ── Pre-compute: batch per-ORF features for all contested pairs ───────
+        # Each feature is computed once per ORF (no redundant double-calls).
+        # _anti_sd_scores_batch and _dist_any_stop_batch use numpy internally.
+        if contested:
+            t1_rows = [c[0].loc[c[1]] for c in contested]
+            t2_rows = [c[0].loc[c[2]] for c in contested]
+            t1_dicts = [r.to_dict() for r in t1_rows]
+            t2_dicts = [r.to_dict() for r in t2_rows]
+
+            up1 = [self._get_upstream(genome_seq, d, 25) for d in t1_dicts]
+            up2 = [self._get_upstream(genome_seq, d, 25) for d in t2_dicts]
+
+            f4_1 = [self._f4_spacer(u) for u in up1]
+            f4_2 = [self._f4_spacer(u) for u in up2]
+            f5_1 = [self._f5_gc_bias(u) for u in up1]
+            f5_2 = [self._f5_gc_bias(u) for u in up2]
+            imm_1 = [self._upstream_imm(u, scoring_models) for u in up1]
+            imm_2 = [self._upstream_imm(u, scoring_models) for u in up2]
+            rbs_1 = [self._score_pwm(u, rbs_pwm) for u in up1]
+            rbs_2 = [self._score_pwm(u, rbs_pwm) for u in up2]
+            ctx_1 = [self._score_ctx_pwm(genome_seq, d, ctx_pwm) for d in t1_dicts]
+            ctx_2 = [self._score_ctx_pwm(genome_seq, d, ctx_pwm) for d in t2_dicts]
+            ps_1 = [
+                self._post_start_score(str(r.get("sequence", "")), scoring_models) for r in t1_rows
+            ]
+            ps_2 = [
+                self._post_start_score(str(r.get("sequence", "")), scoring_models) for r in t2_rows
+            ]
+            ext_c = [
+                self._ext_codon_score(d1, d2, genome_seq, scoring_models)
+                for d1, d2 in zip(t1_dicts, t2_dicts)
+            ]
+            asd_1 = self._anti_sd_scores_batch(up1)
+            asd_2 = self._anti_sd_scores_batch(up2)
+            stop_1 = self._dist_any_stop_batch(genome_seq, t1_dicts)
+            stop_2 = self._dist_any_stop_batch(genome_seq, t2_dicts)
+
+            # ── Assemble feature vectors ──────────────────────────────────────
+            contested_info = []
+            for i, (grp_df, keep_idx, alt_idx, gap) in enumerate(contested):
+                t1 = t1_rows[i]
+                t2 = t2_rows[i]
+                lengths = grp_df["length"].values
+                scores = grp_df["_base"]
+                s_range = float(scores.max() - scores.min())
+                rbs_v = grp_df.get(
+                    "rbs_score_norm",
+                    pd.Series(np.zeros(len(grp_df)), index=grp_df.index),
+                ).values
+                t1l = float(t1.get("length", 0))
+                t2l = float(t2.get("length", 0))
+                t1z = (t1l - len_mean) / max(len_std, 1.0)
+                t2z = (t2l - len_mean) / max(len_std, 1.0)
+                asd1 = float(asd_1[i])
+                asd2 = float(asd_2[i])
+                st1 = float(stop_1[i])
+                st2 = float(stop_2[i])
+                c1 = float(ctx_1[i])
+                c2 = float(ctx_2[i])
+                p1 = float(ps_1[i])
+                p2 = float(ps_2[i])
+                fv = {
+                    "d_baseline": gap,
+                    "d_rbs": float(t1.get("rbs_score_norm", 0))
+                    - float(t2.get("rbs_score_norm", 0)),
+                    "d_start": float(t1.get("start_score_norm", 0))
+                    - float(t2.get("start_score_norm", 0)),
+                    "d_codon": float(t1.get("codon_score_norm", 0))
+                    - float(t2.get("codon_score_norm", 0)),
+                    "d_imm": float(t1.get("imm_score_norm", 0))
+                    - float(t2.get("imm_score_norm", 0)),
+                    "d_length": t1l - t2l,
+                    "d_f4": f4_1[i] - f4_2[i],
+                    "d_f5": f5_1[i] - f5_2[i],
+                    "d_up_imm": imm_1[i] - imm_2[i],
+                    "d_genome_rbs": rbs_1[i] - rbs_2[i],
+                    "d_anti_sd": asd1 - asd2,
+                    "anti_sd_top1": asd1,
+                    "anti_sd_top2": asd2,
+                    "ext_codon": ext_c[i],
+                    "d_any_stop_dist": st1 - st2,
+                    "any_stop_top1": st1,
+                    "any_stop_top2": st2,
+                    "d_len_zscore": t1z - t2z,
+                    "len_zscore_top1": t1z,
+                    "len_zscore_top2": t2z,
+                    "d_post_start": p1 - p2,
+                    "post_start_top1": p1,
+                    "post_start_top2": p2,
+                    "d_ctx_pwm": c1 - c2,
+                    "ctx_pwm_top1": c1,
+                    "ctx_pwm_top2": c2,
+                    "gap": gap,
+                    "score_range": s_range,
+                    "rel_gap": gap / max(s_range, 1e-9),
+                    "n_near_ties": int((scores >= float(t1["_base"]) - 0.5).sum()) - 1,
+                    "n_orfs": len(grp_df),
+                    "top1_len_rank": float((lengths < t1l).sum()) / max(len(lengths) - 1, 1),
+                    "group_len_cv": float(np.std(lengths) / max(np.mean(lengths), 1)),
+                    "frac_longer": float((lengths > t1l).sum() / max(len(lengths), 1)),
+                    "grp_rbs_mean": float(rbs_v.mean()),
+                    "grp_rbs_range": float(rbs_v.max() - rbs_v.min()),
+                    "frac_atg": float(
+                        (
+                            grp_df.get("start_codon", pd.Series(["ATG"] * len(grp_df))) == "ATG"
+                        ).mean()
+                    ),
+                    "top1_rbs_rank": float((rbs_v < float(t1.get("rbs_score_norm", 0))).sum())
+                    / max(len(rbs_v) - 1, 1),
+                    "gc_pct": gc_pct,
+                    "both_atg": int(
+                        t1.get("start_codon", "") == "ATG" and t2.get("start_codon", "") == "ATG"
+                    ),
+                }
+                contested_info.append((grp_df, keep_idx, alt_idx, fv))
+
+            # ── Pass 2: batch predict_proba ───────────────────────────────────
             feat_matrix = np.array(
                 [[ci[3].get(c, 0.0) for c in self.features] for ci in contested_info]
             )
@@ -1599,6 +1717,98 @@ class StartSelectionClassifier:
         return score_imm_ratio(
             upstream, models["coding_imm"], models["noncoding_imm"], models["max_order"]
         )
+
+    def _anti_sd_scores_batch(self, upstreams: List[str]) -> np.ndarray:
+        """Vectorized anti-SD scoring: one numpy pass over all upstream sequences."""
+        N = len(upstreams)
+        if N == 0:
+            return np.zeros(0, dtype=np.float32)
+        n_anti = len(self._ANTI_SD)
+        score_table = self._anti_sd_score_table  # (n_anti, 5)
+        base_map = self._anti_sd_base_map  # (256,)
+        seq_lens = np.array([len(u) for u in upstreams], dtype=np.int32)
+        max_len = int(seq_lens.max())
+        if max_len < n_anti:
+            return np.zeros(N, dtype=np.float32)
+        # Build integer array: (N, max_len), 4=unknown/pad
+        arr = np.full((N, max_len), 4, dtype=np.int8)
+        for k, u in enumerate(upstreams):
+            mapped = base_map[np.frombuffer(u.encode("ascii"), dtype=np.uint8)]
+            arr[k, : len(mapped)] = mapped
+        best = np.zeros(N, dtype=np.float32)
+        p_idx = np.arange(n_anti, dtype=np.int32)
+        for L in np.unique(seq_lens):
+            mask = seq_lens == L
+            if L < n_anti:
+                continue
+            i_lo = max(0, L - n_anti - 14)
+            i_hi = L - n_anti - 4
+            if i_hi < i_lo:
+                continue
+            sub = arr[mask]  # (n_sub, max_len)
+            sub_best = np.zeros(int(mask.sum()), dtype=np.float32)
+            for i in range(i_lo, i_hi + 1):
+                win = sub[:, i : i + n_anti].astype(np.int32)  # (n_sub, n_anti)
+                ws = score_table[p_idx[np.newaxis, :], win]  # (n_sub, n_anti)
+                np.maximum(sub_best, ws.sum(axis=1) / n_anti, out=sub_best)
+            best[mask] = sub_best
+        return best
+
+    def _dist_any_stop_batch(
+        self, genome_seq: str, orfs: List[dict], max_scan: int = 300
+    ) -> np.ndarray:
+        """Vectorized upstream stop-codon distance for a batch of ORFs."""
+        N = len(orfs)
+        if N == 0:
+            return np.zeros(0, dtype=np.int32)
+        regions: List[str] = []
+        region_lens = np.zeros(N, dtype=np.int32)
+        for k, orf in enumerate(orfs):
+            strand = orf.get("strand", "forward")
+            gs = int(orf.get("genome_start", orf.get("start", 0)))
+            ge = int(orf.get("genome_end", orf.get("end", 0)))
+            if gs > ge:
+                gs, ge = ge, gs
+            if strand == "forward":
+                r = genome_seq[max(0, gs - max_scan - 1) : gs - 1].upper()
+            else:
+                r = (
+                    genome_seq[ge : min(len(genome_seq), ge + max_scan)]
+                    .upper()
+                    .translate(self._RC_TABLE)[::-1]
+                )
+            regions.append(r)
+            region_lens[k] = len(r)
+        results = region_lens.copy()
+        pad = max_scan
+        # Pad all regions into a single byte matrix; 0-pad is safe (0 != ord('T'))
+        arr = np.zeros((N, pad), dtype=np.uint8)
+        for k, r in enumerate(regions):
+            b = np.frombuffer(r.encode("ascii"), dtype=np.uint8)[:pad]
+            arr[k, : len(b)] = b
+        T, A, G = ord("T"), ord("A"), ord("G")
+        for frame in range(3):
+            cs = np.arange(frame, pad - 2, 3)
+            c1 = arr[:, cs]
+            c2 = arr[:, cs + 1]
+            c3 = arr[:, cs + 2]
+            is_stop = (
+                ((c1 == T) & (c2 == A) & (c3 == A))
+                | ((c1 == T) & (c2 == A) & (c3 == G))
+                | ((c1 == T) & (c2 == G) & (c3 == A))
+            )
+            valid = cs[np.newaxis, :] < (region_lens[:, np.newaxis] - 2)
+            is_stop &= valid
+            has_stop = is_stop.any(axis=1)
+            if not has_stop.any():
+                continue
+            # Find LAST stop (largest j) = closest to ORF start = minimum distance.
+            # (cs + 1) * is_stop: gives cs+1 at stop positions, 0 elsewhere; argmax
+            # returns the index of the maximum cs value = last stop position.
+            last_j = ((cs[np.newaxis, :] + 1) * is_stop).argmax(axis=1)
+            dist = region_lens - cs[last_j]
+            results = np.where(has_stop, np.minimum(results, dist), results)
+        return results
 
     def _compute_features(
         self, t1, t2, grp_df, seq, models, rbs_pwm, ctx_pwm, len_mean, len_std, gc_pct, gap
