@@ -1,0 +1,21 @@
+acc,label,phylum,gc_pct,activated,base_n,base_tp,base_fp,base_tp_pct,filt_n,filt_tp,filt_fp,filt_tp_pct,d_tp_pct,d_n
+NC_002947.4,P. putida,Proteobacteria,61.5,False,761,602,159,79.1,761,602,159,79.1,0.0,0
+NC_002929.2,B. pertussis,Proteobacteria,67.7,True,558,264,294,47.3,351,237,114,67.5,20.2,-207
+NC_003143.1,Y. pestis,Proteobacteria,47.6,False,1322,1185,137,89.6,1322,1185,137,89.6,0.0,0
+NC_003116.1,N. meningitidis,Proteobacteria,51.8,False,839,671,168,80.0,839,671,168,80.0,0.0,0
+NC_004757.1,N. europaea,Proteobacteria,50.7,False,1048,929,119,88.6,1048,929,119,88.6,0.0,0
+NC_008497.1,L. brevis,Firmicutes,46.2,False,1078,946,132,87.8,1078,946,132,87.8,0.0,0
+NC_004350.2,S. agalactiae,Firmicutes,36.8,False,1103,1005,98,91.1,1103,1005,98,91.1,0.0,0
+NC_006270.3,B. licheniformis,Firmicutes,46.2,False,1146,1001,145,87.3,1146,1001,145,87.3,0.0,0
+NC_006274.1,B. cereus,Firmicutes,35.4,False,1299,1162,137,89.5,1299,1162,137,89.5,0.0,0
+NC_003030.1,C. acetobutyl.,Firmicutes,30.9,False,1271,1157,114,91.0,1271,1157,114,91.0,0.0,0
+NC_003155.5,S. avermitilis,Actinobacteria,70.7,True,486,233,253,47.9,333,214,119,64.3,16.3,-153
+NC_003450.3,C. glutamicum A,Actinobacteria,53.8,False,940,833,107,88.6,940,833,107,88.6,0.0,0
+NC_002677.1,M. leprae,Actinobacteria,57.8,True,580,384,196,66.2,272,217,55,79.8,13.6,-308
+NC_008268.1,Rhodococcus,Actinobacteria,67.5,True,521,299,222,57.4,382,282,100,73.8,16.4,-139
+NC_006958.1,C. glutamicum R,Actinobacteria,53.8,False,936,831,105,88.8,936,831,105,88.8,0.0,0
+NC_008818.1,Hyperthermus,Archaea,53.7,False,552,427,125,77.4,552,427,125,77.4,0.0,0
+NC_015948.1,Haloarcula,Archaea,63.7,False,827,716,111,86.6,827,716,111,86.6,0.0,0
+NC_014408.1,Methanobrevibacter,Archaea,48.6,False,816,704,112,86.3,816,704,112,86.3,0.0,0
+NC_019977.1,Methanosaeta,Archaea,42.6,False,1088,981,107,90.2,1088,981,107,90.2,0.0,0
+NC_007644.1,Moorella,Archaea,55.8,False,820,705,115,86.0,820,705,115,86.0,0.0,0
