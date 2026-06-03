@@ -572,6 +572,7 @@ class HybridGeneFilter:
         model = HybridGenePredictor(num_traditional_features=data["num_traditional_features"])
         model.load_state_dict(data["model_state_dict"])
         model.eval()
+        model.to(self.device)  # move to GPU immediately after loading
 
         self.model = model
         self.threshold = data["threshold"]
@@ -1046,7 +1047,7 @@ class HybridGeneFilter:
         candidates: List[Dict],
         genome_id: str = "unknown",
         threshold: float = None,
-        batch_size: int = 64,  # NEW PARAMETER
+        batch_size: int = 512,  # larger default: fewer GPU round-trips
     ) -> Tuple[np.ndarray, np.ndarray, List[str]]:
         """
         Predict which candidates are real genes using BATCHED processing.
@@ -1107,11 +1108,12 @@ class HybridGeneFilter:
                 probs = torch.sigmoid(outputs).cpu().numpy()
 
                 all_probs.append(probs)
-
-                # Clear cache
                 del X_sequences_batch, X_features_batch, outputs
-                if self.device == "cuda":
-                    torch.cuda.empty_cache()
+                # empty_cache per-batch forces CPU-GPU sync and kills throughput;
+                # only call at the end of all batches if on CUDA.
+
+        if self.device == "cuda":
+            torch.cuda.empty_cache()
 
         # Concatenate all batch results
         probs = np.concatenate(all_probs)
