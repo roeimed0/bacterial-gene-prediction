@@ -1306,8 +1306,13 @@ class StartSelectionClassifier:
         len_mean, len_std = self._build_len_prior(groups)
         gc_pct = (genome_seq.count("G") + genome_seq.count("C")) / max(len(genome_seq), 1)
 
-        selected = []
-        for i, (gid, grp_df) in enumerate(groups.items()):
+        # ── Pass 1: baseline scoring + collect contested pairs ───────────────
+        # Separate singletons (no contest needed) from contested groups so we
+        # can batch all classifier calls into a single predict_proba() call.
+        singleton_rows = []  # groups with 1 ORF or uncontested gap
+        contested_info = []  # (group_key, winner_idx_if_keep, alt_idx, feature_vec)
+
+        for gid, grp_df in groups.items():
             if isinstance(grp_df, list):
                 grp_df = pd.DataFrame(grp_df)
             if len(grp_df) == 0:
@@ -1322,8 +1327,6 @@ class StartSelectionClassifier:
                 if len(sorted_idx) > 1
                 else 999.0
             )
-
-            winner_idx = sorted_idx[0]
 
             if gap < self.contest_t and len(sorted_idx) >= 2:
                 t2 = grp_df.loc[sorted_idx[1]]
@@ -1340,24 +1343,36 @@ class StartSelectionClassifier:
                     gc_pct,
                     gap,
                 )
-                X = pd.DataFrame(
-                    self.scaler.transform(np.array([[fv.get(c, 0.0) for c in self.features]])),
-                    columns=self.features,
+                contested_info.append((grp_df, sorted_idx[0], sorted_idx[1], fv))
+            else:
+                singleton_rows.append(grp_df.loc[sorted_idx[0]])
+
+        # ── Pass 2: batch predict_proba for all contested pairs ───────────────
+        if contested_info:
+            feat_matrix = np.array(
+                [[ci[3].get(c, 0.0) for c in self.features] for ci in contested_info]
+            )
+            X_batch = pd.DataFrame(self.scaler.transform(feat_matrix), columns=self.features)
+            probs_keep = self.clf.predict_proba(X_batch)[:, 1]
+
+            if self.temperature_T is not None:
+                from scipy.special import expit
+                from scipy.special import logit as sp_logit
+
+                probs_keep = expit(
+                    sp_logit(np.clip(probs_keep, 1e-7, 1 - 1e-7)) / self.temperature_T
                 )
-                prob_keep = float(self.clf.predict_proba(X)[0, 1])
-                if self.temperature_T is not None:
-                    from scipy.special import expit
-                    from scipy.special import logit as sp_logit
 
-                    prob_keep = float(
-                        expit(sp_logit(np.clip(prob_keep, 1e-7, 1 - 1e-7)) / self.temperature_T)
-                    )
-                if prob_keep < (1.0 - self.flip_t):
-                    winner_idx = sorted_idx[1]
+            flip_threshold = 1.0 - self.flip_t
+            for (grp_df, keep_idx, alt_idx, _), prob_keep in zip(contested_info, probs_keep):
+                winner_idx = alt_idx if prob_keep < flip_threshold else keep_idx
+                singleton_rows.append(grp_df.loc[winner_idx])
 
-            selected.append(grp_df.loc[winner_idx])
-
-        return pd.DataFrame(selected).reset_index(drop=True) if selected else pd.DataFrame()
+        return (
+            pd.DataFrame(singleton_rows).reset_index(drop=True)
+            if singleton_rows
+            else pd.DataFrame()
+        )
 
     # ── Private: per-genome context builders ─────────────────────────────────
 
