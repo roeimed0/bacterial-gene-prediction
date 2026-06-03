@@ -290,8 +290,8 @@ def main() -> None:
             new_feats = clf.feature_names or list(X_test.columns)
             missing_old = [f for f in old_feats if f not in X_test.columns]
             if missing_old:
-                print(f"  WARNING: old model has generic column names (trained on numpy array).")
-                print(f"  Skipping old-vs-new comparison — run benchmark.py to compare.")
+                print("  WARNING: old model has generic column names (trained on numpy array).")
+                print("  Skipping old-vs-new comparison — run benchmark.py to compare.")
                 old_can_compare = False
             else:
                 old_can_compare = True
