@@ -1619,86 +1619,6 @@ def create_intergenic_set(
 # =============================================================================
 
 
-def create_training_set_live(
-    sequence: str,
-    all_orfs: List[Dict],
-    glimmer_max_size: int = 2000,
-    flexible_target_size: int = 2000,
-) -> List[Dict]:
-    """
-    Convenience wrapper for live mode (new genomes).
-
-    Use this when analyzing NCBI downloads or user FASTA files.
-    """
-    return create_training_set(
-        sequence=sequence,
-        all_orfs=all_orfs,
-        glimmer_max_size=glimmer_max_size,
-        flexible_target_size=flexible_target_size,
-    )
-
-
-def create_training_set_cached(
-    genome_id: str,
-    cached_data: Dict,
-    glimmer_max_size: int = 2000,
-    flexible_target_size: int = 2000,
-) -> List[Dict]:
-    """
-    Convenience wrapper for cached mode (catalog genomes).
-
-    Use this when working with pre-analyzed genomes from the catalog.
-    """
-    return create_training_set(
-        genome_id=genome_id,
-        cached_data=cached_data,
-        glimmer_max_size=glimmer_max_size,
-        flexible_target_size=flexible_target_size,
-    )
-
-
-def create_intergenic_set_live(
-    sequence: str,
-    all_orfs: List[Dict],
-    buffer: int = 50,
-    min_length: int = 150,
-    min_rbs_threshold: float = 3.0,
-) -> List[Dict]:
-    """
-    Convenience wrapper for live mode (new genomes).
-
-    Use this when analyzing NCBI downloads or user FASTA files.
-    """
-    return create_intergenic_set(
-        sequence=sequence,
-        all_orfs=all_orfs,
-        buffer=buffer,
-        min_length=min_length,
-        min_rbs_threshold=min_rbs_threshold,
-    )
-
-
-def create_intergenic_set_cached(
-    genome_id: str,
-    cached_data: Dict,
-    buffer: int = 50,
-    min_length: int = 150,
-    min_rbs_threshold: float = 3.0,
-) -> List[Dict]:
-    """
-    Convenience wrapper for cached mode (catalog genomes).
-
-    Use this when working with pre-analyzed genomes from the catalog.
-    """
-    return create_intergenic_set(
-        genome_id=genome_id,
-        cached_data=cached_data,
-        buffer=buffer,
-        min_length=min_length,
-        min_rbs_threshold=min_rbs_threshold,
-    )
-
-
 # =============================================================================
 # CODON USAGE MODELS
 # =============================================================================
@@ -2309,8 +2229,8 @@ def process_genome(genome_id: str, cached_data: Dict) -> List[Dict]:
     logger.info(f"\n{'='*80}")
     logger.info("STEP 1: CREATE TRAINING SETS")
     logger.info(f"{'='*80}")
-    training_set = create_training_set_cached(genome_id, cached_data)
-    intergenic_set = create_intergenic_set_cached(genome_id, cached_data)
+    training_set = create_training_set(genome_id=genome_id, cached_data=cached_data)
+    intergenic_set = create_intergenic_set(genome_id=genome_id, cached_data=cached_data)
     logger.info(f"Training set: {len(training_set):,} ORFs")
     logger.info(f"Intergenic set: {len(intergenic_set):,} regions")
 
