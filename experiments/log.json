@@ -4944,5 +4944,429 @@
         "runtime_s": 21.29
       }
     ]
+  },
+  {
+    "timestamp": "2026-06-03T22:36:41.349273",
+    "description": "FIX: filter1 combined-only (drop raw AND condition)",
+    "is_baseline": false,
+    "models": {
+      "lgb": {
+        "path": "C:\\Users\\User\\Desktop\\bacterial-gene-prediction\\models\\orf_classifier_lgb.pkl",
+        "hash": "dd1f979fc1",
+        "threshold": 0.07
+      },
+      "hybrid": {
+        "path": "C:\\Users\\User\\Desktop\\bacterial-gene-prediction\\models\\hybrid_best_model.pkl",
+        "hash": "0c32f4ed79",
+        "threshold": 0.471
+      }
+    },
+    "n_genomes": 20,
+    "runtime_s": 514.8,
+    "overall": {
+      "f1": 75.40883170238178,
+      "sensitivity": 70.7368045699838,
+      "precision": 81.50603952761416
+    },
+    "by_group": {
+      "Proteobacteria": {
+        "f1": 74.85295603522421,
+        "sensitivity": 68.32025881554809,
+        "precision": 83.62101610457626,
+        "n": 5
+      },
+      "Firmicutes": {
+        "f1": 88.24155612766161,
+        "sensitivity": 87.45429733029964,
+        "precision": 89.0455641185714,
+        "n": 5
+      },
+      "Actinobacteria": {
+        "f1": 65.81361530857735,
+        "sensitivity": 58.022853751586105,
+        "precision": 76.33104841948389,
+        "n": 5
+      },
+      "Archaea": {
+        "f1": 72.72719933806395,
+        "sensitivity": 69.14980838250139,
+        "precision": 77.0265294678251,
+        "n": 5
+      }
+    },
+    "results": [
+      {
+        "accession": "NC_002947.4",
+        "group": "Proteobacteria",
+        "f1": 73.39980701190095,
+        "sensitivity": 62.3610858079796,
+        "precision": 89.18707660239708,
+        "runtime_s": 43.73
+      },
+      {
+        "accession": "NC_002929.2",
+        "group": "Proteobacteria",
+        "f1": 65.02822982397875,
+        "sensitivity": 54.87668161434978,
+        "precision": 79.78810105949469,
+        "runtime_s": 25.54
+      },
+      {
+        "accession": "NC_003143.1",
+        "group": "Proteobacteria",
+        "f1": 84.101894186806,
+        "sensitivity": 81.97097020626433,
+        "precision": 86.34656652360515,
+        "runtime_s": 28.44
+      },
+      {
+        "accession": "NC_003116.1",
+        "group": "Proteobacteria",
+        "f1": 77.94612794612794,
+        "sensitivity": 70.90352220520674,
+        "precision": 86.54205607476636,
+        "runtime_s": 17.26
+      },
+      {
+        "accession": "NC_004757.1",
+        "group": "Proteobacteria",
+        "f1": 73.78872120730739,
+        "sensitivity": 71.48903424393997,
+        "precision": 76.24128026261798,
+        "runtime_s": 22.61
+      },
+      {
+        "accession": "NC_008497.1",
+        "group": "Firmicutes",
+        "f1": 88.95091881832984,
+        "sensitivity": 87.9080459770115,
+        "precision": 90.01883239171374,
+        "runtime_s": 13.15
+      },
+      {
+        "accession": "NC_004350.2",
+        "group": "Firmicutes",
+        "f1": 90.22031166039763,
+        "sensitivity": 89.93036957686128,
+        "precision": 90.5121293800539,
+        "runtime_s": 10.33
+      },
+      {
+        "accession": "NC_006270.3",
+        "group": "Firmicutes",
+        "f1": 82.810236600676,
+        "sensitivity": 81.88111721174505,
+        "precision": 83.76068376068376,
+        "runtime_s": 29.38
+      },
+      {
+        "accession": "NC_006274.1",
+        "group": "Firmicutes",
+        "f1": 89.10336840073353,
+        "sensitivity": 88.54786111643968,
+        "precision": 89.66588966588967,
+        "runtime_s": 27.81
+      },
+      {
+        "accession": "NC_003030.1",
+        "group": "Firmicutes",
+        "f1": 90.12294515817104,
+        "sensitivity": 89.00409276944066,
+        "precision": 91.27028539451595,
+        "runtime_s": 18.59
+      },
+      {
+        "accession": "NC_003155.5",
+        "group": "Actinobacteria",
+        "f1": 69.42237988740649,
+        "sensitivity": 59.332981808594774,
+        "precision": 83.64616242334138,
+        "runtime_s": 58.49
+      },
+      {
+        "accession": "NC_003450.3",
+        "group": "Actinobacteria",
+        "f1": 72.01339784145888,
+        "sensitivity": 65.65999321343739,
+        "precision": 79.72805933250928,
+        "runtime_s": 25.05
+      },
+      {
+        "accession": "NC_002677.1",
+        "group": "Actinobacteria",
+        "f1": 48.26226275573083,
+        "sensitivity": 43.60801781737194,
+        "precision": 54.02869757174393,
+        "runtime_s": 26.77
+      },
+      {
+        "accession": "NC_008268.1",
+        "group": "Actinobacteria",
+        "f1": 68.10653918388253,
+        "sensitivity": 56.896305805163315,
+        "precision": 84.81820114820327,
+        "runtime_s": 54.96
+      },
+      {
+        "accession": "NC_006958.1",
+        "group": "Actinobacteria",
+        "f1": 71.26349687440803,
+        "sensitivity": 64.61697011336311,
+        "precision": 79.43412162162163,
+        "runtime_s": 25.22
+      },
+      {
+        "accession": "NC_008818.1",
+        "group": "Archaea",
+        "f1": 62.11975664425232,
+        "sensitivity": 55.587392550143264,
+        "precision": 70.39187227866474,
+        "runtime_s": 11.84
+      },
+      {
+        "accession": "NC_015948.1",
+        "group": "Archaea",
+        "f1": 76.657060518732,
+        "sensitivity": 69.70193252538486,
+        "precision": 85.15406162464986,
+        "runtime_s": 23.78
+      },
+      {
+        "accession": "NC_014408.1",
+        "group": "Archaea",
+        "f1": 74.52582433615407,
+        "sensitivity": 74.28737638161722,
+        "precision": 74.76580796252928,
+        "runtime_s": 13.67
+      },
+      {
+        "accession": "NC_019977.1",
+        "group": "Archaea",
+        "f1": 76.32933104631219,
+        "sensitivity": 75.35986452159187,
+        "precision": 77.32406602953952,
+        "runtime_s": 17.81
+      },
+      {
+        "accession": "NC_007644.1",
+        "group": "Archaea",
+        "f1": 74.00402414486922,
+        "sensitivity": 70.81247593376973,
+        "precision": 77.49683944374209,
+        "runtime_s": 20.33
+      }
+    ]
+  },
+  {
+    "timestamp": "2026-06-03T22:46:18.226391",
+    "description": "FIX filter1 v2: combined-only threshold (drop raw AND)",
+    "is_baseline": false,
+    "models": {
+      "lgb": {
+        "path": "C:\\Users\\User\\Desktop\\bacterial-gene-prediction\\models\\orf_classifier_lgb.pkl",
+        "hash": "dd1f979fc1",
+        "threshold": 0.07
+      },
+      "hybrid": {
+        "path": "C:\\Users\\User\\Desktop\\bacterial-gene-prediction\\models\\hybrid_best_model.pkl",
+        "hash": "0c32f4ed79",
+        "threshold": 0.471
+      }
+    },
+    "n_genomes": 20,
+    "runtime_s": 558.4,
+    "overall": {
+      "f1": 75.40883170238178,
+      "sensitivity": 70.7368045699838,
+      "precision": 81.50603952761416
+    },
+    "by_group": {
+      "Proteobacteria": {
+        "f1": 74.85295603522421,
+        "sensitivity": 68.32025881554809,
+        "precision": 83.62101610457626,
+        "n": 5
+      },
+      "Firmicutes": {
+        "f1": 88.24155612766161,
+        "sensitivity": 87.45429733029964,
+        "precision": 89.0455641185714,
+        "n": 5
+      },
+      "Actinobacteria": {
+        "f1": 65.81361530857735,
+        "sensitivity": 58.022853751586105,
+        "precision": 76.33104841948389,
+        "n": 5
+      },
+      "Archaea": {
+        "f1": 72.72719933806395,
+        "sensitivity": 69.14980838250139,
+        "precision": 77.0265294678251,
+        "n": 5
+      }
+    },
+    "results": [
+      {
+        "accession": "NC_002947.4",
+        "group": "Proteobacteria",
+        "f1": 73.39980701190095,
+        "sensitivity": 62.3610858079796,
+        "precision": 89.18707660239708,
+        "runtime_s": 48.37
+      },
+      {
+        "accession": "NC_002929.2",
+        "group": "Proteobacteria",
+        "f1": 65.02822982397875,
+        "sensitivity": 54.87668161434978,
+        "precision": 79.78810105949469,
+        "runtime_s": 29.36
+      },
+      {
+        "accession": "NC_003143.1",
+        "group": "Proteobacteria",
+        "f1": 84.101894186806,
+        "sensitivity": 81.97097020626433,
+        "precision": 86.34656652360515,
+        "runtime_s": 30.79
+      },
+      {
+        "accession": "NC_003116.1",
+        "group": "Proteobacteria",
+        "f1": 77.94612794612794,
+        "sensitivity": 70.90352220520674,
+        "precision": 86.54205607476636,
+        "runtime_s": 18.03
+      },
+      {
+        "accession": "NC_004757.1",
+        "group": "Proteobacteria",
+        "f1": 73.78872120730739,
+        "sensitivity": 71.48903424393997,
+        "precision": 76.24128026261798,
+        "runtime_s": 25.86
+      },
+      {
+        "accession": "NC_008497.1",
+        "group": "Firmicutes",
+        "f1": 88.95091881832984,
+        "sensitivity": 87.9080459770115,
+        "precision": 90.01883239171374,
+        "runtime_s": 14.65
+      },
+      {
+        "accession": "NC_004350.2",
+        "group": "Firmicutes",
+        "f1": 90.22031166039763,
+        "sensitivity": 89.93036957686128,
+        "precision": 90.5121293800539,
+        "runtime_s": 11.69
+      },
+      {
+        "accession": "NC_006270.3",
+        "group": "Firmicutes",
+        "f1": 82.810236600676,
+        "sensitivity": 81.88111721174505,
+        "precision": 83.76068376068376,
+        "runtime_s": 33.65
+      },
+      {
+        "accession": "NC_006274.1",
+        "group": "Firmicutes",
+        "f1": 89.10336840073353,
+        "sensitivity": 88.54786111643968,
+        "precision": 89.66588966588967,
+        "runtime_s": 31.82
+      },
+      {
+        "accession": "NC_003030.1",
+        "group": "Firmicutes",
+        "f1": 90.12294515817104,
+        "sensitivity": 89.00409276944066,
+        "precision": 91.27028539451595,
+        "runtime_s": 21.21
+      },
+      {
+        "accession": "NC_003155.5",
+        "group": "Actinobacteria",
+        "f1": 69.42237988740649,
+        "sensitivity": 59.332981808594774,
+        "precision": 83.64616242334138,
+        "runtime_s": 61.92
+      },
+      {
+        "accession": "NC_003450.3",
+        "group": "Actinobacteria",
+        "f1": 72.01339784145888,
+        "sensitivity": 65.65999321343739,
+        "precision": 79.72805933250928,
+        "runtime_s": 24.37
+      },
+      {
+        "accession": "NC_002677.1",
+        "group": "Actinobacteria",
+        "f1": 48.26226275573083,
+        "sensitivity": 43.60801781737194,
+        "precision": 54.02869757174393,
+        "runtime_s": 26.7
+      },
+      {
+        "accession": "NC_008268.1",
+        "group": "Actinobacteria",
+        "f1": 68.10653918388253,
+        "sensitivity": 56.896305805163315,
+        "precision": 84.81820114820327,
+        "runtime_s": 62.87
+      },
+      {
+        "accession": "NC_006958.1",
+        "group": "Actinobacteria",
+        "f1": 71.26349687440803,
+        "sensitivity": 64.61697011336311,
+        "precision": 79.43412162162163,
+        "runtime_s": 26.3
+      },
+      {
+        "accession": "NC_008818.1",
+        "group": "Archaea",
+        "f1": 62.11975664425232,
+        "sensitivity": 55.587392550143264,
+        "precision": 70.39187227866474,
+        "runtime_s": 12.3
+      },
+      {
+        "accession": "NC_015948.1",
+        "group": "Archaea",
+        "f1": 76.657060518732,
+        "sensitivity": 69.70193252538486,
+        "precision": 85.15406162464986,
+        "runtime_s": 24.49
+      },
+      {
+        "accession": "NC_014408.1",
+        "group": "Archaea",
+        "f1": 74.52582433615407,
+        "sensitivity": 74.28737638161722,
+        "precision": 74.76580796252928,
+        "runtime_s": 14.05
+      },
+      {
+        "accession": "NC_019977.1",
+        "group": "Archaea",
+        "f1": 76.32933104631219,
+        "sensitivity": 75.35986452159187,
+        "precision": 77.32406602953952,
+        "runtime_s": 19.71
+      },
+      {
+        "accession": "NC_007644.1",
+        "group": "Archaea",
+        "f1": 74.00402414486922,
+        "sensitivity": 70.81247593376973,
+        "precision": 77.49683944374209,
+        "runtime_s": 20.31
+      }
+    ]
   }
 ]
