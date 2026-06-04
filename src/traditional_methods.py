@@ -92,6 +92,7 @@ try:
     def _scan_orfs_numba(
         seq_arr: np.ndarray,
         min_length: int,
+        max_results: int,
         max_active: int = 8000,
     ) -> np.ndarray:
         """JIT-compiled ORF scanner for one strand.
@@ -101,11 +102,13 @@ try:
           col 1 : stop_end    (0-based, exclusive — position after stop codon)
           col 2 : start_codon integer (ATG=14, GTG=46, TTG=62)
           col 3 : frame       (0, 1, or 2)
+
+        If the number of ORFs found equals max_results the buffer was full and
+        results were truncated — the caller must detect this and retry.
         """
-        n = len(seq_arr)
-        max_results = n // max(min_length // 2, 1) + 2000
         results = np.empty((max_results, 4), dtype=np.int32)
         count = 0
+        n = len(seq_arr)
 
         act_pos = np.empty(max_active, dtype=np.int32)
         act_cod = np.empty(max_active, dtype=np.int32)
@@ -138,6 +141,24 @@ try:
                 i += 3
 
         return results[:count]
+
+    def _scan_orfs_safe(seq_arr: np.ndarray, min_length: int) -> np.ndarray:
+        """Wrapper with auto-growing buffer — like a hash-table resize but at the call level.
+
+        Starts with a generous capacity (n//30) that covers real genomes without
+        overflow.  If the buffer fills anyway (extreme GC or huge genome), doubles
+        and re-scans — same O(n) work, just twice.  The retry path is rare; no
+        silent data loss ever occurs.
+        """
+        n = len(seq_arr)
+        # n//30 fits even 70%+ GC genomes (Streptomyces 9Mbp ~182k ORFs; n//30=300k)
+        capacity = max(n // 30 + 10000, 50000)
+        while True:
+            raw = _scan_orfs_numba(seq_arr, min_length, capacity)
+            if len(raw) < capacity:
+                return raw
+            logger.warning("ORF scan buffer hit capacity %d — doubling and retrying", capacity)
+            capacity *= 2
 
     @_numba.njit(cache=True)
     def _count_imm_kmers(
@@ -970,8 +991,8 @@ def find_orfs_candidates(sequence: str, min_length: int = 100) -> pd.DataFrame:
     logger.info("Detecting ORFs and calculating RBS...")
 
     if _NUMBA_AVAILABLE:
-        fwd_raw = _scan_orfs_numba(_seq_to_int_fast(sequence), min_length)
-        rev_raw = _scan_orfs_numba(_seq_to_int_fast(reverse_seq), min_length)
+        fwd_raw = _scan_orfs_safe(_seq_to_int_fast(sequence), min_length)
+        rev_raw = _scan_orfs_safe(_seq_to_int_fast(reverse_seq), min_length)
         parts = []
         if len(fwd_raw):
             parts.append(_build_orf_df(fwd_raw, sequence, seq_len, True))
