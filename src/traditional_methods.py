@@ -19,7 +19,7 @@ import math
 import time
 from collections import Counter, defaultdict
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import numpy as np
 import pandas as pd
@@ -414,10 +414,10 @@ try:
 
 except ImportError:
     _NUMBA_AVAILABLE = False
-    _score_imm_numba = None
-    _score_codon_bias_numba = None
-    _score_imm_batch = None
-    _score_codon_bias_batch = None
+    _score_imm_numba = None  # type: ignore[assignment]
+    _score_codon_bias_numba = None  # type: ignore[assignment]
+    _score_imm_batch = None  # type: ignore[assignment]
+    _score_codon_bias_batch = None  # type: ignore[assignment]
 
 from Bio.Seq import Seq  # noqa: E402
 
@@ -710,7 +710,7 @@ def find_purine_rich_regions(
 
 
 @lru_cache(maxsize=100000)
-def score_motif_similarity(sequence: str) -> Tuple[float, str]:
+def score_motif_similarity(sequence: str) -> Tuple[float, Optional[str]]:
     """Score sequence similarity to known RBS motifs."""
     best_score = 0.0
     best_motif = None
@@ -1515,7 +1515,7 @@ def create_training_set(
     # select_training_glimmer/flexible expect List[Dict]; convert if needed.
     # Pre-filter to length >= 100 before converting to reduce dict allocation.
     if isinstance(all_orfs, pd.DataFrame):
-        orfs_list = all_orfs[all_orfs["length"] >= 100].to_dict("records")
+        orfs_list = all_orfs[all_orfs["length"] >= 100].to_dict("records")  # type: ignore[call-overload]
     else:
         orfs_list = list(all_orfs)
 
@@ -1611,9 +1611,13 @@ def create_intergenic_set(
             "or (genome_id + cached_data) for cached mode"
         )
 
+    # After the branches above, sequence and all_orfs are guaranteed non-None
+    assert sequence is not None
+    assert all_orfs is not None
+
     # extract_* functions expect List[Dict]; convert if needed
     if isinstance(all_orfs, pd.DataFrame):
-        all_orfs = all_orfs.to_dict("records")
+        all_orfs = all_orfs.to_dict("records")  # type: ignore[call-overload]
     likely_genes = [orf for orf in all_orfs if orf["length"] >= 200]
 
     _, intergenic_coords_1 = extract_intergenic_regions(
@@ -2138,6 +2142,10 @@ def score_all_orfs(
     n = len(sequences)
 
     if use_numba:
+        # These assertions narrow Optional types for Pylance — guaranteed by use_numba check above
+        assert numba_coding is not None
+        assert numba_noncoding is not None
+        assert codon_ratio_tbl is not None
         # Batch path: encode all sequences at once and call each JIT function once.
         # Eliminates N Python→Numba dispatch calls (was 3 × N per genome).
         flat_bytes = "".join(sequences).encode("ascii")
@@ -2167,7 +2175,7 @@ def score_all_orfs(
     all_orfs = all_orfs.copy()
     all_orfs["codon_score"] = codon_scores
     all_orfs["imm_score"] = imm_scores
-    lengths = all_orfs["length"].values
+    lengths = all_orfs["length"].to_numpy(dtype=np.float64)
     all_orfs["length_score"] = np.log(np.maximum(lengths, MIN_ORF_LENGTH) / LENGTH_REFERENCE_BP)
     all_orfs["start_score"] = all_orfs["start_codon"].map(lambda c: START_CODON_WEIGHTS.get(c, 0.4))
     if "rbs_score" not in all_orfs.columns:
@@ -2202,7 +2210,7 @@ def filter_candidates(
     """
     combined_below = all_orfs["combined_score"] < combined_threshold
     keep = ~combined_below
-    result = all_orfs[keep].reset_index(drop=True)
+    result = cast(pd.DataFrame, all_orfs.loc[keep].reset_index(drop=True))
     logger.info(f"Filtered: {len(result):,} kept, {(~keep).sum():,} removed")
     return result
 
