@@ -42,7 +42,7 @@ from sklearn.preprocessing import StandardScaler
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.config import GENOME_CATALOG, START_SELECTION_WEIGHTS, TEST_GENOMES
+from src.config import GENOME_CATALOG, LGB_TRAINING_THRESHOLD, START_SELECTION_WEIGHTS, TEST_GENOMES
 from src.data_management import get_data_dir, get_gff_path, load_genome_sequence
 from src.ml_models import OrfGroupClassifier
 from src.traditional_methods import (
@@ -80,13 +80,18 @@ _parser.add_argument(
     default=42,
     help="Random seed for train/val/test split and model training (default: 42)",
 )
+_parser.add_argument(
+    "--lgb-path",
+    default=None,
+    help="LGB model path (default: models/orf_classifier_lgb.pkl)",
+)
 _args = _parser.parse_args()
 
 SEED = _args.seed
 CONTEST_T = 1.0  # re-score groups with baseline gap < this
 VAL_PER_GROUP = 4
 TEST_PER_GROUP = 4
-LGB_T = 0.05
+LGB_T = LGB_TRAINING_THRESHOLD
 EPS = 1e-9
 BASES = "ACGT"
 _RC = str.maketrans("ACGT", "TGCA")
@@ -95,7 +100,7 @@ STOPS = {"TAA", "TAG", "TGA"}
 W = START_SELECTION_WEIGHTS
 
 lgb_model = OrfGroupClassifier()
-lgb_model.load(str(MODELS_DIR / "orf_classifier_lgb.pkl"))
+lgb_model.load(str(_args.lgb_path or MODELS_DIR / "orf_classifier_lgb.pkl"))
 
 _ENABLED_GROUPS = {f.strip() for f in _args.features.split(",") if f.strip()}
 _V3_GROUPS = {

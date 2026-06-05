@@ -122,12 +122,14 @@ try:
                 c = seq_arr[i + 2]
                 if a < 4 and b < 4 and c < 4:
                     codon = a * 16 + b * 4 + c
-                    if codon == 14 or codon == 46 or codon == 62:
+                    if codon == CODON_INT_ATG or codon == CODON_INT_GTG or codon == CODON_INT_TTG:
                         if n_active < max_active:
                             act_pos[n_active] = i
                             act_cod[n_active] = codon
                             n_active += 1
-                    elif (codon == 48 or codon == 50 or codon == 56) and n_active > 0:
+                    elif (
+                        codon == CODON_INT_TAA or codon == CODON_INT_TAG or codon == CODON_INT_TGA
+                    ) and n_active > 0:
                         stop_end = i + 3
                         for k in range(n_active):
                             orf_len = stop_end - act_pos[k]
@@ -420,10 +422,17 @@ except ImportError:
 from Bio.Seq import Seq  # noqa: E402
 
 from .config import (  # noqa: E402
+    CODON_INT_ATG,
+    CODON_INT_GTG,
+    CODON_INT_TAA,
+    CODON_INT_TAG,
+    CODON_INT_TGA,
+    CODON_INT_TTG,
     FIRST_FILTER_THRESHOLD,
     KNOWN_RBS_MOTIFS,
     LENGTH_REFERENCE_BP,
     MIN_ORF_LENGTH,
+    RBS_UPSTREAM_LENGTH,
     SCORE_WEIGHTS,
     SECOND_FILTER_THRESHOLD,
     START_CODON_WEIGHTS,

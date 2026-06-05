@@ -16,6 +16,21 @@ __all__ = [
     "SCORE_WEIGHTS",
     "START_CODONS",
     "STOP_CODONS",
+    # LGB / pipeline
+    "LGB_GC_FLOOR_DEFAULT",
+    "LGB_TRAINING_THRESHOLD",
+    # Hybrid model
+    "HF_MAX_SEQ_LEN",
+    "HF_TRAIN_BATCH_SIZE",
+    "HF_MAX_EPOCHS",
+    "HF_EARLY_STOP_PATIENCE",
+    # Codon encoding (base-4: A=0, C=1, G=2, T=3)
+    "CODON_INT_ATG",
+    "CODON_INT_GTG",
+    "CODON_INT_TTG",
+    "CODON_INT_TAA",
+    "CODON_INT_TAG",
+    "CODON_INT_TGA",
     "get_genome_by_id",
     "get_genome_by_accession",
     "list_genomes_by_group",
@@ -63,6 +78,34 @@ MIN_ORF_LENGTH = 100  # Minimum length to prevent log(0) errors
 # RBS Detection Parameters
 RBS_UPSTREAM_LENGTH = 20  # How far upstream to search for RBS
 RBS_MIN_PURINE_CONTENT = 0.6  # Minimum purine content for RBS
+
+# ── LGB / pipeline constants ──────────────────────────────────────────────────
+# Default gc_floor for genome_gc_high = max(0, genome_gc - GC_FLOOR_DEFAULT).
+# Production models store their actual floor in <model>_meta.pkl; this is the
+# fallback for legacy models that pre-date the meta file.
+LGB_GC_FLOOR_DEFAULT = 0.55
+
+# Threshold used when generating TRAINING DATA for downstream models (start
+# selector, hybrid).  Intentionally lower than the production threshold so the
+# training set sees more candidates and covers edge cases.
+LGB_TRAINING_THRESHOLD = 0.05
+
+# ── HybridGeneFilter training/inference constants ────────────────────────────
+HF_MAX_SEQ_LEN = 1500  # Sequences longer than this are capped; model was never
+# trained on longer inputs (memory + rare in bacteria).
+HF_TRAIN_BATCH_SIZE = 64  # Batch size for CNN+Dense training
+HF_MAX_EPOCHS = 50  # Hard epoch ceiling; early stopping usually fires sooner
+HF_EARLY_STOP_PATIENCE = 10  # Epochs without val_f1 improvement before stopping
+
+# ── Codon integer encoding ────────────────────────────────────────────────────
+# Numba scanner encodes codons as base-4 integers: A=0, C=1, G=2, T=3
+# codon_int = a*16 + b*4 + c  (first base most significant)
+CODON_INT_ATG = 14  # A=0, T=3, G=2  →  0*16 + 3*4 + 2 = 14
+CODON_INT_GTG = 46  # G=2, T=3, G=2  →  2*16 + 3*4 + 2 = 46
+CODON_INT_TTG = 62  # T=3, T=3, G=2  →  3*16 + 3*4 + 2 = 62
+CODON_INT_TAA = 48  # T=3, A=0, A=0  →  3*16 + 0*4 + 0 = 48
+CODON_INT_TAG = 50  # T=3, A=0, G=2  →  3*16 + 0*4 + 2 = 50
+CODON_INT_TGA = 56  # T=3, G=2, A=0  →  3*16 + 2*4 + 0 = 56
 
 # Known RBS (Shine-Dalgarno) motifs
 KNOWN_RBS_MOTIFS = ["AGGAGG", "GGAGG", "AGGAG", "GAGG", "AGGA", "GGAG"]

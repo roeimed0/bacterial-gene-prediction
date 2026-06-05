@@ -13,6 +13,16 @@ import torch.nn.functional as F
 from Bio.Seq import Seq
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
 
+from .config import (
+    HF_EARLY_STOP_PATIENCE,
+    HF_MAX_EPOCHS,
+    HF_MAX_SEQ_LEN,
+    HF_TRAIN_BATCH_SIZE,
+    LGB_GC_FLOOR_DEFAULT,
+    LGB_TRAINING_THRESHOLD,
+    RBS_UPSTREAM_LENGTH,
+)
+
 logger = logging.getLogger(__name__)
 
 __all__ = ["OrfGroupClassifier", "HybridGeneFilter", "StartSelectionClassifier"]
@@ -39,6 +49,7 @@ class OrfGroupClassifier:
         """
         self.model: Any = None
         self.feature_names: Optional[List[str]] = None
+        self.gc_floor: float = LGB_GC_FLOOR_DEFAULT
 
     def load(self, model_path: str = "../models/orf_classifier_lgb.pkl"):
         """
@@ -67,6 +78,13 @@ class OrfGroupClassifier:
             logger.warning("No feature_names file found for %s", model_path.name)
             self.feature_names = None
 
+        # Load gc_floor metadata if available (saved with new models)
+        meta_path = model_path.parent / f"{model_path.stem}_meta.pkl"
+        if meta_path.exists():
+            meta = joblib.load(str(meta_path))
+            self.gc_floor = float(meta.get("gc_floor", LGB_GC_FLOOR_DEFAULT))
+        # else: keep default from LGB_GC_FLOOR_DEFAULT
+
     def _entropy_from_probs(self, arr, base=2):
         """
         Compute entropy (bits by default) for a 1D array of non-negative numbers.
@@ -88,6 +106,7 @@ class OrfGroupClassifier:
         genome_id: str,
         weights: Dict = None,
         genome_gc: float = 0.5,
+        gc_floor: float = LGB_GC_FLOOR_DEFAULT,
     ) -> pd.DataFrame:
         """
         Extract features from ORF groups for prediction.
@@ -267,7 +286,7 @@ class OrfGroupClassifier:
         agg["strand_minus_frac"] = 1.0 - agg["strand_plus_frac"]
         agg["rbs_dominance"] = agg["rbs_max"] / agg["rbs_mean"].clip(lower=1e-9)
         agg["length_ratio_max_min"] = agg["_lmx"] / agg["_lmn"].clip(lower=1.0)
-        agg["genome_gc_high"] = float(max(0.0, genome_gc - 0.55))
+        agg["genome_gc_high"] = float(max(0.0, genome_gc - gc_floor))
 
         agg = agg.drop(columns=["_sq_mean", "_lmx", "_lmn"])
 
@@ -280,6 +299,7 @@ class OrfGroupClassifier:
         weights: Dict = None,
         threshold: float = 0.07,
         genome_gc: float = 0.5,
+        gc_floor: float = 0.55,
     ) -> tuple:
         """
         Predict which groups contain real genes.
@@ -298,7 +318,9 @@ class OrfGroupClassifier:
             - group_ids: List of group IDs in same order
         """
         # Extract features
-        df = self.extract_group_features(groups, genome_id, weights, genome_gc=genome_gc)
+        df = self.extract_group_features(
+            groups, genome_id, weights, genome_gc=genome_gc, gc_floor=gc_floor
+        )
 
         # Resolve feature column order.
         # Models trained on numpy arrays get generic names ("Column_0" …).
@@ -415,8 +437,11 @@ class OrfGroupClassifier:
         p = Path(model_path)
         p.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(self.model, str(p))
-        feature_path = p.parent / "feature_names.pkl"
+        stem = p.stem
+        feature_path = p.parent / f"{stem}_feature_names.pkl"
         joblib.dump(self.feature_names, str(feature_path))
+        meta_path = p.parent / f"{stem}_meta.pkl"
+        joblib.dump({"gc_floor": self.gc_floor}, str(meta_path))
         logger.info("Saved model -> %s", p)
         logger.info("Saved features -> %s", feature_path)
 
@@ -427,6 +452,7 @@ class OrfGroupClassifier:
         weights: Dict = None,
         threshold: float = 0.07,
         genome_gc: float = 0.5,
+        gc_floor: float = None,
     ) -> Dict[str, List[Dict]]:
         """
         Filter groups, keeping only those predicted to contain real genes.
@@ -435,7 +461,12 @@ class OrfGroupClassifier:
         """
         # Get predictions
         predictions, probabilities, group_ids = self.predict_groups(
-            groups, genome_id, weights, threshold, genome_gc=genome_gc
+            groups,
+            genome_id,
+            weights,
+            threshold,
+            genome_gc=genome_gc,
+            gc_floor=gc_floor if gc_floor is not None else self.gc_floor,
         )
 
         # Create set of kept group IDs (those above threshold)
@@ -618,14 +649,14 @@ class HybridGeneFilter:
         labels: np.ndarray,
         val_candidates: Optional[List[Dict]] = None,
         val_labels: Optional[np.ndarray] = None,
-        epochs: int = 50,
-        batch_size: int = 64,
+        epochs: int = HF_MAX_EPOCHS,
+        batch_size: int = HF_TRAIN_BATCH_SIZE,
         focal_loss: bool = False,
     ) -> None:
         """Train HybridGenePredictor from candidate dicts and binary labels.
 
         Handles class imbalance via pos_weight (BCEWithLogitsLoss) or focal
-        loss.  Runs early stopping on validation F1 with patience=10.
+        loss.  Runs early stopping on validation F1 with patience=HF_EARLY_STOP_PATIENCE.
         """
         from sklearn.metrics import f1_score as _f1
 
@@ -640,7 +671,9 @@ class HybridGeneFilter:
         # instead index into the CPU tensor and move each batch to device.
         df_train = self.extract_features(candidates)
         X_feat = torch.tensor(df_train[self.feature_names].values, dtype=torch.float32)
-        max_len = min(max((len(c.get("sequence", "")) for c in candidates), default=300), 1500)
+        max_len = min(
+            max((len(c.get("sequence", "")) for c in candidates), default=300), HF_MAX_SEQ_LEN
+        )
         X_seq = self._one_hot_encode_dna(candidates, max_len=max_len)  # stays on CPU
         y = torch.tensor(labels, dtype=torch.float32)
 
@@ -672,7 +705,7 @@ class HybridGeneFilter:
 
         n = len(candidates)
         best_val_f1 = -1.0
-        patience_left = 10
+        patience_left = HF_EARLY_STOP_PATIENCE
         best_state = None
         num_batches_per_epoch = max((n + batch_size - 1) // batch_size, 1)
 
@@ -739,7 +772,7 @@ class HybridGeneFilter:
                 if val_f1 > best_val_f1:
                     best_val_f1 = val_f1
                     best_state = {k: v.cpu().clone() for k, v in self.model.state_dict().items()}
-                    patience_left = 10
+                    patience_left = HF_EARLY_STOP_PATIENCE
                 else:
                     patience_left -= 1
 
@@ -1023,6 +1056,19 @@ class HybridGeneFilter:
                     "polar_fraction": aa_props["polar_frac"],
                 }
             )
+            # Linguistic complexity: 4-gram diversity ratio. FPs (random high-GC ORFs)
+            # tend to be repetitive; real genes need diverse composition.
+            if seq_len >= 4:
+                k = min(4, seq_len // 2)
+                n_kmers = len({sequence[i : i + k] for i in range(seq_len - k + 1)})
+                feature_dict["seq_complexity"] = n_kmers / min(4**k, seq_len - k + 1)
+            else:
+                feature_dict["seq_complexity"] = 0.0
+            # Interaction: combined_score × length_score — specifically penalises
+            # short, low-scoring ORFs which dominate the FP population.
+            feature_dict["cs_x_len"] = (
+                feature_dict["combined_score"] * feature_dict["length_score_norm"]
+            )
             rows.append(feature_dict)
         return pd.DataFrame(rows).fillna(0.0)
 
@@ -1074,7 +1120,9 @@ class HybridGeneFilter:
         X_features = torch.tensor(df[self.feature_names].values, dtype=torch.float32)
 
         # Cap at 1500 bp — the training distribution; longer sequences were never seen
-        max_seq_len = min(max((len(c.get("sequence", "")) for c in candidates), default=1000), 1500)
+        max_seq_len = min(
+            max((len(c.get("sequence", "")) for c in candidates), default=1000), HF_MAX_SEQ_LEN
+        )
 
         # Process in batches to avoid OOM
         all_probs = []
