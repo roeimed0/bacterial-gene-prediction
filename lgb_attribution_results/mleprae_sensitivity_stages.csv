@@ -1,0 +1,6 @@
+acc,name,gc_pct,category,n_ref,stage1_orfs,stage3_filt1,stage4_groups,stage5_lgb,stage6_starts,stage7_filt2,stage8_hybrid,final_sens
+NC_002677.1,M.leprae,57.8,problem,2245,2081,1635,1657,1565,1339,1219,1013,45.1
+NC_003155.5,Streptomyces,70.7,problem,7586,6513,6180,6289,6060,5312,5297,4678,61.7
+NC_002929.2,Bordetella,67.7,problem,3568,2756,2619,2668,2572,2253,2247,2022,56.7
+NC_003030.1,Clostridium,30.9,clean,3665,3654,3431,3431,3407,3275,3229,3185,86.9
+NC_004350.2,Streptococcus,36.8,clean,1867,1853,1752,1753,1746,1686,1651,1635,87.6

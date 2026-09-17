@@ -6,6 +6,11 @@ benchmark_final.txt
 benchmark_new_pipeline.txt
 *.lock
 
+# Runtime logs and large generated CSVs
+logs/
+lgb_attribution_results/pairwise_features*.csv
+lgb_attribution_results/start_classifier_results.csv
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

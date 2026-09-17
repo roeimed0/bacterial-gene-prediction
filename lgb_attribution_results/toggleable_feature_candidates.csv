@@ -1,0 +1,14 @@
+model,feature,r_with_gc,p_value,collapse_frac,reason
+StartClassifier,gc_pct,1.0,0.0,0.0,GC-corr
+HybridFilter,gc_content,0.9507,0.0,0.0,GC-corr
+HybridFilter,gc3_content,0.8982,0.0,0.0,GC-corr
+LGB,genome_gc_high,0.882,0.0,0.7,GC-corr
+LGB,rel_rbs_max,-0.0039,0.163426,0.8,var-collapse
+HybridFilter,small_fraction,0.4892,0.0,0.0,GC-corr
+HybridFilter,gc_skew,-0.4648,0.0,0.0,GC-corr
+HybridFilter,codon_bias_index,0.4555,0.0,0.0,GC-corr
+StartClassifier,frac_atg,-0.4523,0.0,0.0,GC-corr
+StartClassifier,any_stop_top2,0.4373,0.0,0.0,GC-corr
+HybridFilter,stop_codon_type,0.431,0.0,0.0,GC-corr
+HybridFilter,purine_content,-0.4058,0.0,0.0,GC-corr
+LGB,rel_start_select_mean,-0.0016,0.567792,0.35,var-collapse

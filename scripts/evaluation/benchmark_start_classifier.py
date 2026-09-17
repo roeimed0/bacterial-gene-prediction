@@ -24,6 +24,8 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
+import argparse as _ap
+
 from src.comparative_analysis import compare_orfs_to_reference
 from src.config import FIRST_FILTER_THRESHOLD, START_SELECTION_WEIGHTS, TEST_GENOMES
 from src.data_management import get_data_dir, load_genome_sequence
@@ -40,6 +42,14 @@ from src.traditional_methods import (
     score_imm_ratio,
     select_best_starts,
 )
+
+_parser = _ap.ArgumentParser(description="Benchmark start-selection classifier.")
+_parser.add_argument(
+    "--model",
+    default=None,
+    help="Path to start_selector .pkl to evaluate (default: models/start_selector.pkl)",
+)
+_args = _parser.parse_args()
 
 MODELS_DIR = Path(__file__).parent.parent.parent / "models"
 DATA_DIR = get_data_dir("full_dataset")
@@ -77,13 +87,16 @@ hf = HybridGeneFilter()
 with contextlib.redirect_stdout(io.StringIO()):
     hf.load(str(MODELS_DIR / "hybrid_best_model.pkl"))
 
-with open(MODELS_DIR / "start_selector.pkl", "rb") as f:
+_ss_path = Path(_args.model) if _args.model else MODELS_DIR / "start_selector.pkl"
+print(f"Start selector: {_ss_path.name}  (flip_t read from bundle)")
+with open(_ss_path, "rb") as f:
     ss_bundle = pickle.load(f)
 SS_CLF = ss_bundle["clf"]
 SS_SCALER = ss_bundle["scaler"]
 SS_FCOLS = ss_bundle["features"]
 CONTEST_T = ss_bundle["contest_t"]
 FLIP_T = ss_bundle["flip_t"]
+print(f"  contest_t={CONTEST_T}  flip_t={FLIP_T}  n_features={len(SS_FCOLS)}")
 
 from json import load as jload
 

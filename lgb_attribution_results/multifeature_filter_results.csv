@@ -1,0 +1,351 @@
+acc,label,gc_pct,bias_t,nc_t,rule,tp_ret,fp_rem,n_post,tp_pct,pass
+NC_002677.1,M. leprae,57.8,0.04,2.5,OR,94.8,27.0,507,71.8,False
+NC_002677.1,M. leprae,57.8,0.04,2.5,AND,7.0,98.0,31,87.1,False
+NC_002677.1,M. leprae,57.8,0.04,3.0,OR,97.7,7.7,556,67.4,False
+NC_002677.1,M. leprae,57.8,0.04,3.0,AND,80.5,41.3,424,72.9,False
+NC_002677.1,M. leprae,57.8,0.04,3.5,OR,100.0,0.0,580,66.2,False
+NC_002677.1,M. leprae,57.8,0.04,3.5,AND,94.5,27.0,506,71.7,False
+NC_002677.1,M. leprae,57.8,0.04,4.0,OR,100.0,0.0,580,66.2,False
+NC_002677.1,M. leprae,57.8,0.04,4.0,AND,94.5,27.0,506,71.7,False
+NC_002677.1,M. leprae,57.8,0.04,5.0,OR,100.0,0.0,580,66.2,False
+NC_002677.1,M. leprae,57.8,0.04,5.0,AND,94.5,27.0,506,71.7,False
+NC_002677.1,M. leprae,57.8,0.06,2.5,OR,89.3,39.3,462,74.2,False
+NC_002677.1,M. leprae,57.8,0.06,2.5,AND,7.0,98.0,31,87.1,False
+NC_002677.1,M. leprae,57.8,0.06,3.0,OR,95.6,11.2,541,67.8,False
+NC_002677.1,M. leprae,57.8,0.06,3.0,AND,77.1,50.0,394,75.1,False
+NC_002677.1,M. leprae,57.8,0.06,3.5,OR,100.0,0.0,580,66.2,False
+NC_002677.1,M. leprae,57.8,0.06,3.5,AND,89.1,39.3,461,74.2,False
+NC_002677.1,M. leprae,57.8,0.06,4.0,OR,100.0,0.0,580,66.2,False
+NC_002677.1,M. leprae,57.8,0.06,4.0,AND,89.1,39.3,461,74.2,False
+NC_002677.1,M. leprae,57.8,0.06,5.0,OR,100.0,0.0,580,66.2,False
+NC_002677.1,M. leprae,57.8,0.06,5.0,AND,89.1,39.3,461,74.2,False
+NC_002677.1,M. leprae,57.8,0.08,2.5,OR,81.2,50.0,410,76.1,False
+NC_002677.1,M. leprae,57.8,0.08,2.5,AND,6.8,98.5,29,89.7,False
+NC_002677.1,M. leprae,57.8,0.08,3.0,OR,93.0,13.3,527,67.7,False
+NC_002677.1,M. leprae,57.8,0.08,3.0,AND,71.4,59.2,354,77.4,False
+NC_002677.1,M. leprae,57.8,0.08,3.5,OR,100.0,0.0,580,66.2,False
+NC_002677.1,M. leprae,57.8,0.08,3.5,AND,80.7,50.5,407,76.2,False
+NC_002677.1,M. leprae,57.8,0.08,4.0,OR,100.0,0.0,580,66.2,False
+NC_002677.1,M. leprae,57.8,0.08,4.0,AND,80.7,50.5,407,76.2,False
+NC_002677.1,M. leprae,57.8,0.08,5.0,OR,100.0,0.0,580,66.2,False
+NC_002677.1,M. leprae,57.8,0.08,5.0,AND,80.7,50.5,407,76.2,False
+NC_002677.1,M. leprae,57.8,0.1,2.5,OR,70.1,63.8,340,79.1,False
+NC_002677.1,M. leprae,57.8,0.1,2.5,AND,6.5,98.5,28,89.3,False
+NC_002677.1,M. leprae,57.8,0.1,3.0,OR,89.8,17.9,506,68.2,False
+NC_002677.1,M. leprae,57.8,0.1,3.0,AND,63.0,68.4,304,79.6,False
+NC_002677.1,M. leprae,57.8,0.1,3.5,OR,100.0,0.0,580,66.2,False
+NC_002677.1,M. leprae,57.8,0.1,3.5,AND,69.3,64.3,336,79.2,False
+NC_002677.1,M. leprae,57.8,0.1,4.0,OR,100.0,0.0,580,66.2,False
+NC_002677.1,M. leprae,57.8,0.1,4.0,AND,69.3,64.3,336,79.2,False
+NC_002677.1,M. leprae,57.8,0.1,5.0,OR,100.0,0.0,580,66.2,False
+NC_002677.1,M. leprae,57.8,0.1,5.0,AND,69.3,64.3,336,79.2,False
+NC_002677.1,M. leprae,57.8,0.12,2.5,OR,55.7,71.9,269,79.6,False
+NC_002677.1,M. leprae,57.8,0.12,2.5,AND,6.0,98.5,26,88.5,False
+NC_002677.1,M. leprae,57.8,0.12,3.0,OR,88.0,20.9,493,68.6,False
+NC_002677.1,M. leprae,57.8,0.12,3.0,AND,50.0,73.5,244,78.7,False
+NC_002677.1,M. leprae,57.8,0.12,3.5,OR,100.0,0.0,580,66.2,False
+NC_002677.1,M. leprae,57.8,0.12,3.5,AND,54.4,72.4,263,79.5,False
+NC_002677.1,M. leprae,57.8,0.12,4.0,OR,100.0,0.0,580,66.2,False
+NC_002677.1,M. leprae,57.8,0.12,4.0,AND,54.4,72.4,263,79.5,False
+NC_002677.1,M. leprae,57.8,0.12,5.0,OR,100.0,0.0,580,66.2,False
+NC_002677.1,M. leprae,57.8,0.12,5.0,AND,54.4,72.4,263,79.5,False
+NC_002929.2,B. pertussis,67.7,0.04,2.5,OR,97.0,29.6,463,55.3,False
+NC_002929.2,B. pertussis,67.7,0.04,2.5,AND,84.1,77.2,289,76.8,False
+NC_002929.2,B. pertussis,67.7,0.04,3.0,OR,99.6,1.0,554,47.5,False
+NC_002929.2,B. pertussis,67.7,0.04,3.0,AND,94.7,43.2,417,60.0,True
+NC_002929.2,B. pertussis,67.7,0.04,3.5,OR,100.0,0.0,558,47.3,False
+NC_002929.2,B. pertussis,67.7,0.04,3.5,AND,97.0,33.3,452,56.6,False
+NC_002929.2,B. pertussis,67.7,0.04,4.0,OR,100.0,0.0,558,47.3,False
+NC_002929.2,B. pertussis,67.7,0.04,4.0,AND,97.0,33.3,452,56.6,False
+NC_002929.2,B. pertussis,67.7,0.04,5.0,OR,100.0,0.0,558,47.3,False
+NC_002929.2,B. pertussis,67.7,0.04,5.0,AND,97.0,33.3,452,56.6,False
+NC_002929.2,B. pertussis,67.7,0.06,2.5,OR,95.1,40.1,427,58.8,True
+NC_002929.2,B. pertussis,67.7,0.06,2.5,AND,83.7,77.9,286,77.3,False
+NC_002929.2,B. pertussis,67.7,0.06,3.0,OR,99.6,2.4,550,47.8,False
+NC_002929.2,B. pertussis,67.7,0.06,3.0,AND,92.4,53.1,382,63.9,True
+NC_002929.2,B. pertussis,67.7,0.06,3.5,OR,100.0,0.0,558,47.3,False
+NC_002929.2,B. pertussis,67.7,0.06,3.5,AND,94.7,44.6,413,60.5,True
+NC_002929.2,B. pertussis,67.7,0.06,4.0,OR,100.0,0.0,558,47.3,False
+NC_002929.2,B. pertussis,67.7,0.06,4.0,AND,94.7,44.6,413,60.5,True
+NC_002929.2,B. pertussis,67.7,0.06,5.0,OR,100.0,0.0,558,47.3,False
+NC_002929.2,B. pertussis,67.7,0.06,5.0,AND,94.7,44.6,413,60.5,True
+NC_002929.2,B. pertussis,67.7,0.08,2.5,OR,93.9,49.7,396,62.6,True
+NC_002929.2,B. pertussis,67.7,0.08,2.5,AND,83.7,80.6,278,79.5,False
+NC_002929.2,B. pertussis,67.7,0.08,3.0,OR,99.6,2.4,550,47.8,False
+NC_002929.2,B. pertussis,67.7,0.08,3.0,AND,91.3,65.3,343,70.3,False
+NC_002929.2,B. pertussis,67.7,0.08,3.5,OR,100.0,0.0,558,47.3,False
+NC_002929.2,B. pertussis,67.7,0.08,3.5,AND,93.6,56.8,374,66.0,True
+NC_002929.2,B. pertussis,67.7,0.08,4.0,OR,100.0,0.0,558,47.3,False
+NC_002929.2,B. pertussis,67.7,0.08,4.0,AND,93.6,56.8,374,66.0,True
+NC_002929.2,B. pertussis,67.7,0.08,5.0,OR,100.0,0.0,558,47.3,False
+NC_002929.2,B. pertussis,67.7,0.08,5.0,AND,93.6,56.8,374,66.0,True
+NC_002929.2,B. pertussis,67.7,0.1,2.5,OR,92.0,53.7,379,64.1,True
+NC_002929.2,B. pertussis,67.7,0.1,2.5,AND,83.3,82.0,273,80.6,False
+NC_002929.2,B. pertussis,67.7,0.1,3.0,OR,98.5,2.7,546,47.6,False
+NC_002929.2,B. pertussis,67.7,0.1,3.0,AND,90.2,70.4,325,73.2,False
+NC_002929.2,B. pertussis,67.7,0.1,3.5,OR,100.0,0.0,558,47.3,False
+NC_002929.2,B. pertussis,67.7,0.1,3.5,AND,91.3,62.2,352,68.5,True
+NC_002929.2,B. pertussis,67.7,0.1,4.0,OR,100.0,0.0,558,47.3,False
+NC_002929.2,B. pertussis,67.7,0.1,4.0,AND,91.3,62.2,352,68.5,True
+NC_002929.2,B. pertussis,67.7,0.1,5.0,OR,100.0,0.0,558,47.3,False
+NC_002929.2,B. pertussis,67.7,0.1,5.0,AND,91.3,62.2,352,68.5,True
+NC_002929.2,B. pertussis,67.7,0.12,2.5,OR,90.9,55.4,371,64.7,True
+NC_002929.2,B. pertussis,67.7,0.12,2.5,AND,82.6,83.3,267,81.6,False
+NC_002929.2,B. pertussis,67.7,0.12,3.0,OR,98.1,3.1,544,47.6,False
+NC_002929.2,B. pertussis,67.7,0.12,3.0,AND,88.6,73.1,313,74.8,False
+NC_002929.2,B. pertussis,67.7,0.12,3.5,OR,100.0,0.0,558,47.3,False
+NC_002929.2,B. pertussis,67.7,0.12,3.5,AND,89.4,65.3,338,69.8,False
+NC_002929.2,B. pertussis,67.7,0.12,4.0,OR,100.0,0.0,558,47.3,False
+NC_002929.2,B. pertussis,67.7,0.12,4.0,AND,89.4,65.3,338,69.8,False
+NC_002929.2,B. pertussis,67.7,0.12,5.0,OR,100.0,0.0,558,47.3,False
+NC_002929.2,B. pertussis,67.7,0.12,5.0,AND,89.4,65.3,338,69.8,False
+NC_008818.1,Hyperthermus,53.7,0.04,2.5,OR,73.3,32.0,398,78.6,False
+NC_008818.1,Hyperthermus,53.7,0.04,2.5,AND,17.1,88.8,87,83.9,False
+NC_008818.1,Hyperthermus,53.7,0.04,3.0,OR,90.4,9.6,499,77.4,False
+NC_008818.1,Hyperthermus,53.7,0.04,3.0,AND,62.5,42.4,339,78.8,False
+NC_008818.1,Hyperthermus,53.7,0.04,3.5,OR,100.0,0.0,552,77.4,False
+NC_008818.1,Hyperthermus,53.7,0.04,3.5,AND,70.7,33.6,385,78.4,False
+NC_008818.1,Hyperthermus,53.7,0.04,4.0,OR,100.0,0.0,552,77.4,False
+NC_008818.1,Hyperthermus,53.7,0.04,4.0,AND,70.7,33.6,385,78.4,False
+NC_008818.1,Hyperthermus,53.7,0.04,5.0,OR,100.0,0.0,552,77.4,False
+NC_008818.1,Hyperthermus,53.7,0.04,5.0,AND,70.7,33.6,385,78.4,False
+NC_008818.1,Hyperthermus,53.7,0.06,2.5,OR,60.9,46.4,327,79.5,False
+NC_008818.1,Hyperthermus,53.7,0.06,2.5,AND,15.5,92.0,76,86.8,False
+NC_008818.1,Hyperthermus,53.7,0.06,3.0,OR,87.1,12.0,482,77.2,False
+NC_008818.1,Hyperthermus,53.7,0.06,3.0,AND,51.8,57.6,274,80.7,False
+NC_008818.1,Hyperthermus,53.7,0.06,3.5,OR,100.0,0.0,552,77.4,False
+NC_008818.1,Hyperthermus,53.7,0.06,3.5,AND,56.7,51.2,303,79.9,False
+NC_008818.1,Hyperthermus,53.7,0.06,4.0,OR,100.0,0.0,552,77.4,False
+NC_008818.1,Hyperthermus,53.7,0.06,4.0,AND,56.7,51.2,303,79.9,False
+NC_008818.1,Hyperthermus,53.7,0.06,5.0,OR,100.0,0.0,552,77.4,False
+NC_008818.1,Hyperthermus,53.7,0.06,5.0,AND,56.7,51.2,303,79.9,False
+NC_008818.1,Hyperthermus,53.7,0.08,2.5,OR,49.2,61.6,258,81.4,False
+NC_008818.1,Hyperthermus,53.7,0.08,2.5,AND,13.8,92.8,68,86.8,False
+NC_008818.1,Hyperthermus,53.7,0.08,3.0,OR,84.8,14.4,469,77.2,False
+NC_008818.1,Hyperthermus,53.7,0.08,3.0,AND,40.7,71.2,210,82.9,False
+NC_008818.1,Hyperthermus,53.7,0.08,3.5,OR,100.0,0.0,552,77.4,False
+NC_008818.1,Hyperthermus,53.7,0.08,3.5,AND,43.3,67.2,226,81.9,False
+NC_008818.1,Hyperthermus,53.7,0.08,4.0,OR,100.0,0.0,552,77.4,False
+NC_008818.1,Hyperthermus,53.7,0.08,4.0,AND,43.3,67.2,226,81.9,False
+NC_008818.1,Hyperthermus,53.7,0.08,5.0,OR,100.0,0.0,552,77.4,False
+NC_008818.1,Hyperthermus,53.7,0.08,5.0,AND,43.3,67.2,226,81.9,False
+NC_008818.1,Hyperthermus,53.7,0.1,2.5,OR,41.0,68.8,214,81.8,False
+NC_008818.1,Hyperthermus,53.7,0.1,2.5,AND,11.9,94.4,58,87.9,False
+NC_008818.1,Hyperthermus,53.7,0.1,3.0,OR,83.8,16.0,463,77.3,False
+NC_008818.1,Hyperthermus,53.7,0.1,3.0,AND,31.6,78.4,162,83.3,False
+NC_008818.1,Hyperthermus,53.7,0.1,3.5,OR,100.0,0.0,552,77.4,False
+NC_008818.1,Hyperthermus,53.7,0.1,3.5,AND,33.3,76.0,172,82.6,False
+NC_008818.1,Hyperthermus,53.7,0.1,4.0,OR,100.0,0.0,552,77.4,False
+NC_008818.1,Hyperthermus,53.7,0.1,4.0,AND,33.3,76.0,172,82.6,False
+NC_008818.1,Hyperthermus,53.7,0.1,5.0,OR,100.0,0.0,552,77.4,False
+NC_008818.1,Hyperthermus,53.7,0.1,5.0,AND,33.3,76.0,172,82.6,False
+NC_008818.1,Hyperthermus,53.7,0.12,2.5,OR,35.4,74.4,183,82.5,False
+NC_008818.1,Hyperthermus,53.7,0.12,2.5,AND,10.3,95.2,50,88.0,False
+NC_008818.1,Hyperthermus,53.7,0.12,3.0,OR,82.9,17.6,457,77.5,False
+NC_008818.1,Hyperthermus,53.7,0.12,3.0,AND,25.3,83.2,129,83.7,False
+NC_008818.1,Hyperthermus,53.7,0.12,3.5,OR,100.0,0.0,552,77.4,False
+NC_008818.1,Hyperthermus,53.7,0.12,3.5,AND,26.0,82.4,133,83.5,False
+NC_008818.1,Hyperthermus,53.7,0.12,4.0,OR,100.0,0.0,552,77.4,False
+NC_008818.1,Hyperthermus,53.7,0.12,4.0,AND,26.0,82.4,133,83.5,False
+NC_008818.1,Hyperthermus,53.7,0.12,5.0,OR,100.0,0.0,552,77.4,False
+NC_008818.1,Hyperthermus,53.7,0.12,5.0,AND,26.0,82.4,133,83.5,False
+NC_008268.1,Rhodococcus,67.5,0.04,2.5,OR,97.3,27.5,452,64.4,False
+NC_008268.1,Rhodococcus,67.5,0.04,2.5,AND,81.9,77.5,295,83.1,False
+NC_008268.1,Rhodococcus,67.5,0.04,3.0,OR,99.3,0.9,517,57.4,False
+NC_008268.1,Rhodococcus,67.5,0.04,3.0,AND,96.3,36.0,430,67.0,False
+NC_008268.1,Rhodococcus,67.5,0.04,3.5,OR,100.0,0.0,521,57.4,False
+NC_008268.1,Rhodococcus,67.5,0.04,3.5,AND,97.3,27.9,451,64.5,False
+NC_008268.1,Rhodococcus,67.5,0.04,4.0,OR,100.0,0.0,521,57.4,False
+NC_008268.1,Rhodococcus,67.5,0.04,4.0,AND,97.3,27.9,451,64.5,False
+NC_008268.1,Rhodococcus,67.5,0.04,5.0,OR,100.0,0.0,521,57.4,False
+NC_008268.1,Rhodococcus,67.5,0.04,5.0,AND,97.3,27.9,451,64.5,False
+NC_008268.1,Rhodococcus,67.5,0.06,2.5,OR,96.3,38.3,425,67.8,False
+NC_008268.1,Rhodococcus,67.5,0.06,2.5,AND,81.9,77.9,294,83.3,False
+NC_008268.1,Rhodococcus,67.5,0.06,3.0,OR,99.3,1.8,515,57.7,False
+NC_008268.1,Rhodococcus,67.5,0.06,3.0,AND,95.3,46.4,404,70.5,True
+NC_008268.1,Rhodococcus,67.5,0.06,3.5,OR,100.0,0.0,521,57.4,False
+NC_008268.1,Rhodococcus,67.5,0.06,3.5,AND,96.3,39.2,423,68.1,False
+NC_008268.1,Rhodococcus,67.5,0.06,4.0,OR,100.0,0.0,521,57.4,False
+NC_008268.1,Rhodococcus,67.5,0.06,4.0,AND,96.3,39.2,423,68.1,False
+NC_008268.1,Rhodococcus,67.5,0.06,5.0,OR,100.0,0.0,521,57.4,False
+NC_008268.1,Rhodococcus,67.5,0.06,5.0,AND,96.3,39.2,423,68.1,False
+NC_008268.1,Rhodococcus,67.5,0.08,2.5,OR,95.0,48.2,399,71.2,True
+NC_008268.1,Rhodococcus,67.5,0.08,2.5,AND,81.9,78.8,292,83.9,False
+NC_008268.1,Rhodococcus,67.5,0.08,3.0,OR,99.0,2.7,512,57.8,False
+NC_008268.1,Rhodococcus,67.5,0.08,3.0,AND,94.3,56.3,379,74.4,True
+NC_008268.1,Rhodococcus,67.5,0.08,3.5,OR,100.0,0.0,521,57.4,False
+NC_008268.1,Rhodococcus,67.5,0.08,3.5,AND,95.0,50.0,395,71.9,True
+NC_008268.1,Rhodococcus,67.5,0.08,4.0,OR,100.0,0.0,521,57.4,False
+NC_008268.1,Rhodococcus,67.5,0.08,4.0,AND,95.0,50.0,395,71.9,True
+NC_008268.1,Rhodococcus,67.5,0.08,5.0,OR,100.0,0.0,521,57.4,False
+NC_008268.1,Rhodococcus,67.5,0.08,5.0,AND,95.0,50.0,395,71.9,True
+NC_008268.1,Rhodococcus,67.5,0.1,2.5,OR,94.3,52.7,387,72.9,True
+NC_008268.1,Rhodococcus,67.5,0.1,2.5,AND,81.9,78.8,292,83.9,False
+NC_008268.1,Rhodococcus,67.5,0.1,3.0,OR,99.0,3.2,511,57.9,False
+NC_008268.1,Rhodococcus,67.5,0.1,3.0,AND,93.6,60.4,368,76.1,True
+NC_008268.1,Rhodococcus,67.5,0.1,3.5,OR,100.0,0.0,521,57.4,False
+NC_008268.1,Rhodococcus,67.5,0.1,3.5,AND,94.3,54.5,383,73.6,True
+NC_008268.1,Rhodococcus,67.5,0.1,4.0,OR,100.0,0.0,521,57.4,False
+NC_008268.1,Rhodococcus,67.5,0.1,4.0,AND,94.3,54.5,383,73.6,True
+NC_008268.1,Rhodococcus,67.5,0.1,5.0,OR,100.0,0.0,521,57.4,False
+NC_008268.1,Rhodococcus,67.5,0.1,5.0,AND,94.3,54.5,383,73.6,True
+NC_008268.1,Rhodococcus,67.5,0.12,2.5,OR,94.3,55.4,381,74.0,True
+NC_008268.1,Rhodococcus,67.5,0.12,2.5,AND,81.9,78.8,292,83.9,False
+NC_008268.1,Rhodococcus,67.5,0.12,3.0,OR,99.0,4.1,509,58.2,False
+NC_008268.1,Rhodococcus,67.5,0.12,3.0,AND,93.6,62.2,364,76.9,True
+NC_008268.1,Rhodococcus,67.5,0.12,3.5,OR,100.0,0.0,521,57.4,False
+NC_008268.1,Rhodococcus,67.5,0.12,3.5,AND,94.3,57.2,377,74.8,True
+NC_008268.1,Rhodococcus,67.5,0.12,4.0,OR,100.0,0.0,521,57.4,False
+NC_008268.1,Rhodococcus,67.5,0.12,4.0,AND,94.3,57.2,377,74.8,True
+NC_008268.1,Rhodococcus,67.5,0.12,5.0,OR,100.0,0.0,521,57.4,False
+NC_008268.1,Rhodococcus,67.5,0.12,5.0,AND,94.3,57.2,377,74.8,True
+NC_003155.5,S. avermitilis,70.7,0.04,2.5,OR,98.3,23.7,422,54.3,False
+NC_003155.5,S. avermitilis,70.7,0.04,2.5,AND,90.6,66.0,297,71.0,False
+NC_003155.5,S. avermitilis,70.7,0.04,3.0,OR,100.0,0.4,485,48.0,False
+NC_003155.5,S. avermitilis,70.7,0.04,3.0,AND,97.4,34.8,392,57.9,False
+NC_003155.5,S. avermitilis,70.7,0.04,3.5,OR,100.0,0.0,486,47.9,False
+NC_003155.5,S. avermitilis,70.7,0.04,3.5,AND,97.9,29.2,407,56.0,False
+NC_003155.5,S. avermitilis,70.7,0.04,4.0,OR,100.0,0.0,486,47.9,False
+NC_003155.5,S. avermitilis,70.7,0.04,4.0,AND,97.9,29.2,407,56.0,False
+NC_003155.5,S. avermitilis,70.7,0.04,5.0,OR,100.0,0.0,486,47.9,False
+NC_003155.5,S. avermitilis,70.7,0.04,5.0,AND,97.9,29.2,407,56.0,False
+NC_003155.5,S. avermitilis,70.7,0.06,2.5,OR,96.6,31.6,398,56.5,False
+NC_003155.5,S. avermitilis,70.7,0.06,2.5,AND,90.6,68.4,291,72.5,False
+NC_003155.5,S. avermitilis,70.7,0.06,3.0,OR,100.0,0.4,485,48.0,False
+NC_003155.5,S. avermitilis,70.7,0.06,3.0,AND,95.7,45.1,362,61.6,True
+NC_003155.5,S. avermitilis,70.7,0.06,3.5,OR,100.0,0.0,486,47.9,False
+NC_003155.5,S. avermitilis,70.7,0.06,3.5,AND,96.1,39.5,377,59.4,False
+NC_003155.5,S. avermitilis,70.7,0.06,4.0,OR,100.0,0.0,486,47.9,False
+NC_003155.5,S. avermitilis,70.7,0.06,4.0,AND,96.1,39.5,377,59.4,False
+NC_003155.5,S. avermitilis,70.7,0.06,5.0,OR,100.0,0.0,486,47.9,False
+NC_003155.5,S. avermitilis,70.7,0.06,5.0,AND,96.1,39.5,377,59.4,False
+NC_003155.5,S. avermitilis,70.7,0.08,2.5,OR,94.4,39.5,373,59.0,False
+NC_003155.5,S. avermitilis,70.7,0.08,2.5,AND,90.6,71.1,284,74.3,False
+NC_003155.5,S. avermitilis,70.7,0.08,3.0,OR,99.6,0.4,484,47.9,False
+NC_003155.5,S. avermitilis,70.7,0.08,3.0,AND,94.0,55.7,331,66.2,False
+NC_003155.5,S. avermitilis,70.7,0.08,3.5,OR,100.0,0.0,486,47.9,False
+NC_003155.5,S. avermitilis,70.7,0.08,3.5,AND,94.0,50.2,345,63.5,False
+NC_003155.5,S. avermitilis,70.7,0.08,4.0,OR,100.0,0.0,486,47.9,False
+NC_003155.5,S. avermitilis,70.7,0.08,4.0,AND,94.0,50.2,345,63.5,False
+NC_003155.5,S. avermitilis,70.7,0.08,5.0,OR,100.0,0.0,486,47.9,False
+NC_003155.5,S. avermitilis,70.7,0.08,5.0,AND,94.0,50.2,345,63.5,False
+NC_003155.5,S. avermitilis,70.7,0.1,2.5,OR,94.0,42.7,364,60.2,True
+NC_003155.5,S. avermitilis,70.7,0.1,2.5,AND,89.7,73.5,276,75.7,False
+NC_003155.5,S. avermitilis,70.7,0.1,3.0,OR,99.6,1.2,482,48.1,False
+NC_003155.5,S. avermitilis,70.7,0.1,3.0,AND,92.7,60.5,316,68.4,False
+NC_003155.5,S. avermitilis,70.7,0.1,3.5,OR,100.0,0.0,486,47.9,False
+NC_003155.5,S. avermitilis,70.7,0.1,3.5,AND,92.7,55.7,328,65.9,False
+NC_003155.5,S. avermitilis,70.7,0.1,4.0,OR,100.0,0.0,486,47.9,False
+NC_003155.5,S. avermitilis,70.7,0.1,4.0,AND,92.7,55.7,328,65.9,False
+NC_003155.5,S. avermitilis,70.7,0.1,5.0,OR,100.0,0.0,486,47.9,False
+NC_003155.5,S. avermitilis,70.7,0.1,5.0,AND,92.7,55.7,328,65.9,False
+NC_003155.5,S. avermitilis,70.7,0.12,2.5,OR,93.1,47.4,350,62.0,True
+NC_003155.5,S. avermitilis,70.7,0.12,2.5,AND,88.4,74.3,271,76.0,False
+NC_003155.5,S. avermitilis,70.7,0.12,3.0,OR,99.6,1.6,481,48.2,False
+NC_003155.5,S. avermitilis,70.7,0.12,3.0,AND,90.6,65.6,298,70.8,False
+NC_003155.5,S. avermitilis,70.7,0.12,3.5,OR,100.0,0.0,486,47.9,False
+NC_003155.5,S. avermitilis,70.7,0.12,3.5,AND,90.6,61.3,309,68.3,False
+NC_003155.5,S. avermitilis,70.7,0.12,4.0,OR,100.0,0.0,486,47.9,False
+NC_003155.5,S. avermitilis,70.7,0.12,4.0,AND,90.6,61.3,309,68.3,False
+NC_003155.5,S. avermitilis,70.7,0.12,5.0,OR,100.0,0.0,486,47.9,False
+NC_003155.5,S. avermitilis,70.7,0.12,5.0,AND,90.6,61.3,309,68.3,False
+NC_003030.1,C. acetobutyl.,30.9,0.04,2.5,OR,99.3,2.6,1260,91.2,False
+NC_003030.1,C. acetobutyl.,30.9,0.04,2.5,AND,63.0,51.8,784,93.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.04,3.0,OR,99.8,0.0,1269,91.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.04,3.0,AND,98.6,3.5,1251,91.2,False
+NC_003030.1,C. acetobutyl.,30.9,0.04,3.5,OR,100.0,0.0,1271,91.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.04,3.5,AND,98.8,3.5,1253,91.2,False
+NC_003030.1,C. acetobutyl.,30.9,0.04,4.0,OR,100.0,0.0,1271,91.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.04,4.0,AND,98.8,3.5,1253,91.2,False
+NC_003030.1,C. acetobutyl.,30.9,0.04,5.0,OR,100.0,0.0,1271,91.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.04,5.0,AND,98.8,3.5,1253,91.2,False
+NC_003030.1,C. acetobutyl.,30.9,0.06,2.5,OR,97.8,4.4,1241,91.2,False
+NC_003030.1,C. acetobutyl.,30.9,0.06,2.5,AND,62.4,52.6,776,93.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.06,3.0,OR,99.7,0.0,1268,91.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.06,3.0,AND,96.6,6.1,1225,91.3,False
+NC_003030.1,C. acetobutyl.,30.9,0.06,3.5,OR,100.0,0.0,1271,91.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.06,3.5,AND,96.7,6.1,1226,91.3,False
+NC_003030.1,C. acetobutyl.,30.9,0.06,4.0,OR,100.0,0.0,1271,91.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.06,4.0,AND,96.7,6.1,1226,91.3,False
+NC_003030.1,C. acetobutyl.,30.9,0.06,5.0,OR,100.0,0.0,1271,91.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.06,5.0,AND,96.7,6.1,1226,91.3,False
+NC_003030.1,C. acetobutyl.,30.9,0.08,2.5,OR,94.4,11.4,1193,91.5,False
+NC_003030.1,C. acetobutyl.,30.9,0.08,2.5,AND,60.9,53.5,758,93.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.08,3.0,OR,99.7,0.0,1267,91.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.08,3.0,AND,91.8,14.0,1160,91.6,False
+NC_003030.1,C. acetobutyl.,30.9,0.08,3.5,OR,100.0,0.0,1271,91.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.08,3.5,AND,91.8,14.0,1160,91.6,False
+NC_003030.1,C. acetobutyl.,30.9,0.08,4.0,OR,100.0,0.0,1271,91.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.08,4.0,AND,91.8,14.0,1160,91.6,False
+NC_003030.1,C. acetobutyl.,30.9,0.08,5.0,OR,100.0,0.0,1271,91.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.08,5.0,AND,91.8,14.0,1160,91.6,False
+NC_003030.1,C. acetobutyl.,30.9,0.1,2.5,OR,90.2,14.9,1141,91.5,False
+NC_003030.1,C. acetobutyl.,30.9,0.1,2.5,AND,58.7,55.3,730,93.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.1,3.0,OR,99.7,0.0,1267,91.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.1,3.0,AND,85.4,19.3,1080,91.5,False
+NC_003030.1,C. acetobutyl.,30.9,0.1,3.5,OR,100.0,0.0,1271,91.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.1,3.5,AND,85.4,19.3,1080,91.5,False
+NC_003030.1,C. acetobutyl.,30.9,0.1,4.0,OR,100.0,0.0,1271,91.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.1,4.0,AND,85.4,19.3,1080,91.5,False
+NC_003030.1,C. acetobutyl.,30.9,0.1,5.0,OR,100.0,0.0,1271,91.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.1,5.0,AND,85.4,19.3,1080,91.5,False
+NC_003030.1,C. acetobutyl.,30.9,0.12,2.5,OR,84.5,28.1,1060,92.3,False
+NC_003030.1,C. acetobutyl.,30.9,0.12,2.5,AND,54.5,57.9,679,92.9,False
+NC_003030.1,C. acetobutyl.,30.9,0.12,3.0,OR,99.7,0.0,1267,91.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.12,3.0,AND,75.5,35.1,948,92.2,False
+NC_003030.1,C. acetobutyl.,30.9,0.12,3.5,OR,100.0,0.0,1271,91.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.12,3.5,AND,75.5,35.1,948,92.2,False
+NC_003030.1,C. acetobutyl.,30.9,0.12,4.0,OR,100.0,0.0,1271,91.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.12,4.0,AND,75.5,35.1,948,92.2,False
+NC_003030.1,C. acetobutyl.,30.9,0.12,5.0,OR,100.0,0.0,1271,91.0,False
+NC_003030.1,C. acetobutyl.,30.9,0.12,5.0,AND,75.5,35.1,948,92.2,False
+NC_004350.2,S. agalactiae,36.8,0.04,2.5,OR,92.6,9.2,1020,91.3,False
+NC_004350.2,S. agalactiae,36.8,0.04,2.5,AND,32.4,65.3,360,90.6,False
+NC_004350.2,S. agalactiae,36.8,0.04,3.0,OR,99.6,2.0,1097,91.2,False
+NC_004350.2,S. agalactiae,36.8,0.04,3.0,AND,90.2,12.2,993,91.3,False
+NC_004350.2,S. agalactiae,36.8,0.04,3.5,OR,100.0,0.0,1103,91.1,False
+NC_004350.2,S. agalactiae,36.8,0.04,3.5,AND,90.9,11.2,1001,91.3,False
+NC_004350.2,S. agalactiae,36.8,0.04,4.0,OR,100.0,0.0,1103,91.1,False
+NC_004350.2,S. agalactiae,36.8,0.04,4.0,AND,90.9,11.2,1001,91.3,False
+NC_004350.2,S. agalactiae,36.8,0.04,5.0,OR,100.0,0.0,1103,91.1,False
+NC_004350.2,S. agalactiae,36.8,0.04,5.0,AND,90.9,11.2,1001,91.3,False
+NC_004350.2,S. agalactiae,36.8,0.06,2.5,OR,87.8,24.5,956,92.3,False
+NC_004350.2,S. agalactiae,36.8,0.06,2.5,AND,31.3,66.3,348,90.5,False
+NC_004350.2,S. agalactiae,36.8,0.06,3.0,OR,99.4,3.1,1094,91.3,False
+NC_004350.2,S. agalactiae,36.8,0.06,3.0,AND,84.5,27.6,920,92.3,False
+NC_004350.2,S. agalactiae,36.8,0.06,3.5,OR,100.0,0.0,1103,91.1,False
+NC_004350.2,S. agalactiae,36.8,0.06,3.5,AND,85.0,27.6,925,92.3,False
+NC_004350.2,S. agalactiae,36.8,0.06,4.0,OR,100.0,0.0,1103,91.1,False
+NC_004350.2,S. agalactiae,36.8,0.06,4.0,AND,85.0,27.6,925,92.3,False
+NC_004350.2,S. agalactiae,36.8,0.06,5.0,OR,100.0,0.0,1103,91.1,False
+NC_004350.2,S. agalactiae,36.8,0.06,5.0,AND,85.0,27.6,925,92.3,False
+NC_004350.2,S. agalactiae,36.8,0.08,2.5,OR,81.8,30.6,890,92.4,False
+NC_004350.2,S. agalactiae,36.8,0.08,2.5,AND,29.2,70.4,322,91.0,False
+NC_004350.2,S. agalactiae,36.8,0.08,3.0,OR,99.2,3.1,1092,91.3,False
+NC_004350.2,S. agalactiae,36.8,0.08,3.0,AND,76.5,37.8,830,92.7,False
+NC_004350.2,S. agalactiae,36.8,0.08,3.5,OR,100.0,0.0,1103,91.1,False
+NC_004350.2,S. agalactiae,36.8,0.08,3.5,AND,76.8,37.8,833,92.7,False
+NC_004350.2,S. agalactiae,36.8,0.08,4.0,OR,100.0,0.0,1103,91.1,False
+NC_004350.2,S. agalactiae,36.8,0.08,4.0,AND,76.8,37.8,833,92.7,False
+NC_004350.2,S. agalactiae,36.8,0.08,5.0,OR,100.0,0.0,1103,91.1,False
+NC_004350.2,S. agalactiae,36.8,0.08,5.0,AND,76.8,37.8,833,92.7,False
+NC_004350.2,S. agalactiae,36.8,0.1,2.5,OR,73.2,35.7,799,92.1,False
+NC_004350.2,S. agalactiae,36.8,0.1,2.5,AND,27.2,73.5,299,91.3,False
+NC_004350.2,S. agalactiae,36.8,0.1,3.0,OR,99.0,3.1,1090,91.3,False
+NC_004350.2,S. agalactiae,36.8,0.1,3.0,AND,66.2,45.9,718,92.6,False
+NC_004350.2,S. agalactiae,36.8,0.1,3.5,OR,100.0,0.0,1103,91.1,False
+NC_004350.2,S. agalactiae,36.8,0.1,3.5,AND,66.3,45.9,719,92.6,False
+NC_004350.2,S. agalactiae,36.8,0.1,4.0,OR,100.0,0.0,1103,91.1,False
+NC_004350.2,S. agalactiae,36.8,0.1,4.0,AND,66.3,45.9,719,92.6,False
+NC_004350.2,S. agalactiae,36.8,0.1,5.0,OR,100.0,0.0,1103,91.1,False
+NC_004350.2,S. agalactiae,36.8,0.1,5.0,AND,66.3,45.9,719,92.6,False
+NC_004350.2,S. agalactiae,36.8,0.12,2.5,OR,64.2,43.9,700,92.1,False
+NC_004350.2,S. agalactiae,36.8,0.12,2.5,AND,24.5,76.5,269,91.4,False
+NC_004350.2,S. agalactiae,36.8,0.12,3.0,OR,98.9,3.1,1089,91.3,False
+NC_004350.2,S. agalactiae,36.8,0.12,3.0,AND,54.5,57.1,590,92.9,False
+NC_004350.2,S. agalactiae,36.8,0.12,3.5,OR,100.0,0.0,1103,91.1,False
+NC_004350.2,S. agalactiae,36.8,0.12,3.5,AND,54.5,57.1,590,92.9,False
+NC_004350.2,S. agalactiae,36.8,0.12,4.0,OR,100.0,0.0,1103,91.1,False
+NC_004350.2,S. agalactiae,36.8,0.12,4.0,AND,54.5,57.1,590,92.9,False
+NC_004350.2,S. agalactiae,36.8,0.12,5.0,OR,100.0,0.0,1103,91.1,False
+NC_004350.2,S. agalactiae,36.8,0.12,5.0,AND,54.5,57.1,590,92.9,False

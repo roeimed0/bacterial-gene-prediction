@@ -1,6 +1,9 @@
 [flake8]
 max-line-length = 100
 extend-ignore = E203, W503
+exclude =
+    # One-off diagnostic scripts; not held to production lint standards.
+    scripts/experiments
 per-file-ignores =
     # Scripts add project root to sys.path before imports — E402 is intentional.
     # E501 violations are in print/format strings that can't be cleanly wrapped.

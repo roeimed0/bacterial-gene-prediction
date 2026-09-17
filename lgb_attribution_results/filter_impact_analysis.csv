@@ -1,0 +1,21 @@
+acc,label,phylum,gc_pct,filtered,df1,base_n,base_tp_n,base_fp_n,base_tp_pct,filt_n,filt_tp_n,filt_fp_n,filt_tp_pct,removed_n,removed_tp,removed_fp,removed_tp_pct
+NC_002947.4,P. putida,Proteobacteria,61.5,True,-0.12,761,602,159,79.1,666,571,95,85.7,95,31,64,32.6
+NC_002929.2,B. pertussis,Proteobacteria,67.7,True,1.87,558,264,294,47.3,374,247,127,66.0,184,17,167,9.2
+NC_003143.1,Y. pestis,Proteobacteria,47.6,False,0.08,1322,1185,137,89.6,1322,1185,137,89.6,0,0,0,
+NC_003116.1,N. meningitidis,Proteobacteria,51.8,False,-0.19,839,671,168,80.0,839,671,168,80.0,0,0,0,
+NC_004757.1,N. europaea,Proteobacteria,50.7,False,0.0,1048,929,119,88.6,1048,929,119,88.6,0,0,0,
+NC_008497.1,L. brevis,Firmicutes,46.2,False,-0.4,1078,946,132,87.8,1078,946,132,87.8,0,0,0,
+NC_004350.2,S. agalactiae,Firmicutes,36.8,False,-0.06,1103,1005,98,91.1,1103,1005,98,91.1,0,0,0,
+NC_006270.3,B. licheniformis,Firmicutes,46.2,False,0.34,1146,1001,145,87.3,1146,1001,145,87.3,0,0,0,
+NC_006274.1,B. cereus,Firmicutes,35.4,False,0.29,1299,1162,137,89.5,1299,1162,137,89.5,0,0,0,
+NC_003030.1,C. acetobutyl.,Firmicutes,30.9,False,-0.03,1271,1157,114,91.0,1271,1157,114,91.0,0,0,0,
+NC_003155.5,S. avermitilis,Actinobacteria,70.7,True,1.14,486,233,253,47.9,345,219,126,63.5,141,14,127,9.9
+NC_003450.3,C. glutamicum A,Actinobacteria,53.8,False,0.12,940,833,107,88.6,940,833,107,88.6,0,0,0,
+NC_002677.1,M. leprae,Actinobacteria,57.8,True,0.02,580,384,196,66.2,407,310,97,76.2,173,74,99,42.8
+NC_008268.1,Rhodococcus,Actinobacteria,67.5,True,1.05,521,299,222,57.4,395,284,111,71.9,126,15,111,11.9
+NC_006958.1,C. glutamicum R,Actinobacteria,53.8,False,0.17,936,831,105,88.8,936,831,105,88.8,0,0,0,
+NC_008818.1,Hyperthermus,Archaea,53.7,False,0.45,552,427,125,77.4,552,427,125,77.4,0,0,0,
+NC_015948.1,Haloarcula,Archaea,63.7,True,-0.44,827,716,111,86.6,760,686,74,90.3,67,30,37,44.8
+NC_014408.1,Methanobrevibacter,Archaea,48.6,False,0.28,816,704,112,86.3,816,704,112,86.3,0,0,0,
+NC_019977.1,Methanosaeta,Archaea,42.6,False,0.12,1088,981,107,90.2,1088,981,107,90.2,0,0,0,
+NC_007644.1,Moorella,Archaea,55.8,True,-0.4,820,705,115,86.0,665,576,89,86.6,155,129,26,83.2

@@ -67,7 +67,7 @@ _parser = argparse.ArgumentParser(description="Train start-selection classifier.
 _parser.add_argument(
     "--features",
     default="",
-    help="Comma-separated v3 feature groups to add to v2 baseline: nterm,gc3,groupnorm  (default: none = v2 baseline)",
+    help="Comma-separated feature groups: nterm,gc3,groupnorm,gc_length,rank2  (default: none = v2 baseline).  'rank2' is a pseudo-group that adds rank-0-vs-rank-2 training pairs.",
 )
 _parser.add_argument(
     "--out-model",
@@ -111,10 +111,22 @@ _V3_GROUPS = {
     },
     "gc3": {"d_gc3_period", "gc3_period_t1", "gc3_period_t2"},
     "groupnorm": {"d_length_norm", "d_codon_norm", "d_imm_norm"},
+    # GC-corrected length: explicit interaction between d_length and genome GC%.
+    # Hypothesis: the length advantage of an upstream-extension wrong start is
+    # spurious in high-GC genomes (fewer upstream stop codons -> longer ORFs by
+    # chance). d_length_x_gc = d_length * max(0, gc_pct - 0.55) is zero for
+    # all clean/low-GC genomes (decision boundary unchanged) and grows linearly
+    # only above the high-GC threshold — same convention as genome_gc_high.
+    "gc_length": {"d_length_x_gc"},
+    # rank2: pseudo-group with no feature columns.  When enabled, extract_features
+    # also collects rank-0 vs rank-2 pairs (real gene at rank 2, gap < contest_t).
+    # These are B4-rank2 training examples the baseline loop misses.
+    "rank2": set(),
 }
 _V3_ALL = set().union(*_V3_GROUPS.values())
 _V3_ENABLED = set().union(*(_V3_GROUPS[g] for g in _ENABLED_GROUPS if g in _V3_GROUPS))
 _V3_DROPPED = _V3_ALL - _V3_ENABLED
+_INCLUDE_RANK2 = "rank2" in _ENABLED_GROUPS
 
 if _ENABLED_GROUPS:
     print(f"\nAblation mode — enabled v3 groups: {sorted(_ENABLED_GROUPS)}")
@@ -160,7 +172,7 @@ def available(accs):
     return [a for a in accs if (Path(DATA_DIR) / f"{a}.fasta").exists()]
 
 
-TRAIN_GENOMES = available(catalog_train + catalog_val)  # train classifier on both
+TRAIN_GENOMES = available(catalog_train)  # 68 genomes, mirrors train_lgb.py convention
 TEST_CATALOG = available(catalog_test)
 TEST_HOLDOUT = available(TEST_GENOMES)
 
@@ -738,6 +750,8 @@ def extract_features(
             "both_atg": int(
                 top1.get("start_codon", "") == "ATG" and top2.get("start_codon", "") == "ATG"
             ),
+            # GC-corrected length interaction (gc_length group)
+            "d_length_x_gc": (t1_len - t2_len) * max(0.0, gc_pct - 0.55),
             # ── N-terminal AA composition (pairwise differences) ────────────
             **{
                 f"d_{k}": nterm_features(str(top1.get("sequence", "")))[k]
@@ -788,6 +802,133 @@ def extract_features(
             ),
         }
         rows.append(feat)
+
+        # ── rank2 group: also collect rank-0 vs rank-2 when real is at rank 2 ──
+        # Standard loop only reaches here when real is top-1 or top-2.
+        # When rank2 is enabled we additionally check rank-3 (index 2) and, if
+        # it matches a real gene and gap(rank0, rank2) < CONTEST_T, emit a
+        # label-0 pair so the classifier learns to flip over two wrong starts.
+        if _INCLUDE_RANK2 and len(sorted_idx) >= 3:
+            rank2_idx = sorted_idx[2]
+            r2_coord = (
+                int(
+                    grp_df.loc[rank2_idx].get("genome_start", grp_df.loc[rank2_idx].get("start", 0))
+                ),
+                int(grp_df.loc[rank2_idx].get("genome_end", grp_df.loc[rank2_idx].get("end", 0))),
+            )
+            if r2_coord in real:
+                rank2_gap = float(top1["_base"]) - float(grp_df.loc[rank2_idx, "_base"])
+                if rank2_gap < CONTEST_T:
+                    r2 = grp_df.loc[rank2_idx]
+                    r2_len = float(r2.get("length", 0))
+                    r2_zscore = (r2_len - len_mean) / max(len_std, 1.0)
+                    up_r2 = get_upstream(seq, r2.to_dict(), 25)
+                    r2seq = r2.get("sequence", "")
+                    feat_r2 = {
+                        "acc": acc,
+                        "phylum": _PHYLUM.get(acc, "?"),
+                        "label": 0,  # flip from top-1 to rank-2
+                        "d_baseline": rank2_gap,
+                        "d_rbs": float(top1.get("rbs_score_norm", 0))
+                        - float(r2.get("rbs_score_norm", 0)),
+                        "d_start": float(top1.get("start_score_norm", 0))
+                        - float(r2.get("start_score_norm", 0)),
+                        "d_codon": float(top1.get("codon_score_norm", 0))
+                        - float(r2.get("codon_score_norm", 0)),
+                        "d_imm": float(top1.get("imm_score_norm", 0))
+                        - float(r2.get("imm_score_norm", 0)),
+                        "d_length": t1_len - r2_len,
+                        "d_f4": f4_spacer(up1) - f4_spacer(up_r2),
+                        "d_f5": f5_gc_bias(up1) - f5_gc_bias(up_r2),
+                        "d_up_imm": upstream_imm(up1, models) - upstream_imm(up_r2, models),
+                        "d_genome_rbs": score_pwm(up1, pwm) - score_pwm(up_r2, pwm),
+                        "d_anti_sd": anti_sd_score(up1) - anti_sd_score(up_r2),
+                        "anti_sd_top1": anti_sd_score(up1),
+                        "anti_sd_top2": anti_sd_score(up_r2),
+                        "ext_codon": ext_codon_score(top1.to_dict(), r2.to_dict(), seq, models),
+                        "d_any_stop_dist": dist_any_frame_stop(seq, top1.to_dict())
+                        - dist_any_frame_stop(seq, r2.to_dict()),
+                        "any_stop_top1": dist_any_frame_stop(seq, top1.to_dict()),
+                        "any_stop_top2": dist_any_frame_stop(seq, r2.to_dict()),
+                        "d_len_zscore": t1_zscore - r2_zscore,
+                        "len_zscore_top1": t1_zscore,
+                        "len_zscore_top2": r2_zscore,
+                        "d_post_start": post_start_codon_score(t1seq, models)
+                        - post_start_codon_score(r2seq, models),
+                        "post_start_top1": post_start_codon_score(t1seq, models),
+                        "post_start_top2": post_start_codon_score(r2seq, models),
+                        "d_ctx_pwm": score_start_context(seq, top1.to_dict(), ctx_pwm)
+                        - score_start_context(seq, r2.to_dict(), ctx_pwm),
+                        "ctx_pwm_top1": score_start_context(seq, top1.to_dict(), ctx_pwm),
+                        "ctx_pwm_top2": score_start_context(seq, r2.to_dict(), ctx_pwm),
+                        "gap": rank2_gap,
+                        "score_range": float(s_range),
+                        "rel_gap": float(rank2_gap / max(s_range, 1e-6)),
+                        "n_near_ties": n_near,
+                        "n_orfs": len(grp_df),
+                        "top1_len_rank": l_rank_t1,
+                        "group_len_cv": l_cv,
+                        "frac_longer": frac_long,
+                        "grp_rbs_mean": grp_rbs_mean,
+                        "grp_rbs_range": rbs_range,
+                        "frac_atg": frac_atg,
+                        "top1_rbs_rank": t1_rbs_rank,
+                        "gc_pct": gc_pct,
+                        "both_atg": int(
+                            top1.get("start_codon", "") == "ATG"
+                            and r2.get("start_codon", "") == "ATG"
+                        ),
+                        "d_length_x_gc": (t1_len - r2_len) * max(0.0, gc_pct - 0.55),
+                        **{
+                            f"d_{k}": nterm_features(str(top1.get("sequence", "")))[k]
+                            - nterm_features(str(r2.get("sequence", "")))[k]
+                            for k in [
+                                "nterm_charged_pos",
+                                "nterm_charged_neg",
+                                "nterm_polar",
+                                "nterm_hydrophobic",
+                            ]
+                        },
+                        **{
+                            f"t1_{k}": nterm_features(str(top1.get("sequence", "")))[k]
+                            for k in [
+                                "nterm_charged_pos",
+                                "nterm_charged_neg",
+                                "nterm_polar",
+                                "nterm_hydrophobic",
+                            ]
+                        },
+                        "d_gc3_period": gc3_periodicity_strength(up1)
+                        - gc3_periodicity_strength(up_r2),
+                        "gc3_period_t1": gc3_periodicity_strength(up1),
+                        "gc3_period_t2": gc3_periodicity_strength(up_r2),
+                        "d_length_norm": (t1_len - r2_len)
+                        / max(float(grp_df["length"].max() - grp_df["length"].min()), 1.0),
+                        "d_codon_norm": (
+                            float(top1.get("codon_score_norm", 0))
+                            - float(r2.get("codon_score_norm", 0))
+                        )
+                        / max(
+                            float(
+                                grp_df.get("codon_score_norm", pd.Series([0])).max()
+                                - grp_df.get("codon_score_norm", pd.Series([0])).min()
+                            ),
+                            EPS,
+                        ),
+                        "d_imm_norm": (
+                            float(top1.get("imm_score_norm", 0))
+                            - float(r2.get("imm_score_norm", 0))
+                        )
+                        / max(
+                            float(
+                                grp_df.get("imm_score_norm", pd.Series([0])).max()
+                                - grp_df.get("imm_score_norm", pd.Series([0])).min()
+                            ),
+                            EPS,
+                        ),
+                    }
+                    rows.append(feat_r2)
+
     return rows
 
 
@@ -1055,11 +1196,14 @@ elif use_calibration == "isotonic":
     cal_clf.fit(X_all_sc, y_all)
     final_clf = cal_clf
 
-# Feature importances
-if hasattr(final_clf, "coef_"):
-    imps = np.abs(final_clf.coef_[0])
-elif hasattr(final_clf, "feature_importances_"):
-    imps = final_clf.feature_importances_
+# Feature importances (unwrap CalibratedClassifierCV if needed)
+_clf_for_imp = final_clf
+if hasattr(_clf_for_imp, "estimator"):
+    _clf_for_imp = _clf_for_imp.estimator
+if hasattr(_clf_for_imp, "coef_"):
+    imps = np.abs(_clf_for_imp.coef_[0])
+elif hasattr(_clf_for_imp, "feature_importances_"):
+    imps = _clf_for_imp.feature_importances_
 else:
     imps = np.zeros(len(FCOLS))
 
@@ -1256,6 +1400,7 @@ def evaluate_on_genomes(accessions, label):
                     ),
                     EPS,
                 ),
+                "d_length_x_gc": (t1l - t2l) * max(0.0, gc_pct - 0.55),
             }
             X_fv = scaler_f.transform(np.array([[fv[c] for c in FCOLS]]))
             prob_keep = final_clf.predict_proba(X_fv)[0, 1]

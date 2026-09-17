@@ -1,0 +1,8 @@
+feature,raw_auc,z_auc,delta,verdict
+combined_max,0.9391,0.9391,0.0,no benefit
+rbs_max,0.8449,0.8449,0.0,no benefit
+imm_max,0.9006,0.9006,0.0,no benefit
+start_select_max,0.9007,0.9007,0.0,no benefit
+codon_max,0.8917,0.8917,0.0,no benefit
+combined_mean,0.915,0.915,0.0,no benefit
+rbs_dominance,0.8788,0.8788,0.0,no benefit

@@ -1,0 +1,29 @@
+acc,label,phylum,gc_pct,feature,auc,tp_mean,fp_mean
+NC_002929.2,B. pertussis,Proteobacteria,67.7,gc_content,0.5302,0.684,0.6878
+NC_002929.2,B. pertussis,Proteobacteria,67.7,gc_deviation,0.5302,0.0068,0.0106
+NC_002929.2,B. pertussis,Proteobacteria,67.7,gc3_content,0.693,0.8858,0.7997
+NC_002929.2,B. pertussis,Proteobacteria,67.7,gc3 - genome_gc,0.693,0.2086,0.1225
+NC_002677.1,M. leprae,Actinobacteria,57.8,gc_content,0.5192,0.6029,0.6009
+NC_002677.1,M. leprae,Actinobacteria,57.8,gc_deviation,0.5192,0.025,0.0229
+NC_002677.1,M. leprae,Actinobacteria,57.8,gc3_content,0.5294,0.6863,0.6786
+NC_002677.1,M. leprae,Actinobacteria,57.8,gc3 - genome_gc,0.5294,0.1083,0.1006
+NC_008268.1,Rhodococcus,Actinobacteria,67.5,gc_content,0.507,0.681,0.682
+NC_008268.1,Rhodococcus,Actinobacteria,67.5,gc_deviation,0.507,0.0059,0.0068
+NC_008268.1,Rhodococcus,Actinobacteria,67.5,gc3_content,0.6627,0.86,0.797
+NC_008268.1,Rhodococcus,Actinobacteria,67.5,gc3 - genome_gc,0.6627,0.1849,0.1218
+NC_003155.5,S. avermitilis,Actinobacteria,70.7,gc_content,0.537,0.7118,0.7161
+NC_003155.5,S. avermitilis,Actinobacteria,70.7,gc_deviation,0.537,0.0047,0.009
+NC_003155.5,S. avermitilis,Actinobacteria,70.7,gc3_content,0.6836,0.9105,0.8338
+NC_003155.5,S. avermitilis,Actinobacteria,70.7,gc3 - genome_gc,0.6836,0.2033,0.1267
+NC_015948.1,Haloarcula,Archaea,63.7,gc_content,0.5166,0.6516,0.654
+NC_015948.1,Haloarcula,Archaea,63.7,gc_deviation,0.5166,0.0147,0.017
+NC_015948.1,Haloarcula,Archaea,63.7,gc3_content,0.6398,0.8274,0.7853
+NC_015948.1,Haloarcula,Archaea,63.7,gc3 - genome_gc,0.6398,0.1905,0.1483
+NC_003030.1,C. acetobutyl.,Firmicutes,30.9,gc_content,0.525,0.3184,0.3214
+NC_003030.1,C. acetobutyl.,Firmicutes,30.9,gc_deviation,0.525,0.0091,0.0121
+NC_003030.1,C. acetobutyl.,Firmicutes,30.9,gc3_content,0.5129,0.2125,0.2142
+NC_003030.1,C. acetobutyl.,Firmicutes,30.9,gc3 - genome_gc,0.5129,-0.0967,-0.095
+NC_004350.2,S. agalactiae,Firmicutes,36.8,gc_content,0.5326,0.3846,0.3788
+NC_004350.2,S. agalactiae,Firmicutes,36.8,gc_deviation,0.5326,0.0163,0.0105
+NC_004350.2,S. agalactiae,Firmicutes,36.8,gc3_content,0.5151,0.2988,0.2959
+NC_004350.2,S. agalactiae,Firmicutes,36.8,gc3 - genome_gc,0.5151,-0.0695,-0.0724
