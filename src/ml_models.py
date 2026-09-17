@@ -581,7 +581,7 @@ class HybridGeneFilter:
             "at_skew",
             "purine_content",
             "effective_num_codons",
-            "codon_bias_index",
+            "codon_entropy",
             "has_hairpin_near_stop",
             "minus10_box_score",  # prokaryotic promoter -10 box (replaces has_kozak_like)
             "hydrophobicity_mean",
@@ -629,7 +629,7 @@ class HybridGeneFilter:
                     "at_skew",
                     "purine_content",
                     "effective_num_codons",
-                    "codon_bias_index",
+                    "codon_entropy",
                     "has_hairpin_near_stop",
                     "hydrophobicity_mean",
                     "hydrophobicity_std",
@@ -852,7 +852,9 @@ class HybridGeneFilter:
         return float(enc_normalized)
 
     @staticmethod
-    def _calculate_cbi(sequence: str) -> float:
+    def _calculate_codon_entropy(sequence: str) -> float:
+        # Shannon entropy of codon distribution, inverted so higher = more biased.
+        # Named "codon_entropy" to distinguish from Karlin-Mrazek CBI (different formula).
         codons = [sequence[i : i + 3] for i in range(0, len(sequence) - 2, 3)]
         valid_codons = [c for c in codons if len(c) == 3 and "N" not in c]
         if len(valid_codons) == 0:
@@ -861,8 +863,8 @@ class HybridGeneFilter:
         frequencies = np.array(list(codon_counts.values())) / len(valid_codons)
         entropy = -np.sum(frequencies * np.log2(frequencies + 1e-10))
         max_entropy = math.log2(61)
-        cbi = 1.0 - (entropy / max_entropy) if max_entropy > 0 else 0.0
-        return float(cbi)
+        score = 1.0 - (entropy / max_entropy) if max_entropy > 0 else 0.0
+        return float(score)
 
     @staticmethod
     def _detect_hairpin_near_stop(sequence: str, window: int = 30) -> float:
@@ -1033,7 +1035,7 @@ class HybridGeneFilter:
             feature_dict["at_skew"] = (a - t) / (a + t) if (a + t) > 0 else 0.0
             feature_dict["purine_content"] = (a + g) / seq_len if seq_len > 0 else 0.0
             feature_dict["effective_num_codons"] = self._calculate_enc(sequence)
-            feature_dict["codon_bias_index"] = self._calculate_cbi(sequence)
+            feature_dict["codon_entropy"] = self._calculate_codon_entropy(sequence)
             feature_dict["has_hairpin_near_stop"] = self._detect_hairpin_near_stop(sequence)
             # -10 box: use genome_start if genome_seq provided, else 0.0
             if genome_seq is not None:

@@ -316,13 +316,13 @@ class TestHybridGeneFilterStaticHelpers:
     def test_calculate_enc_empty_sequence_returns_zero(self):
         assert HybridGeneFilter._calculate_enc("") == 0.0
 
-    def test_calculate_cbi_returns_float_in_unit_interval(self):
-        cbi = HybridGeneFilter._calculate_cbi("ATGAAACCCGGGTAA")
-        assert isinstance(cbi, float)
-        assert 0.0 <= cbi <= 1.0
+    def test_calculate_codon_entropy_returns_float_in_unit_interval(self):
+        score = HybridGeneFilter._calculate_codon_entropy("ATGAAACCCGGGTAA")
+        assert isinstance(score, float)
+        assert 0.0 <= score <= 1.0
 
-    def test_calculate_cbi_empty_sequence_returns_zero(self):
-        assert HybridGeneFilter._calculate_cbi("") == 0.0
+    def test_calculate_codon_entropy_empty_sequence_returns_zero(self):
+        assert HybridGeneFilter._calculate_codon_entropy("") == 0.0
 
     def test_detect_hairpin_returns_zero_or_one(self):
         result = HybridGeneFilter._detect_hairpin_near_stop("ATGAAACCCGGGTAA")

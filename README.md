@@ -317,7 +317,7 @@ Dense(128→64) → Dropout(0.3)
 | `at_skew` | (A-T)/(A+T) — strand usage asymmetry |
 | `purine_content` | (A+G)/length — related to RBS and coding |
 | `effective_num_codons` | ENC statistic: 20 (strong bias) to 61 (no bias) |
-| `codon_bias_index` | CBI: fraction preferred codons |
+| `codon_entropy` | Inverted Shannon entropy of codon distribution — higher means more biased codon usage |
 | `has_hairpin_near_stop` | Stem-loop near stop (transcription termination signal) |
 | `minus10_box_score` | Prokaryotic promoter -10 box (TATAAT) score |
 | `hydrophobicity_mean` | Mean Kyte-Doolittle hydrophobicity of translated protein |

@@ -34,24 +34,23 @@ Each issue has a severity rating, effort estimate, and a concrete fix descriptio
 
 ---
 
-#### A1 — ENC and CBI implementations are scientifically incorrect
+#### A1 — ENC implementation is scientifically incorrect; CBI renamed ✓
 
-**Severity:** CRITICAL  
-**Effort:** S  
-**Files:** `src/ml_models.py` — `_calculate_enc()` (line ~830), `_calculate_cbi()` (line ~860)
+**Severity:** HIGH (was CRITICAL — CBI rename resolved the misrepresentation issue)  
+**Effort:** M  
+**Files:** `src/ml_models.py` — `_calculate_enc()` (line ~830)
 
-**Problem:**  
-`_calculate_enc()` does not compute Wright (1990) Effective Number of Codons. It computes a simple codon diversity ratio (unique codons / 61). ENC should range from 20 (maximum bias) to 61 (no bias) using the F-value formula: `ENC = 2 + 9/F2 + 1/F3 + 5/F4 + 3/F6` where Fk = (sum_j n_j^2 / N^2 - 1/N) / (1 - 1/N) for each degeneracy class.
+**Resolved (2026-09-17):**  
+`_calculate_cbi()` renamed to `_calculate_codon_entropy()` and feature key renamed `codon_bias_index` → `codon_entropy` throughout. The Shannon entropy calculation is a valid de novo feature; it was only the name that was wrong. CAI (Sharp & Li 1987) was evaluated but rejected — CAI requires a reference set of known highly-expressed genes, creating circularity in de novo prediction. No retraining needed (pure rename, same calculation, same feature position in model).
 
-`_calculate_cbi()` computes Shannon entropy over codon counts. True Codon Bias Index (Karlin & Mrazek, 1996) is the mean ratio of observed vs. maximum-likelihood codon frequency across synonymous codons.
-
-Both are used as HybridGeneFilter features. Current feature values are not wrong per se (they correlate with the true metrics) but they misrepresent what's being measured — a peer-review showstopper.
+**Remaining problem:**  
+`_calculate_enc()` does not compute Wright (1990) Effective Number of Codons. It computes a simple codon diversity ratio (unique codons / 61). ENC' (Novembre 2002, *Genetics* 163:2097) is preferred over Wright ENC for this project because it corrects for GC background — critical given training genomes span 30–70% GC. ENC' works fully de novo (no reference set needed).
 
 **Fix:**  
-1. Implement Wright (1990) ENC exactly. Group codons by degeneracy class (2-fold, 3-fold, 4-fold, 6-fold), compute F for each class, apply formula. Return value in [20, 61].
-2. Implement CAI (Sharp & Li, 1987) instead of CBI — simpler, better documented, standard tool. Precompute RSCU table from a reference set (first 500 predicted genes), then score each gene as geometric mean of its codon RSCUs.
-3. Update feature name strings and README Section 5 to reflect correct metrics.
-4. Re-run benchmark after fix (expect small change since correlation with old values is high).
+1. Implement ENC' (Novembre 2002): compute per-degeneracy-class homozygosity F adjusted for expected GC-based frequencies, apply `ENC' = 2 + 9/F2' + 1/F3' + 5/F4' + 3/F6'`.
+2. Update feature name `effective_num_codons` → `enc_prime` and README.
+3. Re-run benchmark after fix (no retraining required if feature name in model artifact is updated).
+4. **Requires retraining HybridGeneFilter** if ENC' values differ substantially from the current ratio (they will — current range is [0,1], ENC' range is [20,61]).
 
 ---
 
