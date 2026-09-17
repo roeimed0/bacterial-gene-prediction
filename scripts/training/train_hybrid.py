@@ -39,11 +39,12 @@ from sklearn.metrics import f1_score, precision_score, recall_score
 from src.config import (
     FIRST_FILTER_THRESHOLD,
     GENOME_CATALOG,
+    LGB_TRAINING_THRESHOLD,
     SECOND_FILTER_THRESHOLD,
     START_SELECTION_WEIGHTS,
 )
 from src.data_management import get_data_dir, get_gff_path, load_genome_sequence
-from src.ml_models import HybridGeneFilter, OrfGroupClassifier
+from src.ml_models import HybridGeneFilter, OrfGroupClassifier, StartSelectionClassifier
 from src.traditional_methods import (
     build_all_scoring_models,
     create_intergenic_set,
@@ -78,8 +79,17 @@ parser.add_argument(
 parser.add_argument(
     "--no-compare", action="store_true", help="Skip comparison against production model at the end"
 )
+parser.add_argument(
+    "--start-selector",
+    default=None,
+    help="StartSelectionClassifier path. If given, uses ML start selection instead of rule-based.",
+)
 args = parser.parse_args()
 rng = np.random.default_rng(args.seed)
+
+# Override save path when using ML start selector to avoid overwriting v2
+if args.start_selector:
+    NEW_MODEL = MODELS_DIR / "hybrid_best_model_v6.pkl"
 
 # ── Load LGB model ────────────────────────────────────────────────────────────
 
@@ -87,6 +97,14 @@ lgb_clf = OrfGroupClassifier()
 lgb_path = args.lgb_path or str(MODELS_DIR / "orf_classifier_lgb.pkl")
 print(f"LGB model: {lgb_path}")
 lgb_clf.load(lgb_path)
+
+# ── Load start selector (optional) ───────────────────────────────────────────
+
+ss_clf = None
+if args.start_selector:
+    ss_clf = StartSelectionClassifier()
+    ss_clf.load(args.start_selector)
+    print(f"Start selector: {args.start_selector} (ML mode)")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -124,9 +142,12 @@ def run_pipeline(accession: str):
             groups=groups,
             genome_id=accession,
             weights=START_SELECTION_WEIGHTS,
-            threshold=0.07,
+            threshold=LGB_TRAINING_THRESHOLD,
         )
-        top = select_best_starts(groups, START_SELECTION_WEIGHTS)
+        if ss_clf is not None:
+            top = ss_clf.select_best_starts(groups, seq, models, START_SELECTION_WEIGHTS)
+        else:
+            top = select_best_starts(groups, START_SELECTION_WEIGHTS)
         candidates = filter_candidates(top, **SECOND_FILTER_THRESHOLD)
 
     if hasattr(candidates, "to_dict"):

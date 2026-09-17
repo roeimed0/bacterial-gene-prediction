@@ -73,7 +73,7 @@ Fusion: Concat([128, 128]) → FC(256→128) → BN → ReLU → Dropout
 | Codon identity | `start_codon_type` (ATG=0, GTG=1, TTG=2), `stop_codon_type` |
 | RBS proxy | `has_kozak_like` |
 | Sequence composition | `gc_content`, `gc_skew`, `at_skew`, `purine_content` |
-| Codon usage | `effective_num_codons`, `codon_bias_index` |
+| Codon usage | `effective_num_codons`, `codon_entropy` |
 | Structural signal | `has_hairpin_near_stop` |
 | Amino acid properties | `hydrophobicity_mean`, `hydrophobicity_std`, `charge_mean`, `aromatic_fraction`, `small_fraction`, `polar_fraction` |
 

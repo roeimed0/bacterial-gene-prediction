@@ -149,7 +149,7 @@ def build_splits(available_by_group: dict, val_per_group: int, test_per_group: i
 # ── Feature collection ────────────────────────────────────────────────────────
 
 
-def collect_features(accessions: list, clf: OrfGroupClassifier, desc: str):
+def collect_features(accessions: list, clf: OrfGroupClassifier, desc: str, gc_floor: float = 0.55):
     """Run pipeline on each genome, extract group features + labels."""
     all_X, all_y = [], []
     for i, acc in enumerate(accessions, 1):
@@ -167,7 +167,11 @@ def collect_features(accessions: list, clf: OrfGroupClassifier, desc: str):
 
         y = label_groups(groups, ref_set)
         feat_df = clf.extract_group_features(
-            groups, acc, weights=START_SELECTION_WEIGHTS, genome_gc=genome_gc
+            groups,
+            acc,
+            weights=START_SELECTION_WEIGHTS,
+            genome_gc=genome_gc,
+            gc_floor=gc_floor,
         )
         feat_df = feat_df.drop(columns=["group_id"], errors="ignore")
 
@@ -210,6 +214,12 @@ def main() -> None:
         "--seed", type=int, default=None, help="Random seed (default: system entropy)"
     )
     parser.add_argument("--no-val-compare", action="store_true")
+    parser.add_argument(
+        "--gc-floor",
+        type=float,
+        default=0.55,
+        help="Floor for genome_gc_high feature: max(0, gc - floor). Default 0.55.",
+    )
     args = parser.parse_args()
     seed = args.seed
 
@@ -245,7 +255,7 @@ def main() -> None:
 
     # ── Collect training features ─────────────────────────────────────────────
     print(f"\n{SEP}\nCOLLECTING TRAINING FEATURES ({len(train_accs)} genomes)\n{SEP}")
-    X_train, y_train = collect_features(train_accs, clf, "train")
+    X_train, y_train = collect_features(train_accs, clf, "train", gc_floor=args.gc_floor)
     if X_train is None:
         print("ERROR: no training data collected. Aborting.")
         sys.exit(1)
@@ -256,13 +266,13 @@ def main() -> None:
 
     # ── Collect val features (early stopping + threshold calibration) ─────────
     print(f"\n{SEP}\nCOLLECTING VAL FEATURES ({len(val_accs)} genomes)\n{SEP}")
-    X_val, y_val = collect_features(val_accs, clf, "val")
+    X_val, y_val = collect_features(val_accs, clf, "val", gc_floor=args.gc_floor)
     if X_val is None:
         print("WARNING: no val data — training without early stopping")
 
     # ── Collect test features (held out — final comparison only) ─────────────
     print(f"\n{SEP}\nCOLLECTING TEST FEATURES ({len(test_accs)} genomes)\n{SEP}")
-    X_test, y_test = collect_features(test_accs, clf, "test")
+    X_test, y_test = collect_features(test_accs, clf, "test", gc_floor=args.gc_floor)
     if X_test is None:
         print("WARNING: no test data — final comparison will be skipped")
 
@@ -329,8 +339,11 @@ def main() -> None:
             print("  (No existing model found — skipping comparison)")
 
     # ── Save ──────────────────────────────────────────────────────────────────
-    out_path = MODELS_DIR / "orf_classifier_lgb_v2.pkl"
-    print(f"\n{SEP}\nSAVING\n{SEP}")
+    floor_tag = f"gcf{str(args.gc_floor).replace('.','')}" if args.gc_floor != 0.55 else ""
+    out_name = f"orf_classifier_lgb_v2{'_'+floor_tag if floor_tag else ''}.pkl"
+    out_path = MODELS_DIR / out_name
+    clf.gc_floor = args.gc_floor
+    print(f"\n{SEP}\nSAVING  (gc_floor={args.gc_floor})\n{SEP}")
     clf.save(str(out_path))
     print(f"\n  Calibrated threshold: {best_threshold:.3f}")
     print(f"  To promote: rename {out_path.name} -> orf_classifier_lgb.pkl")

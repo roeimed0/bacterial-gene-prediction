@@ -13,6 +13,14 @@ import torch.nn.functional as F
 from Bio.Seq import Seq
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
 
+from .config import (
+    HF_EARLY_STOP_PATIENCE,
+    HF_MAX_EPOCHS,
+    HF_MAX_SEQ_LEN,
+    HF_TRAIN_BATCH_SIZE,
+    LGB_GC_FLOOR_DEFAULT,
+)
+
 logger = logging.getLogger(__name__)
 
 __all__ = ["OrfGroupClassifier", "HybridGeneFilter", "StartSelectionClassifier"]
@@ -39,6 +47,7 @@ class OrfGroupClassifier:
         """
         self.model: Any = None
         self.feature_names: Optional[List[str]] = None
+        self.gc_floor: float = LGB_GC_FLOOR_DEFAULT
 
     def load(self, model_path: str = "../models/orf_classifier_lgb.pkl"):
         """
@@ -67,6 +76,13 @@ class OrfGroupClassifier:
             logger.warning("No feature_names file found for %s", model_path.name)
             self.feature_names = None
 
+        # Load gc_floor metadata if available (saved with new models)
+        meta_path = model_path.parent / f"{model_path.stem}_meta.pkl"
+        if meta_path.exists():
+            meta = joblib.load(str(meta_path))
+            self.gc_floor = float(meta.get("gc_floor", LGB_GC_FLOOR_DEFAULT))
+        # else: keep default from LGB_GC_FLOOR_DEFAULT
+
     def _entropy_from_probs(self, arr, base=2):
         """
         Compute entropy (bits by default) for a 1D array of non-negative numbers.
@@ -88,6 +104,7 @@ class OrfGroupClassifier:
         genome_id: str,
         weights: Dict = None,
         genome_gc: float = 0.5,
+        gc_floor: float = LGB_GC_FLOOR_DEFAULT,
     ) -> pd.DataFrame:
         """
         Extract features from ORF groups for prediction.
@@ -267,7 +284,7 @@ class OrfGroupClassifier:
         agg["strand_minus_frac"] = 1.0 - agg["strand_plus_frac"]
         agg["rbs_dominance"] = agg["rbs_max"] / agg["rbs_mean"].clip(lower=1e-9)
         agg["length_ratio_max_min"] = agg["_lmx"] / agg["_lmn"].clip(lower=1.0)
-        agg["genome_gc_high"] = float(max(0.0, genome_gc - 0.55))
+        agg["genome_gc_high"] = float(max(0.0, genome_gc - gc_floor))
 
         agg = agg.drop(columns=["_sq_mean", "_lmx", "_lmn"])
 
@@ -280,6 +297,7 @@ class OrfGroupClassifier:
         weights: Dict = None,
         threshold: float = 0.07,
         genome_gc: float = 0.5,
+        gc_floor: float = 0.55,
     ) -> tuple:
         """
         Predict which groups contain real genes.
@@ -298,7 +316,9 @@ class OrfGroupClassifier:
             - group_ids: List of group IDs in same order
         """
         # Extract features
-        df = self.extract_group_features(groups, genome_id, weights, genome_gc=genome_gc)
+        df = self.extract_group_features(
+            groups, genome_id, weights, genome_gc=genome_gc, gc_floor=gc_floor
+        )
 
         # Resolve feature column order.
         # Models trained on numpy arrays get generic names ("Column_0" …).
@@ -415,8 +435,11 @@ class OrfGroupClassifier:
         p = Path(model_path)
         p.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(self.model, str(p))
-        feature_path = p.parent / "feature_names.pkl"
+        stem = p.stem
+        feature_path = p.parent / f"{stem}_feature_names.pkl"
         joblib.dump(self.feature_names, str(feature_path))
+        meta_path = p.parent / f"{stem}_meta.pkl"
+        joblib.dump({"gc_floor": self.gc_floor}, str(meta_path))
         logger.info("Saved model -> %s", p)
         logger.info("Saved features -> %s", feature_path)
 
@@ -427,6 +450,7 @@ class OrfGroupClassifier:
         weights: Dict = None,
         threshold: float = 0.07,
         genome_gc: float = 0.5,
+        gc_floor: float = None,
     ) -> Dict[str, List[Dict]]:
         """
         Filter groups, keeping only those predicted to contain real genes.
@@ -435,7 +459,12 @@ class OrfGroupClassifier:
         """
         # Get predictions
         predictions, probabilities, group_ids = self.predict_groups(
-            groups, genome_id, weights, threshold, genome_gc=genome_gc
+            groups,
+            genome_id,
+            weights,
+            threshold,
+            genome_gc=genome_gc,
+            gc_floor=gc_floor if gc_floor is not None else self.gc_floor,
         )
 
         # Create set of kept group IDs (those above threshold)
@@ -552,7 +581,7 @@ class HybridGeneFilter:
             "at_skew",
             "purine_content",
             "effective_num_codons",
-            "codon_bias_index",
+            "codon_entropy",
             "has_hairpin_near_stop",
             "minus10_box_score",  # prokaryotic promoter -10 box (replaces has_kozak_like)
             "hydrophobicity_mean",
@@ -572,6 +601,7 @@ class HybridGeneFilter:
         model = HybridGenePredictor(num_traditional_features=data["num_traditional_features"])
         model.load_state_dict(data["model_state_dict"])
         model.eval()
+        model.to(self.device)  # move to GPU immediately after loading
 
         self.model = model
         self.threshold = data["threshold"]
@@ -599,7 +629,7 @@ class HybridGeneFilter:
                     "at_skew",
                     "purine_content",
                     "effective_num_codons",
-                    "codon_bias_index",
+                    "codon_entropy",
                     "has_hairpin_near_stop",
                     "hydrophobicity_mean",
                     "hydrophobicity_std",
@@ -617,14 +647,14 @@ class HybridGeneFilter:
         labels: np.ndarray,
         val_candidates: Optional[List[Dict]] = None,
         val_labels: Optional[np.ndarray] = None,
-        epochs: int = 50,
-        batch_size: int = 64,
+        epochs: int = HF_MAX_EPOCHS,
+        batch_size: int = HF_TRAIN_BATCH_SIZE,
         focal_loss: bool = False,
     ) -> None:
         """Train HybridGenePredictor from candidate dicts and binary labels.
 
         Handles class imbalance via pos_weight (BCEWithLogitsLoss) or focal
-        loss.  Runs early stopping on validation F1 with patience=10.
+        loss.  Runs early stopping on validation F1 with patience=HF_EARLY_STOP_PATIENCE.
         """
         from sklearn.metrics import f1_score as _f1
 
@@ -639,7 +669,9 @@ class HybridGeneFilter:
         # instead index into the CPU tensor and move each batch to device.
         df_train = self.extract_features(candidates)
         X_feat = torch.tensor(df_train[self.feature_names].values, dtype=torch.float32)
-        max_len = min(max((len(c.get("sequence", "")) for c in candidates), default=300), 1500)
+        max_len = min(
+            max((len(c.get("sequence", "")) for c in candidates), default=300), HF_MAX_SEQ_LEN
+        )
         X_seq = self._one_hot_encode_dna(candidates, max_len=max_len)  # stays on CPU
         y = torch.tensor(labels, dtype=torch.float32)
 
@@ -671,7 +703,7 @@ class HybridGeneFilter:
 
         n = len(candidates)
         best_val_f1 = -1.0
-        patience_left = 10
+        patience_left = HF_EARLY_STOP_PATIENCE
         best_state = None
         num_batches_per_epoch = max((n + batch_size - 1) // batch_size, 1)
 
@@ -738,7 +770,7 @@ class HybridGeneFilter:
                 if val_f1 > best_val_f1:
                     best_val_f1 = val_f1
                     best_state = {k: v.cpu().clone() for k, v in self.model.state_dict().items()}
-                    patience_left = 10
+                    patience_left = HF_EARLY_STOP_PATIENCE
                 else:
                     patience_left -= 1
 
@@ -820,7 +852,9 @@ class HybridGeneFilter:
         return float(enc_normalized)
 
     @staticmethod
-    def _calculate_cbi(sequence: str) -> float:
+    def _calculate_codon_entropy(sequence: str) -> float:
+        # Shannon entropy of codon distribution, inverted so higher = more biased.
+        # Named "codon_entropy" to distinguish from Karlin-Mrazek CBI (different formula).
         codons = [sequence[i : i + 3] for i in range(0, len(sequence) - 2, 3)]
         valid_codons = [c for c in codons if len(c) == 3 and "N" not in c]
         if len(valid_codons) == 0:
@@ -829,8 +863,8 @@ class HybridGeneFilter:
         frequencies = np.array(list(codon_counts.values())) / len(valid_codons)
         entropy = -np.sum(frequencies * np.log2(frequencies + 1e-10))
         max_entropy = math.log2(61)
-        cbi = 1.0 - (entropy / max_entropy) if max_entropy > 0 else 0.0
-        return float(cbi)
+        score = 1.0 - (entropy / max_entropy) if max_entropy > 0 else 0.0
+        return float(score)
 
     @staticmethod
     def _detect_hairpin_near_stop(sequence: str, window: int = 30) -> float:
@@ -1001,7 +1035,7 @@ class HybridGeneFilter:
             feature_dict["at_skew"] = (a - t) / (a + t) if (a + t) > 0 else 0.0
             feature_dict["purine_content"] = (a + g) / seq_len if seq_len > 0 else 0.0
             feature_dict["effective_num_codons"] = self._calculate_enc(sequence)
-            feature_dict["codon_bias_index"] = self._calculate_cbi(sequence)
+            feature_dict["codon_entropy"] = self._calculate_codon_entropy(sequence)
             feature_dict["has_hairpin_near_stop"] = self._detect_hairpin_near_stop(sequence)
             # -10 box: use genome_start if genome_seq provided, else 0.0
             if genome_seq is not None:
@@ -1021,6 +1055,19 @@ class HybridGeneFilter:
                     "small_fraction": aa_props["small_frac"],
                     "polar_fraction": aa_props["polar_frac"],
                 }
+            )
+            # Linguistic complexity: 4-gram diversity ratio. FPs (random high-GC ORFs)
+            # tend to be repetitive; real genes need diverse composition.
+            if seq_len >= 4:
+                k = min(4, seq_len // 2)
+                n_kmers = len({sequence[i : i + k] for i in range(seq_len - k + 1)})
+                feature_dict["seq_complexity"] = n_kmers / min(4**k, seq_len - k + 1)
+            else:
+                feature_dict["seq_complexity"] = 0.0
+            # Interaction: combined_score × length_score — specifically penalises
+            # short, low-scoring ORFs which dominate the FP population.
+            feature_dict["cs_x_len"] = (
+                feature_dict["combined_score"] * feature_dict["length_score_norm"]
             )
             rows.append(feature_dict)
         return pd.DataFrame(rows).fillna(0.0)
@@ -1046,7 +1093,7 @@ class HybridGeneFilter:
         candidates: List[Dict],
         genome_id: str = "unknown",
         threshold: float = None,
-        batch_size: int = 64,  # NEW PARAMETER
+        batch_size: int = 512,  # larger default: fewer GPU round-trips
     ) -> Tuple[np.ndarray, np.ndarray, List[str]]:
         """
         Predict which candidates are real genes using BATCHED processing.
@@ -1073,7 +1120,9 @@ class HybridGeneFilter:
         X_features = torch.tensor(df[self.feature_names].values, dtype=torch.float32)
 
         # Cap at 1500 bp — the training distribution; longer sequences were never seen
-        max_seq_len = min(max((len(c.get("sequence", "")) for c in candidates), default=1000), 1500)
+        max_seq_len = min(
+            max((len(c.get("sequence", "")) for c in candidates), default=1000), HF_MAX_SEQ_LEN
+        )
 
         # Process in batches to avoid OOM
         all_probs = []
@@ -1107,11 +1156,12 @@ class HybridGeneFilter:
                 probs = torch.sigmoid(outputs).cpu().numpy()
 
                 all_probs.append(probs)
-
-                # Clear cache
                 del X_sequences_batch, X_features_batch, outputs
-                if self.device == "cuda":
-                    torch.cuda.empty_cache()
+                # empty_cache per-batch forces CPU-GPU sync and kills throughput;
+                # only call at the end of all batches if on CUDA.
+
+        if self.device == "cuda":
+            torch.cuda.empty_cache()
 
         # Concatenate all batch results
         probs = np.concatenate(all_probs)
@@ -1226,6 +1276,29 @@ class StartSelectionClassifier:
         self.flip_t: float = 0.80
         self.calibrated: bool = False
         self.temperature_T: Optional[float] = None
+        self._init_anti_sd_table()
+
+    def _init_anti_sd_table(self) -> None:
+        n = len(self._ANTI_SD)
+        # score_table[window_pos, mrna_base_int]: 1.0 / 0.5 / 0.0
+        # window position p pairs with ANTI_SD[n-1-p] (antiparallel)
+        score_table = np.zeros((n, 5), dtype=np.float32)
+        for p in range(n):
+            ab = self._ANTI_SD[n - 1 - p]
+            for b_idx, b in enumerate("AUGC"):
+                if self._PAIRS.get(ab) == b:
+                    score_table[p, b_idx] = 1.0
+                elif (ab, b) in self._WOBBLE or (b, ab) in self._WOBBLE:
+                    score_table[p, b_idx] = 0.5
+        self._anti_sd_score_table = score_table
+        # A=0, U/T=1, G=2, C=3, other=4
+        bmap = np.full(256, 4, dtype=np.int8)
+        bmap[ord("A")] = bmap[ord("a")] = 0
+        bmap[ord("U")] = bmap[ord("u")] = 1
+        bmap[ord("T")] = bmap[ord("t")] = 1
+        bmap[ord("G")] = bmap[ord("g")] = 2
+        bmap[ord("C")] = bmap[ord("c")] = 3
+        self._anti_sd_base_map = bmap
 
     # ── Persistence ───────────────────────────────────────────────────────────
 
@@ -1304,58 +1377,173 @@ class StartSelectionClassifier:
         len_mean, len_std = self._build_len_prior(groups)
         gc_pct = (genome_seq.count("G") + genome_seq.count("C")) / max(len(genome_seq), 1)
 
-        selected = []
-        for i, (gid, grp_df) in enumerate(groups.items()):
+        # ── Pass 1: baseline scoring — split singletons from contested ────────
+        singleton_rows: List = []
+        contested: List = []  # (grp_df_with_base, keep_idx, alt_idx, gap)
+
+        for gid, grp_df in groups.items():
             if isinstance(grp_df, list):
                 grp_df = pd.DataFrame(grp_df)
             if len(grp_df) == 0:
                 continue
-
             grp_df = grp_df.copy()
-            grp_df["_base"] = grp_df.apply(lambda r: self._baseline_score(r, weights), axis=1)
+            if "start_select_score" in grp_df.columns:
+                grp_df["_base"] = grp_df["start_select_score"]
+            else:
+                grp_df["_base"] = grp_df.apply(lambda r: self._baseline_score(r, weights), axis=1)
             sorted_idx = grp_df["_base"].sort_values(ascending=False).index
-            t1 = grp_df.loc[sorted_idx[0]]
+            t1_idx = sorted_idx[0]
             gap = (
-                float(t1["_base"]) - float(grp_df.loc[sorted_idx[1], "_base"])
+                float(grp_df.loc[t1_idx, "_base"]) - float(grp_df.loc[sorted_idx[1], "_base"])
                 if len(sorted_idx) > 1
                 else 999.0
             )
-
-            winner_idx = sorted_idx[0]
-
             if gap < self.contest_t and len(sorted_idx) >= 2:
-                t2 = grp_df.loc[sorted_idx[1]]
-                fv = self._compute_features(
-                    t1,
-                    t2,
-                    grp_df,
-                    genome_seq,
-                    scoring_models,
-                    rbs_pwm,
-                    ctx_pwm,
-                    len_mean,
-                    len_std,
-                    gc_pct,
-                    gap,
+                contested.append((grp_df, t1_idx, sorted_idx[1], gap))
+            else:
+                singleton_rows.append(grp_df.loc[t1_idx])
+
+        # ── Pre-compute: batch per-ORF features for all contested pairs ───────
+        # Each feature is computed once per ORF (no redundant double-calls).
+        # _anti_sd_scores_batch and _dist_any_stop_batch use numpy internally.
+        if contested:
+            t1_rows = [c[0].loc[c[1]] for c in contested]
+            t2_rows = [c[0].loc[c[2]] for c in contested]
+            t1_dicts = [r.to_dict() for r in t1_rows]
+            t2_dicts = [r.to_dict() for r in t2_rows]
+
+            up1 = [self._get_upstream(genome_seq, d, 25) for d in t1_dicts]
+            up2 = [self._get_upstream(genome_seq, d, 25) for d in t2_dicts]
+
+            f4_1 = [self._f4_spacer(u) for u in up1]
+            f4_2 = [self._f4_spacer(u) for u in up2]
+            f5_1 = [self._f5_gc_bias(u) for u in up1]
+            f5_2 = [self._f5_gc_bias(u) for u in up2]
+            imm_1 = [self._upstream_imm(u, scoring_models) for u in up1]
+            imm_2 = [self._upstream_imm(u, scoring_models) for u in up2]
+            rbs_1 = [self._score_pwm(u, rbs_pwm) for u in up1]
+            rbs_2 = [self._score_pwm(u, rbs_pwm) for u in up2]
+            ctx_1 = [self._score_ctx_pwm(genome_seq, d, ctx_pwm) for d in t1_dicts]
+            ctx_2 = [self._score_ctx_pwm(genome_seq, d, ctx_pwm) for d in t2_dicts]
+            ps_1 = [
+                self._post_start_score(str(r.get("sequence", "")), scoring_models) for r in t1_rows
+            ]
+            ps_2 = [
+                self._post_start_score(str(r.get("sequence", "")), scoring_models) for r in t2_rows
+            ]
+            ext_c = [
+                self._ext_codon_score(d1, d2, genome_seq, scoring_models)
+                for d1, d2 in zip(t1_dicts, t2_dicts)
+            ]
+            asd_1 = self._anti_sd_scores_batch(up1)
+            asd_2 = self._anti_sd_scores_batch(up2)
+            stop_1 = self._dist_any_stop_batch(genome_seq, t1_dicts)
+            stop_2 = self._dist_any_stop_batch(genome_seq, t2_dicts)
+
+            # ── Assemble feature vectors ──────────────────────────────────────
+            contested_info = []
+            for i, (grp_df, keep_idx, alt_idx, gap) in enumerate(contested):
+                t1 = t1_rows[i]
+                t2 = t2_rows[i]
+                lengths = grp_df["length"].values
+                scores = grp_df["_base"]
+                s_range = float(scores.max() - scores.min())
+                rbs_v = grp_df.get(
+                    "rbs_score_norm",
+                    pd.Series(np.zeros(len(grp_df)), index=grp_df.index),
+                ).values
+                t1l = float(t1.get("length", 0))
+                t2l = float(t2.get("length", 0))
+                t1z = (t1l - len_mean) / max(len_std, 1.0)
+                t2z = (t2l - len_mean) / max(len_std, 1.0)
+                asd1 = float(asd_1[i])
+                asd2 = float(asd_2[i])
+                st1 = float(stop_1[i])
+                st2 = float(stop_2[i])
+                c1 = float(ctx_1[i])
+                c2 = float(ctx_2[i])
+                p1 = float(ps_1[i])
+                p2 = float(ps_2[i])
+                fv = {
+                    "d_baseline": gap,
+                    "d_rbs": float(t1.get("rbs_score_norm", 0))
+                    - float(t2.get("rbs_score_norm", 0)),
+                    "d_start": float(t1.get("start_score_norm", 0))
+                    - float(t2.get("start_score_norm", 0)),
+                    "d_codon": float(t1.get("codon_score_norm", 0))
+                    - float(t2.get("codon_score_norm", 0)),
+                    "d_imm": float(t1.get("imm_score_norm", 0))
+                    - float(t2.get("imm_score_norm", 0)),
+                    "d_length": t1l - t2l,
+                    "d_f4": f4_1[i] - f4_2[i],
+                    "d_f5": f5_1[i] - f5_2[i],
+                    "d_up_imm": imm_1[i] - imm_2[i],
+                    "d_genome_rbs": rbs_1[i] - rbs_2[i],
+                    "d_anti_sd": asd1 - asd2,
+                    "anti_sd_top1": asd1,
+                    "anti_sd_top2": asd2,
+                    "ext_codon": ext_c[i],
+                    "d_any_stop_dist": st1 - st2,
+                    "any_stop_top1": st1,
+                    "any_stop_top2": st2,
+                    "d_len_zscore": t1z - t2z,
+                    "len_zscore_top1": t1z,
+                    "len_zscore_top2": t2z,
+                    "d_post_start": p1 - p2,
+                    "post_start_top1": p1,
+                    "post_start_top2": p2,
+                    "d_ctx_pwm": c1 - c2,
+                    "ctx_pwm_top1": c1,
+                    "ctx_pwm_top2": c2,
+                    "gap": gap,
+                    "score_range": s_range,
+                    "rel_gap": gap / max(s_range, 1e-9),
+                    "n_near_ties": int((scores >= float(t1["_base"]) - 0.5).sum()) - 1,
+                    "n_orfs": len(grp_df),
+                    "top1_len_rank": float((lengths < t1l).sum()) / max(len(lengths) - 1, 1),
+                    "group_len_cv": float(np.std(lengths) / max(np.mean(lengths), 1)),
+                    "frac_longer": float((lengths > t1l).sum() / max(len(lengths), 1)),
+                    "grp_rbs_mean": float(rbs_v.mean()),
+                    "grp_rbs_range": float(rbs_v.max() - rbs_v.min()),
+                    "frac_atg": float(
+                        (
+                            grp_df.get("start_codon", pd.Series(["ATG"] * len(grp_df))) == "ATG"
+                        ).mean()
+                    ),
+                    "top1_rbs_rank": float((rbs_v < float(t1.get("rbs_score_norm", 0))).sum())
+                    / max(len(rbs_v) - 1, 1),
+                    "gc_pct": gc_pct,
+                    "both_atg": int(
+                        t1.get("start_codon", "") == "ATG" and t2.get("start_codon", "") == "ATG"
+                    ),
+                }
+                contested_info.append((grp_df, keep_idx, alt_idx, fv))
+
+            # ── Pass 2: batch predict_proba ───────────────────────────────────
+            feat_matrix = np.array(
+                [[ci[3].get(c, 0.0) for c in self.features] for ci in contested_info]
+            )
+            X_batch = pd.DataFrame(self.scaler.transform(feat_matrix), columns=self.features)
+            probs_keep = self.clf.predict_proba(X_batch)[:, 1]
+
+            if self.temperature_T is not None:
+                from scipy.special import expit
+                from scipy.special import logit as sp_logit
+
+                probs_keep = expit(
+                    sp_logit(np.clip(probs_keep, 1e-7, 1 - 1e-7)) / self.temperature_T
                 )
-                X = pd.DataFrame(
-                    self.scaler.transform(np.array([[fv.get(c, 0.0) for c in self.features]])),
-                    columns=self.features,
-                )
-                prob_keep = float(self.clf.predict_proba(X)[0, 1])
-                if self.temperature_T is not None:
-                    from scipy.special import expit
-                    from scipy.special import logit as sp_logit
 
-                    prob_keep = float(
-                        expit(sp_logit(np.clip(prob_keep, 1e-7, 1 - 1e-7)) / self.temperature_T)
-                    )
-                if prob_keep < (1.0 - self.flip_t):
-                    winner_idx = sorted_idx[1]
+            flip_threshold = 1.0 - self.flip_t
+            for (grp_df, keep_idx, alt_idx, _), prob_keep in zip(contested_info, probs_keep):
+                winner_idx = alt_idx if prob_keep < flip_threshold else keep_idx
+                singleton_rows.append(grp_df.loc[winner_idx])
 
-            selected.append(grp_df.loc[winner_idx])
-
-        return pd.DataFrame(selected).reset_index(drop=True) if selected else pd.DataFrame()
+        return (
+            pd.DataFrame(singleton_rows).reset_index(drop=True)
+            if singleton_rows
+            else pd.DataFrame()
+        )
 
     # ── Private: per-genome context builders ─────────────────────────────────
 
@@ -1578,72 +1766,94 @@ class StartSelectionClassifier:
             upstream, models["coding_imm"], models["noncoding_imm"], models["max_order"]
         )
 
-    def _compute_features(
-        self, t1, t2, grp_df, seq, models, rbs_pwm, ctx_pwm, len_mean, len_std, gc_pct, gap
-    ) -> dict:
-        t1d = t1.to_dict()
-        t2d = t2.to_dict()
-        up1 = self._get_upstream(seq, t1d, 25)
-        up2 = self._get_upstream(seq, t2d, 25)
-        lengths = grp_df["length"].values
-        scores = grp_df["_base"]
-        s_range = float(scores.max() - scores.min())
-        rbs_v = grp_df.get(
-            "rbs_score_norm", pd.Series(np.zeros(len(grp_df)), index=grp_df.index)
-        ).values
-        t1l = float(t1.get("length", 0))
-        t2l = float(t2.get("length", 0))
-        t1z = (t1l - len_mean) / max(len_std, 1.0)
-        t2z = (t2l - len_mean) / max(len_std, 1.0)
-        t1s = t1.get("sequence", "")
-        t2s = t2.get("sequence", "")
+    def _anti_sd_scores_batch(self, upstreams: List[str]) -> np.ndarray:
+        """Vectorized anti-SD scoring: one numpy pass over all upstream sequences."""
+        N = len(upstreams)
+        if N == 0:
+            return np.zeros(0, dtype=np.float32)
+        n_anti = len(self._ANTI_SD)
+        score_table = self._anti_sd_score_table  # (n_anti, 5)
+        base_map = self._anti_sd_base_map  # (256,)
+        seq_lens = np.array([len(u) for u in upstreams], dtype=np.int32)
+        max_len = int(seq_lens.max())
+        if max_len < n_anti:
+            return np.zeros(N, dtype=np.float32)
+        # Build integer array: (N, max_len), 4=unknown/pad
+        arr = np.full((N, max_len), 4, dtype=np.int8)
+        for k, u in enumerate(upstreams):
+            mapped = base_map[np.frombuffer(u.encode("ascii"), dtype=np.uint8)]
+            arr[k, : len(mapped)] = mapped
+        best = np.zeros(N, dtype=np.float32)
+        p_idx = np.arange(n_anti, dtype=np.int32)
+        for L in np.unique(seq_lens):
+            mask = seq_lens == L
+            if L < n_anti:
+                continue
+            i_lo = max(0, L - n_anti - 14)
+            i_hi = L - n_anti - 4
+            if i_hi < i_lo:
+                continue
+            sub = arr[mask]  # (n_sub, max_len)
+            sub_best = np.zeros(int(mask.sum()), dtype=np.float32)
+            for i in range(i_lo, i_hi + 1):
+                win = sub[:, i : i + n_anti].astype(np.int32)  # (n_sub, n_anti)
+                ws = score_table[p_idx[np.newaxis, :], win]  # (n_sub, n_anti)
+                np.maximum(sub_best, ws.sum(axis=1) / n_anti, out=sub_best)
+            best[mask] = sub_best
+        return best
 
-        return {
-            "d_baseline": gap,
-            "d_rbs": float(t1.get("rbs_score_norm", 0)) - float(t2.get("rbs_score_norm", 0)),
-            "d_start": float(t1.get("start_score_norm", 0)) - float(t2.get("start_score_norm", 0)),
-            "d_codon": float(t1.get("codon_score_norm", 0)) - float(t2.get("codon_score_norm", 0)),
-            "d_imm": float(t1.get("imm_score_norm", 0)) - float(t2.get("imm_score_norm", 0)),
-            "d_length": t1l - t2l,
-            "d_f4": self._f4_spacer(up1) - self._f4_spacer(up2),
-            "d_f5": self._f5_gc_bias(up1) - self._f5_gc_bias(up2),
-            "d_up_imm": self._upstream_imm(up1, models) - self._upstream_imm(up2, models),
-            "d_genome_rbs": self._score_pwm(up1, rbs_pwm) - self._score_pwm(up2, rbs_pwm),
-            "d_anti_sd": self._anti_sd_score(up1) - self._anti_sd_score(up2),
-            "anti_sd_top1": self._anti_sd_score(up1),
-            "anti_sd_top2": self._anti_sd_score(up2),
-            "ext_codon": self._ext_codon_score(t1d, t2d, seq, models),
-            "d_any_stop_dist": self._dist_any_stop(seq, t1d) - self._dist_any_stop(seq, t2d),
-            "any_stop_top1": self._dist_any_stop(seq, t1d),
-            "any_stop_top2": self._dist_any_stop(seq, t2d),
-            "d_len_zscore": t1z - t2z,
-            "len_zscore_top1": t1z,
-            "len_zscore_top2": t2z,
-            "d_post_start": self._post_start_score(t1s, models)
-            - self._post_start_score(t2s, models),
-            "post_start_top1": self._post_start_score(t1s, models),
-            "post_start_top2": self._post_start_score(t2s, models),
-            "d_ctx_pwm": self._score_ctx_pwm(seq, t1d, ctx_pwm)
-            - self._score_ctx_pwm(seq, t2d, ctx_pwm),
-            "ctx_pwm_top1": self._score_ctx_pwm(seq, t1d, ctx_pwm),
-            "ctx_pwm_top2": self._score_ctx_pwm(seq, t2d, ctx_pwm),
-            "gap": gap,
-            "score_range": s_range,
-            "rel_gap": gap / max(s_range, 1e-9),
-            "n_near_ties": int((scores >= float(t1["_base"]) - 0.5).sum()) - 1,
-            "n_orfs": len(grp_df),
-            "top1_len_rank": float((lengths < t1l).sum()) / max(len(lengths) - 1, 1),
-            "group_len_cv": float(np.std(lengths) / max(np.mean(lengths), 1)),
-            "frac_longer": float((lengths > t1l).sum() / max(len(lengths), 1)),
-            "grp_rbs_mean": float(rbs_v.mean()),
-            "grp_rbs_range": float(rbs_v.max() - rbs_v.min()),
-            "frac_atg": float(
-                (grp_df.get("start_codon", pd.Series(["ATG"] * len(grp_df))) == "ATG").mean()
-            ),
-            "top1_rbs_rank": float((rbs_v < float(t1.get("rbs_score_norm", 0))).sum())
-            / max(len(rbs_v) - 1, 1),
-            "gc_pct": gc_pct,
-            "both_atg": int(
-                t1.get("start_codon", "") == "ATG" and t2.get("start_codon", "") == "ATG"
-            ),
-        }
+    def _dist_any_stop_batch(
+        self, genome_seq: str, orfs: List[dict], max_scan: int = 300
+    ) -> np.ndarray:
+        """Vectorized upstream stop-codon distance for a batch of ORFs."""
+        N = len(orfs)
+        if N == 0:
+            return np.zeros(0, dtype=np.int32)
+        regions: List[str] = []
+        region_lens = np.zeros(N, dtype=np.int32)
+        for k, orf in enumerate(orfs):
+            strand = orf.get("strand", "forward")
+            gs = int(orf.get("genome_start", orf.get("start", 0)))
+            ge = int(orf.get("genome_end", orf.get("end", 0)))
+            if gs > ge:
+                gs, ge = ge, gs
+            if strand == "forward":
+                r = genome_seq[max(0, gs - max_scan - 1) : gs - 1].upper()
+            else:
+                r = (
+                    genome_seq[ge : min(len(genome_seq), ge + max_scan)]
+                    .upper()
+                    .translate(self._RC_TABLE)[::-1]
+                )
+            regions.append(r)
+            region_lens[k] = len(r)
+        results = region_lens.copy()
+        pad = max_scan
+        # Pad all regions into a single byte matrix; 0-pad is safe (0 != ord('T'))
+        arr = np.zeros((N, pad), dtype=np.uint8)
+        for k, r in enumerate(regions):
+            b = np.frombuffer(r.encode("ascii"), dtype=np.uint8)[:pad]
+            arr[k, : len(b)] = b
+        T, A, G = ord("T"), ord("A"), ord("G")
+        for frame in range(3):
+            cs = np.arange(frame, pad - 2, 3)
+            c1 = arr[:, cs]
+            c2 = arr[:, cs + 1]
+            c3 = arr[:, cs + 2]
+            is_stop = (
+                ((c1 == T) & (c2 == A) & (c3 == A))
+                | ((c1 == T) & (c2 == A) & (c3 == G))
+                | ((c1 == T) & (c2 == G) & (c3 == A))
+            )
+            valid = cs[np.newaxis, :] < (region_lens[:, np.newaxis] - 2)
+            is_stop &= valid
+            has_stop = is_stop.any(axis=1)
+            if not has_stop.any():
+                continue
+            # Find LAST stop (largest j) = closest to ORF start = minimum distance.
+            # (cs + 1) * is_stop: gives cs+1 at stop positions, 0 elsewhere; argmax
+            # returns the index of the maximum cs value = last stop position.
+            last_j = ((cs[np.newaxis, :] + 1) * is_stop).argmax(axis=1)
+            dist = region_lens - cs[last_j]
+            results = np.where(has_stop, np.minimum(results, dist), results)
+        return results

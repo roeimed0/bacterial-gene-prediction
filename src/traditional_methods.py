@@ -19,7 +19,7 @@ import math
 import time
 from collections import Counter, defaultdict
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import numpy as np
 import pandas as pd
@@ -92,6 +92,7 @@ try:
     def _scan_orfs_numba(
         seq_arr: np.ndarray,
         min_length: int,
+        max_results: int,
         max_active: int = 8000,
     ) -> np.ndarray:
         """JIT-compiled ORF scanner for one strand.
@@ -101,11 +102,13 @@ try:
           col 1 : stop_end    (0-based, exclusive — position after stop codon)
           col 2 : start_codon integer (ATG=14, GTG=46, TTG=62)
           col 3 : frame       (0, 1, or 2)
+
+        If the number of ORFs found equals max_results the buffer was full and
+        results were truncated — the caller must detect this and retry.
         """
-        n = len(seq_arr)
-        max_results = n // max(min_length // 2, 1) + 2000
         results = np.empty((max_results, 4), dtype=np.int32)
         count = 0
+        n = len(seq_arr)
 
         act_pos = np.empty(max_active, dtype=np.int32)
         act_cod = np.empty(max_active, dtype=np.int32)
@@ -119,12 +122,14 @@ try:
                 c = seq_arr[i + 2]
                 if a < 4 and b < 4 and c < 4:
                     codon = a * 16 + b * 4 + c
-                    if codon == 14 or codon == 46 or codon == 62:
+                    if codon == CODON_INT_ATG or codon == CODON_INT_GTG or codon == CODON_INT_TTG:
                         if n_active < max_active:
                             act_pos[n_active] = i
                             act_cod[n_active] = codon
                             n_active += 1
-                    elif (codon == 48 or codon == 50 or codon == 56) and n_active > 0:
+                    elif (
+                        codon == CODON_INT_TAA or codon == CODON_INT_TAG or codon == CODON_INT_TGA
+                    ) and n_active > 0:
                         stop_end = i + 3
                         for k in range(n_active):
                             orf_len = stop_end - act_pos[k]
@@ -138,6 +143,24 @@ try:
                 i += 3
 
         return results[:count]
+
+    def _scan_orfs_safe(seq_arr: np.ndarray, min_length: int) -> np.ndarray:
+        """Wrapper with auto-growing buffer — like a hash-table resize but at the call level.
+
+        Starts with a generous capacity (n//30) that covers real genomes without
+        overflow.  If the buffer fills anyway (extreme GC or huge genome), doubles
+        and re-scans — same O(n) work, just twice.  The retry path is rare; no
+        silent data loss ever occurs.
+        """
+        n = len(seq_arr)
+        # n//30 fits even 70%+ GC genomes (Streptomyces 9Mbp ~182k ORFs; n//30=300k)
+        capacity = max(n // 30 + 10000, 50000)
+        while True:
+            raw = _scan_orfs_numba(seq_arr, min_length, capacity)
+            if len(raw) < capacity:
+                return raw
+            logger.warning("ORF scan buffer hit capacity %d — doubling and retrying", capacity)
+            capacity *= 2
 
     @_numba.njit(cache=True)
     def _count_imm_kmers(
@@ -391,14 +414,20 @@ try:
 
 except ImportError:
     _NUMBA_AVAILABLE = False
-    _score_imm_numba = None
-    _score_codon_bias_numba = None
-    _score_imm_batch = None
-    _score_codon_bias_batch = None
+    _score_imm_numba = None  # type: ignore[assignment]
+    _score_codon_bias_numba = None  # type: ignore[assignment]
+    _score_imm_batch = None  # type: ignore[assignment]
+    _score_codon_bias_batch = None  # type: ignore[assignment]
 
 from Bio.Seq import Seq  # noqa: E402
 
 from .config import (  # noqa: E402
+    CODON_INT_ATG,
+    CODON_INT_GTG,
+    CODON_INT_TAA,
+    CODON_INT_TAG,
+    CODON_INT_TGA,
+    CODON_INT_TTG,
     FIRST_FILTER_THRESHOLD,
     KNOWN_RBS_MOTIFS,
     LENGTH_REFERENCE_BP,
@@ -680,7 +709,7 @@ def find_purine_rich_regions(
 
 
 @lru_cache(maxsize=100000)
-def score_motif_similarity(sequence: str) -> Tuple[float, str]:
+def score_motif_similarity(sequence: str) -> Tuple[float, Optional[str]]:
     """Score sequence similarity to known RBS motifs."""
     best_score = 0.0
     best_motif = None
@@ -970,8 +999,8 @@ def find_orfs_candidates(sequence: str, min_length: int = 100) -> pd.DataFrame:
     logger.info("Detecting ORFs and calculating RBS...")
 
     if _NUMBA_AVAILABLE:
-        fwd_raw = _scan_orfs_numba(_seq_to_int_fast(sequence), min_length)
-        rev_raw = _scan_orfs_numba(_seq_to_int_fast(reverse_seq), min_length)
+        fwd_raw = _scan_orfs_safe(_seq_to_int_fast(sequence), min_length)
+        rev_raw = _scan_orfs_safe(_seq_to_int_fast(reverse_seq), min_length)
         parts = []
         if len(fwd_raw):
             parts.append(_build_orf_df(fwd_raw, sequence, seq_len, True))
@@ -1485,7 +1514,8 @@ def create_training_set(
     # select_training_glimmer/flexible expect List[Dict]; convert if needed.
     # Pre-filter to length >= 100 before converting to reduce dict allocation.
     if isinstance(all_orfs, pd.DataFrame):
-        orfs_list = all_orfs[all_orfs["length"] >= 100].to_dict("records")
+        long_enough = all_orfs["length"] >= 100
+        orfs_list = all_orfs[long_enough].to_dict("records")  # type: ignore[call-overload]
     else:
         orfs_list = list(all_orfs)
 
@@ -1581,9 +1611,13 @@ def create_intergenic_set(
             "or (genome_id + cached_data) for cached mode"
         )
 
+    # After the branches above, sequence and all_orfs are guaranteed non-None
+    assert sequence is not None
+    assert all_orfs is not None
+
     # extract_* functions expect List[Dict]; convert if needed
     if isinstance(all_orfs, pd.DataFrame):
-        all_orfs = all_orfs.to_dict("records")
+        all_orfs = all_orfs.to_dict("records")  # type: ignore[call-overload]
     likely_genes = [orf for orf in all_orfs if orf["length"] >= 200]
 
     _, intergenic_coords_1 = extract_intergenic_regions(
@@ -2045,7 +2079,14 @@ def normalize_all_orf_scores(scored_orfs: Any) -> pd.DataFrame:
 
 
 def add_combined_scores(scored_orfs: Any, weights: Optional[Dict] = None) -> pd.DataFrame:
-    """Vectorised weighted sum of normalized score columns."""
+    """Vectorised weighted sum of normalized score columns.
+
+    Adds two columns at once to avoid redundant passes downstream:
+      combined_score       — SCORE_WEIGHTS (equal weights, used by filters/LGB)
+      start_select_score   — START_SELECTION_WEIGHTS (used by start selector)
+    Both are computed here once vectorially; select_best_starts reuses
+    start_select_score instead of re-running the Python apply() loop.
+    """
     if isinstance(scored_orfs, list):
         scored_orfs = pd.DataFrame(scored_orfs)
     if weights is None:
@@ -2058,6 +2099,16 @@ def add_combined_scores(scored_orfs: Any, weights: Optional[Dict] = None) -> pd.
         + scored_orfs["rbs_score_norm"] * weights["rbs"]
         + scored_orfs["length_score_norm"] * weights["length"]
         + scored_orfs["start_score_norm"] * weights["start"]
+    )
+    # Pre-compute start-selection weighted score once (vectorised) so that
+    # select_best_starts() can read this column instead of calling _baseline_score()
+    # per ORF in a Python loop.  Same formula as StartSelectionClassifier._baseline_score.
+    scored_orfs["start_select_score"] = (
+        scored_orfs["codon_score_norm"] * START_SELECTION_WEIGHTS["codon"]
+        + scored_orfs["imm_score_norm"] * START_SELECTION_WEIGHTS["imm"]
+        + scored_orfs["rbs_score_norm"] * START_SELECTION_WEIGHTS["rbs"]
+        + scored_orfs["length_score_norm"] * START_SELECTION_WEIGHTS["length"]
+        + scored_orfs["start_score_norm"] * START_SELECTION_WEIGHTS["start"]
     )
     logger.info("Combined scores added")
     return scored_orfs
@@ -2091,6 +2142,10 @@ def score_all_orfs(
     n = len(sequences)
 
     if use_numba:
+        # These assertions narrow Optional types for Pylance — guaranteed by use_numba check above
+        assert numba_coding is not None
+        assert numba_noncoding is not None
+        assert codon_ratio_tbl is not None
         # Batch path: encode all sequences at once and call each JIT function once.
         # Eliminates N Python→Numba dispatch calls (was 3 × N per genome).
         flat_bytes = "".join(sequences).encode("ascii")
@@ -2120,7 +2175,7 @@ def score_all_orfs(
     all_orfs = all_orfs.copy()
     all_orfs["codon_score"] = codon_scores
     all_orfs["imm_score"] = imm_scores
-    lengths = all_orfs["length"].values
+    lengths = all_orfs["length"].to_numpy(dtype=np.float64)
     all_orfs["length_score"] = np.log(np.maximum(lengths, MIN_ORF_LENGTH) / LENGTH_REFERENCE_BP)
     all_orfs["start_score"] = all_orfs["start_codon"].map(lambda c: START_CODON_WEIGHTS.get(c, 0.4))
     if "rbs_score" not in all_orfs.columns:
@@ -2145,16 +2200,17 @@ def filter_candidates(
     length_threshold: float = 0,
     combined_threshold: float = 0,
 ) -> pd.DataFrame:
-    """Boolean-mask filter: removes ORFs where all three scores are below their
-    thresholds OR combined_score is below its threshold."""
-    all_three_below = (
-        (all_orfs["length_score"] < length_threshold)
-        & (all_orfs["codon_score"] < codon_threshold)
-        & (all_orfs["imm_score"] < imm_threshold)
-    )
+    """Boolean-mask filter: removes ORFs whose combined_score is below threshold.
+
+    The previous AND-condition on raw individual scores (codon, IMM, length) was
+    removed because raw scores are genome-specific and not comparable across GC
+    ranges — causing 2-6pp extra sensitivity loss in high-GC genomes with no
+    precision benefit. The combined_score (weighted sum of normalized scores) is
+    genome-invariant and sufficient as a single gate.
+    """
     combined_below = all_orfs["combined_score"] < combined_threshold
-    keep = ~(all_three_below | combined_below)
-    result = all_orfs[keep].reset_index(drop=True)
+    keep = ~combined_below
+    result = cast(pd.DataFrame, all_orfs.loc[keep].reset_index(drop=True))
     logger.info(f"Filtered: {len(result):,} kept, {(~keep).sum():,} removed")
     return result
 
