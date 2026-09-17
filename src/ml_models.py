@@ -19,8 +19,6 @@ from .config import (
     HF_MAX_SEQ_LEN,
     HF_TRAIN_BATCH_SIZE,
     LGB_GC_FLOOR_DEFAULT,
-    LGB_TRAINING_THRESHOLD,
-    RBS_UPSTREAM_LENGTH,
 )
 
 logger = logging.getLogger(__name__)

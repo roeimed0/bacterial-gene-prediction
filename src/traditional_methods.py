@@ -432,7 +432,6 @@ from .config import (  # noqa: E402
     KNOWN_RBS_MOTIFS,
     LENGTH_REFERENCE_BP,
     MIN_ORF_LENGTH,
-    RBS_UPSTREAM_LENGTH,
     SCORE_WEIGHTS,
     SECOND_FILTER_THRESHOLD,
     START_CODON_WEIGHTS,
@@ -1515,7 +1514,8 @@ def create_training_set(
     # select_training_glimmer/flexible expect List[Dict]; convert if needed.
     # Pre-filter to length >= 100 before converting to reduce dict allocation.
     if isinstance(all_orfs, pd.DataFrame):
-        orfs_list = all_orfs[all_orfs["length"] >= 100].to_dict("records")  # type: ignore[call-overload]
+        long_enough = all_orfs["length"] >= 100
+        orfs_list = all_orfs[long_enough].to_dict("records")  # type: ignore[call-overload]
     else:
         orfs_list = list(all_orfs)
 
